@@ -14,9 +14,9 @@ if (!isTelegram && localStorage.getItem('disableRedirect') !== 'true') {
     redirectBanner.classList.add('show');
     
     // Редирект через 3 секунды
-    setTimeout(() => {
-        window.location.href = 'https://t.me/oneshotfeedbot';
-    }, 3000);
+    //SetTimeout(() => {
+        //window.location.href = 'https://t.me/oneshotfeedbot';
+    //}, 3000);
 }
 
 
@@ -290,40 +290,64 @@ uiVolRange.addEventListener('input', (e) => { e.stopPropagation(); globalVolume=
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display==='flex')?'none':'flex'; });
 }
+// ... (выше код suggestForm) ...
+
 if (sugBtn) {
     sugBtn.addEventListener('click', async () => {
         const url = sugUrl.value.trim();
         const author = sugAuthor.value.trim();
         const desc = sugDesc.value.trim();
+        
+        // 1. Простая проверка
         if (!url) { tg?.showAlert('Вставь ссылку!'); return; }
         
+        // 2. БЛОКИРУЕМ КНОПКУ (Защита от двойного клика)
+        sugBtn.disabled = true; 
         const originalText = sugBtn.innerText;
-        sugBtn.innerText = '...';
+        sugBtn.innerText = '⏳';
         
         try {
             const res = await fetch(`${API_BASE}/api/suggest`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user })
+                body: JSON.stringify({ 
+                    url, 
+                    author, 
+                    desc, 
+                    user: tg?.initDataUnsafe?.user 
+                })
             });
             
             if (res.ok) { 
+                // УСПЕХ
                 sugBtn.innerText = 'Отправлено!';
                 sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
+                
+                // Закрываем через 1.5 сек
                 setTimeout(() => {
                     suggestForm.style.display = 'none';
                     sugBtn.innerText = originalText;
-                }, 1000);
+                    sugBtn.disabled = false; // Разблокируем для следующего раза
+                }, 1500);
+
+            } else if (res.status === 429) {
+                // ПОЙМАЛИ НА СПАМЕ
+                tg?.showAlert('Подожди минуту перед следующей отправкой!');
+                sugBtn.innerText = originalText;
+                sugBtn.disabled = false;
             } else {
                 tg?.showAlert('Ошибка API');
                 sugBtn.innerText = originalText;
+                sugBtn.disabled = false;
             }
         } catch (e) { 
             tg?.showAlert('Ошибка сети'); 
             sugBtn.innerText = originalText;
+            sugBtn.disabled = false;
         }
     });
 }
+
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
