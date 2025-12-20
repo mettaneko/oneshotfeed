@@ -94,11 +94,13 @@ export default async function handler(req, res) {
                           cover: v.cover
                       };
                       
-                      // !!! ВАЖНОЕ ИСПРАВЛЕНИЕ !!!
-                      // Отправляем JSON в body, а не в URL, чтобы не было ошибок "мусора"
+                      // Сохраняем (Добавил Content-Type для надежности)
                       await fetch(`${DB_URL}/`, {
                           method: 'POST',
-                          headers: { Authorization: `Bearer ${DB_TOKEN}` },
+                          headers: { 
+                              Authorization: `Bearer ${DB_TOKEN}`,
+                              'Content-Type': 'application/json' 
+                          },
                           body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                       });
                       
