@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/suggest.js": {
+      "runtime": "nodejs18.x"
+    },
+    "api/share.js": {
+      "runtime": "nodejs18.x"
+    }
+  }
+}
