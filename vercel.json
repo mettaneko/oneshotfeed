@@ -1,10 +1,10 @@
 {
   "functions": {
     "api/suggest.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@4"
     },
     "api/share.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "@vercel/node@4"
     }
   }
 }
