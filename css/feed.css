@@ -412,3 +412,211 @@ input[type=range].volume-range::-webkit-slider-thumb {
 .video-gradient {
     pointer-events: none;
 }
+/* Форма предложки видео */
+.suggest-form {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: 90%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(15px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.suggest-form-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+}
+
+.suggest-input,
+.suggest-textarea {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.4);
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 8px 10px;
+}
+
+.suggest-textarea {
+    resize: none;
+    min-height: 60px;
+}
+
+.suggest-send-btn {
+    width: 100%;
+    border-radius: 999px;
+    padding: 8px 0;
+    background: var(--accent-color);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-align: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.suggest-send-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+@media (max-width: 768px) {
+    .suggest-form {
+        bottom: 96px;
+        max-width: 420px;
+    }
+}
+/* Кнопка предложки визуально как остальные */
+.control-btn.btn-suggest i {
+    font-size: 0.9rem;
+}
+
+/* Форма предложки видео */
+.suggest-form {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: 90%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(15px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.suggest-form-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+}
+
+.suggest-input,
+.suggest-textarea {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.4);
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 8px 10px;
+}
+
+.suggest-textarea {
+    resize: none;
+    min-height: 60px;
+}
+
+.suggest-send-btn {
+    width: 100%;
+    border-radius: 999px;
+    padding: 8px 0;
+    background: var(--accent-color);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-align: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.suggest-send-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+@media (max-width: 768px) {
+    .suggest-form {
+        bottom: 96px;
+        max-width: 420px;
+    }
+}
+/* Кнопка предложки визуально как остальные */
+.control-btn.btn-suggest i {
+    font-size: 0.9rem;
+}
+
+/* Форма предложки видео */
+.suggest-form {
+    position: fixed;
+    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    width: 90%;
+    max-width: 360px;
+    display: none; /* скрыта по умолчанию */
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(15px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+.suggest-form-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+}
+
+.suggest-input,
+.suggest-textarea {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0,0,0,0.4);
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 8px 10px;
+}
+
+.suggest-textarea {
+    resize: none;
+    min-height: 60px;
+}
+
+.suggest-send-btn {
+    width: 100%;
+    border-radius: 999px;
+    padding: 8px 0;
+    background: var(--accent-color);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-align: center;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.suggest-send-btn:active {
+    transform: scale(0.97);
+    box-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+@media (max-width: 768px) {
+    .suggest-form {
+        bottom: 96px;
+        max-width: 420px;
+    }
+}
