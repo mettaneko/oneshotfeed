@@ -1,117 +1,230 @@
-/* --- ЛЕНТА (ОСНОВА) --- */
+/* --- ЛЕНТА --- */
 .tiktok-feed {
-    height: 100vh; width: 100vw;
-    overflow-y: scroll; scroll-snap-type: y mandatory;
-    position: relative; scrollbar-width: none;
+    height: 100vh;
+    width: 100vw;
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    position: relative;
+    scrollbar-width: none;
     background: #000;
 }
 .tiktok-feed::-webkit-scrollbar { display: none; }
 
+
 .video-slide {
-    height: 100vh; width: 100vw;
-    scroll-snap-align: start; scroll-snap-stop: always;
-    position: relative; background: #000;
-    display: flex; justify-content: center; align-items: center;
+    height: 100vh;
+    width: 100vw;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    position: relative;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     overflow: hidden;
 }
 
-/* ФОН (Темный и размытый) */
+
+/* Фон */
 .video-blur-bg {
-    position: absolute; width: 100%; height: 100%;
-    object-fit: cover; 
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
     filter: blur(80px) brightness(0.25) saturate(1.2);
-    z-index: 1; transform: scale(1.2); opacity: 0.8;
+    z-index: 1;
+    transform: scale(1.2);
+    opacity: 0.8;
 }
 
-/* ВИДЕО */
+
+/* Видеоконтейнер */
 .video-wrapper {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    z-index: 2; width: 100%; height: 100%;
-    display: flex; justify-content: center; align-items: center; pointer-events: none;
-}
-.video-player {
-    display: block; max-width: 100%; max-height: 100%; width: auto; height: auto;
-    object-fit: contain; box-shadow: 0 0 100px rgba(0,0,0,0.8); pointer-events: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    pointer-events: auto;
+    align-items: center;
 }
 
+
+/* Видео */
+.video-player {
+    display: block;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    box-shadow: 0 0 100px rgba(0,0,0,0.8);
+    pointer-events: auto;
+}
+
+
+/* Мобилка */
 @media (max-width: 768px) {
     .video-slide { height: 100dvh; }
     .video-wrapper { width: 100%; height: 100%; }
-    .video-player { width: 100%; height: auto; max-height: 100%; border-radius: 0; box-shadow: none; }
-    .liquid-controls-container { bottom: 70px; width: 95%; }
-    .video-progress-container { 
-        right: 0 !important; width: 6px !important; height: 100% !important; top: 0 !important;
-        background: rgba(255,255,255,0.05) !important; z-index: 999 !important; border-radius: 0 !important;
+    .video-player {
+        width: 100%;
+        height: auto;
+        max-height: 100%;
+        border-radius: 0;
+        box-shadow: none;
     }
+    .liquid-controls-container {
+        bottom: 64px;
+        width: 100%;
+        max-width: 420px;
+        padding: 0 8px;
+    }
+    .glass-deck {
+        min-width: 0;
+        width: 100%;
+        justify-content: space-around;
+    }
+    .video-progress-container {
+        right: 0 !important;
+        width: 6px !important;
+        height: 100% !important;
+        top: 0 !important;
+        background: rgba(255,255,255,0.05) !important;
+        z-index: 999 !important;
+        border-radius: 0 !important;
+    }
+    .video-progress-fill { border-radius: 0 !important; }
 }
 
-/* ПРОГРЕСС (ДЕСКТОП) */
+
+/* Прогресс */
 .video-progress-container {
-    position: absolute; right: 10px; top: 20%; height: 60%; width: 4px;
-    background: rgba(255,255,255,0.1); border-radius: 10px; cursor: pointer; z-index: 10;
-    transition: width 0.2s;
+    position: absolute;
+    right: 10px;
+    top: 20%;
+    height: 60%;
+    width: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 10px;
+    cursor: pointer;
+    z-index: 10;
+    pointer-events: auto;
+    transition: width 0.2s, background 0.2s;
 }
-.video-progress-fill { 
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 0%; 
-    background: var(--accent-color); border-radius:10px; box-shadow: 0 0 10px var(--accent-color);
+.video-progress-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 0%;
+    background: var(--accent-color);
+    border-radius: 10px;
+    box-shadow: 0 0 10px var(--accent-color);
 }
-.video-progress-container:hover { width: 8px; background: rgba(255, 255, 255, 0.2); }
+.video-progress-container:hover {
+    width: 8px;
+    background: rgba(255, 255, 255, 0.2);
+}
 
 
-/* --- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС (НОВЫЙ СТИЛЬ) --- */
+/* Глобальный интерфейс */
 .liquid-controls-container {
-    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-    z-index: 50; display: flex; flex-direction: column; align-items: center;
-    gap: 12px; width: 90%; max-width: 360px; transition: opacity 0.2s;
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 90%;
+    max-width: 360px;
+    transition: opacity 0.2s;
 }
 
-/* 1. ИНФО-КАПСУЛА (АВТОР + ОПИСАНИЕ) */
+
+/* Инфо-капсула */
 .video-info-capsule {
-    background: rgba(0, 0, 0, 0.6); /* Темный фон */
-    backdrop-filter: blur(15px);     /* Размытие */
-    border: 1px solid rgba(255, 255, 255, 0.1); /* Тонкая рамка */
-    padding: 12px 24px; 
-    border-radius: 30px; /* Сильное скругление */
-    text-align: center; 
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4); /* Мягкая тень */
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 12px 24px;
+    border-radius: 30px;
+    text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
     min-width: 200px;
 }
-.author-row { display: flex; justify-content: center; align-items: center; gap: 8px; margin-bottom: 4px; }
-.author-name { margin: 0; font-size: 0.95rem; color: #fff; font-weight: 700; line-height: 1; letter-spacing: 0.3px; }
-.video-desc { 
-    margin: 4px 0 0 0; font-size: 0.85rem; color: rgba(255,255,255,0.7); 
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; 
+.author-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.author-name {
+    margin: 0;
+    font-size: 0.95rem;
+    color: #fff;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.3px;
+}
+.video-desc {
+    margin: 4px 0 0 0;
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.7);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
     font-weight: 500;
 }
 
-/* 2. ПАНЕЛЬ КНОПОК (НИЖНЯЯ) */
-.glass-deck { 
-    display: flex; align-items: center; justify-content: space-between; 
-    padding: 6px 16px; /* Чуть компактнее по вертикали */
-    background: rgba(0, 0, 0, 0.6); /* Тот же темный фон */
-    backdrop-filter: blur(15px); 
-    border-radius: 50px; 
-    border: 1px solid rgba(255, 255, 255, 0.1); 
-    min-width: 240px; 
+
+/* Панель кнопок */
+.glass-deck {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 16px;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(15px);
+    border-radius: 50px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 240px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
-/* КНОПКИ */
-.control-btn { 
-    width: 42px; height: 42px; 
-    display: flex; justify-content: center; align-items: center; 
-    color: rgba(255,255,255,0.6); /* Спокойный цвет иконок */
-    font-size: 1.1rem; border-radius: 50%; transition: all 0.2s ease; 
+
+/* Кнопки */
+.control-btn {
+    width: 42px;
+    height: 42px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 1.1rem;
+    border-radius: 50%;
+    transition: all 0.2s ease;
 }
-.control-btn:hover { 
-    color: #fff; background: rgba(255,255,255,0.1); 
+.control-btn:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.1);
 }
 .control-btn.active { color: var(--accent-color); }
 
-/* Центральная кнопка Play чуть выделяется */
-.control-btn.btn-play { 
-    width: 48px; height: 48px; 
-    background: rgba(255,255,255,0.05); 
+
+.control-btn.btn-play {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.05);
     margin: 0 8px;
 }
@@ -120,63 +233,182 @@
     transform: scale(1.05);
 }
 
-.divider { width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 2px; }
 
-/* КНОПКА ПОДПИСКИ (Внутри инфо) */
-.subscribe-btn {
-    width: 20px; height: 20px; min-width: 20px; border-radius: 50%;
-    background: rgba(255,255,255,0.15); display: flex; justify-content: center; align-items: center;
-    color: #fff; font-size: 0.65rem; border: none; padding: 0; margin: 0; cursor: pointer; 
-    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+.divider {
+    width: 1px;
+    height: 16px;
+    background: rgba(255,255,255,0.1);
+    margin: 0 2px;
 }
-.subscribe-btn.subscribed { background: var(--accent-color); color: #000; transform: rotate(360deg); }
-.subscribe-btn i { position: absolute; transition: all 0.3s; }
+
+
+/* Подписка */
+.subscribe-btn {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    font-size: 0.65rem;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+}
+.subscribe-btn i {
+    position: absolute;
+    transition: all 0.3s;
+}
+.subscribe-btn.subscribed {
+    background: var(--accent-color);
+    color: #000;
+    transform: rotate(360deg);
+}
 .subscribe-btn .fa-plus { opacity: 1; transform: scale(1); }
 .subscribe-btn.subscribed .fa-plus { opacity: 0; transform: scale(0); }
 .subscribe-btn .fa-check { opacity: 0; transform: scale(0); }
 .subscribe-btn.subscribed .fa-check { opacity: 1; transform: scale(1); }
 
-/* ГРОМКОСТЬ (Слайдер) */
-.volume-control-wrapper { display: flex; align-items: center; flex-direction: row-reverse; gap: 8px; }
-.volume-slider-container { 
-    width: 0; height: 32px; 
-    background: rgba(0,0,0,0.3); /* Темнее внутри */
-    border-radius: 16px; overflow: hidden; display: flex; align-items: center; 
-    transition: width 0.3s; opacity: 0; 
-}
-.volume-slider-container.active { width: 80px; opacity: 1; padding: 0 10px; }
-input[type=range].volume-range { -webkit-appearance: none; width: 100%; height: 3px; background: rgba(255,255,255,0.3); border-radius: 2px; }
-input[type=range].volume-range::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; background: #fff; border-radius: 50%; }
 
-/* --- НАВИГАЦИЯ (В ТОМ ЖЕ СТИЛЕ) --- */
+/* Громкость */
+.volume-control-wrapper {
+    display: flex;
+    align-items: center;
+    flex-direction: row-reverse;
+    gap: 8px;
+}
+.volume-slider-container {
+    width: 0;
+    height: 32px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    transition: width 0.3s;
+    opacity: 0;
+}
+.volume-slider-container.active {
+    width: 80px;
+    opacity: 1;
+    padding: 0 10px;
+}
+input[type=range].volume-range {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+}
+input[type=range].volume-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px;
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+}
+
+
+/* Навигация */
 .feed-navigation {
-    position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100;
-    display: flex; padding: 4px;
-    background: rgba(0, 0, 0, 0.6); /* Единый стиль */
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    display: flex;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(15px);
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 .nav-tab {
-    background: transparent; color: rgba(255, 255, 255, 0.5);
-    font-family: var(--font-title); font-size: 0.95rem; font-weight: 700;
-    padding: 8px 24px; cursor: pointer; transition: color 0.3s; z-index: 2; position: relative;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: var(--font-title);
+    font-size: 0.95rem;
+    font-weight: 700;
+    padding: 8px 24px;
+    cursor: pointer;
+    transition: color 0.3s;
+    z-index: 2;
+    position: relative;
 }
-.nav-tab.active { color: #fff; text-shadow: 0 0 10px rgba(255,255,255,0.2); }
+.nav-tab.active {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.2);
+}
 .nav-indicator {
-    position: absolute; top: 4px; left: 0; height: calc(100% - 8px);
-    background: rgba(255, 255, 255, 0.15); /* Светлый акцент внутри темного */
-    border-radius: 25px; z-index: 1; transition: all 0.3s; width: 0;
+    position: absolute;
+    top: 4px;
+    left: 0;
+    height: calc(100% - 8px);
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 25px;
+    z-index: 1;
+    transition: all 0.3s;
+    width: 0;
 }
 
-/* ШТОРКА ЗВУКА */
-#audio-unlock-overlay { 
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; 
-    background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); 
-    display: flex; justify-content: center; align-items: center; cursor: pointer; 
+
+/* Шторка звука */
+#audio-unlock-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
 }
-.hidden { opacity: 0; pointer-events: none; transition: 0.5s; }
-.unlock-message { text-align: center; color: #fff; display: flex; flex-direction: column; align-items: center; gap: 15px; }
-.unlock-message i { font-size: 2.5rem; color: rgba(255,255,255,0.9); }
-.unlock-message p { font-size: 1.1rem; font-weight: 600; letter-spacing: 0.5px; margin: 0; }
+.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transition: 0.5s;
+}
+.unlock-message {
+    text-align: center;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+.unlock-message i {
+    font-size: 2.5rem;
+    color: rgba(255,255,255,0.9);
+}
+.unlock-message p {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+/* === ДОБАВЛЕНО, чтобы перемотка точно работала === */
+.video-wrapper,
+.video-progress-container,
+.video-progress-fill,
+.video-player {
+    pointer-events: auto;
+}
+
+/* На всякий случай выключаем перехват кликов для любых декоративных оверлеев */
+.video-overlay,
+.video-mask,
+.video-gradient {
+    pointer-events: none;
+}
