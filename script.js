@@ -14,16 +14,13 @@ let hasInteracted = false;
 let globalVolume = 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
-
-// Видео из public/videos.json
 let allVideos = [];
 
-// Элементы UI
+// DOM элементы
 const feedContainer = document.getElementById('feed');
 const tabForYou = document.getElementById('tab-foryou');
 const tabFollowing = document.getElementById('tab-following');
 const indicator = document.getElementById('nav-indicator');
-
 const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
@@ -36,12 +33,12 @@ const uiSuggestBtn = document.getElementById('ui-suggest-btn');
 
 // Форма предложки
 const suggestForm = document.getElementById('suggest-form');
-const sugUrl  = document.getElementById('sug-url');
+const sugUrl = document.getElementById('sug-url');
 const sugAuthor = document.getElementById('sug-author');
 const sugDesc = document.getElementById('sug-desc');
-const sugBtn  = document.getElementById('sug-send');
+const sugBtn = document.getElementById('sug-send');
 
-// === 2. ЗАГРУЗКА ВИДЕО ИЗ public/videos.json ===
+// === 2. ЗАГРУЗКА ВИДЕО ===
 async function loadVideosOnce() {
     try {
         const res = await fetch('public/videos.json', { cache: 'no-store' });
@@ -50,23 +47,18 @@ async function loadVideosOnce() {
             return;
         }
         const data = await res.json();
-        if (Array.isArray(data)) {
-            allVideos = data;
-        }
+        if (Array.isArray(data)) allVideos = data;
     } catch (e) {
         console.error('videos.json load error', e);
     }
 }
 
-// Добавляем только новые видео в конец ленты
 async function reloadVideosAndFeed() {
     const oldVideos = allVideos.slice();
     await loadVideosOnce();
-
     const oldIds = new Set(oldVideos.map(v => v.id));
     const newOnes = allVideos.filter(v => !oldIds.has(v.id));
     if (newOnes.length === 0) return;
-
     newOnes.forEach(v => {
         const slide = createSlide(v);
         feedContainer.appendChild(slide);
@@ -74,13 +66,11 @@ async function reloadVideosAndFeed() {
     });
 }
 
-// === 3. РАЗБЛОКИРОВКА АУДИО ===
+// === 3. АУДИО ===
 function unlockAudioContext() {
     if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
     const buffer = audioCtx.createBuffer(1, 1, 22050);
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
@@ -92,10 +82,9 @@ function unlockAudioContext() {
         overlay.classList.add('hidden');
         setTimeout(() => overlay.remove(), 500);
     }
-
     hasInteracted = true;
-
-    const activeSlide = document.querySelector('.video-slide.active-slide') || document.querySelector('.video-slide');
+    
+    const activeSlide = document.querySelector('.video-slide.active-slide');
     if (activeSlide) {
         const vid = activeSlide.querySelector('.video-player');
         if (vid) {
@@ -142,14 +131,10 @@ tabFollowing.addEventListener('click', () => {
     renderFeed(subs);
 });
 
-// === 5. ГЛОБАЛЬНЫЙ UI ===
+// === 5. UI ОБНОВЛЕНИЯ ===
 function updateSubBtnState() {
     if (!currentActiveAuthor) return;
-    if (subscribedAuthors.includes(currentActiveAuthor)) {
-        uiSubBtn.classList.add('subscribed');
-    } else {
-        uiSubBtn.classList.remove('subscribed');
-    }
+    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
 }
 
 function updateGlobalUI(videoData) {
@@ -157,7 +142,7 @@ function updateGlobalUI(videoData) {
     if (uiDesc) uiDesc.innerText = videoData.desc;
     currentActiveAuthor = videoData.author;
     updateSubBtnState();
-
+    
     if (uiPlayBtn) {
         uiPlayBtn.querySelector('i').className = 'fas fa-pause';
         uiPlayBtn.classList.add('active');
@@ -167,39 +152,24 @@ function updateGlobalUI(videoData) {
 uiSubBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!currentActiveAuthor) return;
-
+    
     if (subscribedAuthors.includes(currentActiveAuthor)) {
         subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor);
-        if (currentTab === 'following') {
-            if (subscribedAuthors.length === 0) {
-                switchToForYou();
-            } else {
-                const subs = allVideos.filter(v => subscribedAuthors.includes(v.author));
-                renderFeed(subs);
-            }
-        }
+        if (currentTab === 'following' && subscribedAuthors.length === 0) switchToForYou();
+        else if (currentTab === 'following') renderFeed(allVideos.filter(v => subscribedAuthors.includes(v.author)));
     } else {
         subscribedAuthors.push(currentActiveAuthor);
     }
-
     localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
     updateSubBtnState();
 });
 
-function getActiveVideo() {
-    return document.querySelector('.video-slide.active-slide .video-player');
-}
-function getActiveBg() {
-    return document.querySelector('.video-slide.active-slide .video-blur-bg');
-}
+function getActiveVideo() { return document.querySelector('.video-slide.active-slide .video-player'); }
+function getActiveBg() { return document.querySelector('.video-slide.active-slide .video-blur-bg'); }
 function getActiveSlideData() {
     const slide = document.querySelector('.video-slide.active-slide');
     if (!slide) return null;
-    try {
-        return JSON.parse(slide.dataset.jsonData);
-    } catch {
-        return null;
-    }
+    try { return JSON.parse(slide.dataset.jsonData); } catch { return null; }
 }
 
 uiPlayBtn.addEventListener('click', (e) => {
@@ -207,133 +177,67 @@ uiPlayBtn.addEventListener('click', (e) => {
     const v = getActiveVideo();
     const b = getActiveBg();
     if (!v) return;
-
+    
     if (v.paused) {
-        v.play();
-        if (b) b.play();
+        v.play(); if (b) b.play();
         uiPlayBtn.querySelector('i').className = 'fas fa-pause';
         uiPlayBtn.classList.add('active');
     } else {
-        v.pause();
-        if (b) b.pause();
+        v.pause(); if (b) b.pause();
         uiPlayBtn.querySelector('i').className = 'fas fa-play';
         uiPlayBtn.classList.remove('active');
     }
 });
 
-uiVolBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    uiVolCont.classList.toggle('active');
-});
-
+uiVolBtn.addEventListener('click', (e) => { e.stopPropagation(); uiVolCont.classList.toggle('active'); });
 uiVolRange.addEventListener('input', (e) => {
     e.stopPropagation();
     globalVolume = parseFloat(e.target.value);
     const v = getActiveVideo();
-    if (v) {
-        v.volume = globalVolume;
-        v.muted = (globalVolume === 0);
-    }
+    if (v) { v.volume = globalVolume; v.muted = (globalVolume === 0); }
 });
 
 // === 6. ПРОМОТКА ===
 function attachSeek(bar, vid) {
     let isDragging = false;
-
     function handleSeek(clientY) {
         const rect = bar.getBoundingClientRect();
-        const y = clientY - rect.top;
-        let ratio = y / rect.height;
-        ratio = 1 - ratio;
-        if (ratio < 0) ratio = 0;
-        if (ratio > 1) ratio = 1;
-
-        if (vid.duration && !isNaN(vid.duration)) {
-            vid.currentTime = ratio * vid.duration;
-        }
+        const ratio = Math.max(0, Math.min(1, 1 - (clientY - rect.top) / rect.height));
+        if (vid.duration) vid.currentTime = ratio * vid.duration;
     }
+    function start(e) { e.preventDefault(); e.stopPropagation(); isDragging = true; handleSeek(e.touches ? e.touches[0].clientY : e.clientY); }
+    function move(e) { if (isDragging) { e.preventDefault(); e.stopPropagation(); handleSeek(e.touches ? e.touches[0].clientY : e.clientY); } }
+    function end(e) { if (isDragging) { e.preventDefault(); e.stopPropagation(); isDragging = false; } }
 
-    function startDrag(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        isDragging = true;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        handleSeek(clientY);
-    }
-
-    function moveDrag(e) {
-        if (!isDragging) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        handleSeek(clientY);
-    }
-
-    function endDrag(e) {
-        if (!isDragging) return;
-        e.preventDefault();
-        e.stopPropagation();
-        isDragging = false;
-    }
-
-    bar.addEventListener('mousedown', startDrag);
-    window.addEventListener('mousemove', moveDrag);
-    window.addEventListener('mouseup', endDrag);
-
-    bar.addEventListener('touchstart', startDrag, { passive: false });
-    window.addEventListener('touchmove', moveDrag, { passive: false });
-    window.addEventListener('touchend', endDrag, { passive: false });
-
-    bar.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        handleSeek(e.clientY);
-    });
+    bar.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
+    bar.addEventListener('touchstart', start, { passive: false }); window.addEventListener('touchmove', move, { passive: false }); window.addEventListener('touchend', end, { passive: false });
+    bar.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handleSeek(e.clientY); });
 }
 
-// === 7. СОЗДАНИЕ СЛАЙДА ===
+// === 7. СЛАЙДЫ ===
 function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
     slide.dataset.jsonData = JSON.stringify(data);
-
     slide.innerHTML = `
         <video class="video-blur-bg" loop muted playsinline src="${data.videoUrl}"></video>
         <div class="video-wrapper">
             <video class="video-player" loop muted playsinline src="${data.videoUrl}"></video>
-            <div class="video-progress-container">
-                <div class="video-progress-fill"></div>
-            </div>
-        </div>
-    `;
-
-    const vid  = slide.querySelector('.video-player');
-    const bg   = slide.querySelector('.video-blur-bg');
+            <div class="video-progress-container"><div class="video-progress-fill"></div></div>
+        </div>`;
+        
+    const vid = slide.querySelector('.video-player');
+    const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
-    const bar  = slide.querySelector('.video-progress-container');
-
+    const bar = slide.querySelector('.video-progress-container');
+    
     vid.addEventListener('click', () => {
-        if (vid.paused) {
-            vid.play();
-            bg.play();
-            uiPlayBtn.querySelector('i').className = 'fas fa-pause';
-            uiPlayBtn.classList.add('active');
-        } else {
-            vid.pause();
-            bg.pause();
-            uiPlayBtn.querySelector('i').className = 'fas fa-play';
-            uiPlayBtn.classList.remove('active');
-        }
+        if (vid.paused) { vid.play(); bg.play(); uiPlayBtn.querySelector('i').className = 'fas fa-pause'; uiPlayBtn.classList.add('active'); }
+        else { vid.pause(); bg.pause(); uiPlayBtn.querySelector('i').className = 'fas fa-play'; uiPlayBtn.classList.remove('active'); }
     });
-
-    vid.addEventListener('timeupdate', () => {
-        if (vid.duration) {
-            fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`;
-        }
-    });
-
+    
+    vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     attachSeek(bar, vid);
-
     return slide;
 }
 
@@ -342,154 +246,106 @@ const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const slide = entry.target;
         const vid = slide.querySelector('.video-player');
-        const bg  = slide.querySelector('.video-blur-bg');
-
+        const bg = slide.querySelector('.video-blur-bg');
         if (!vid || !bg) return;
 
         if (entry.isIntersecting) {
             document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
+            try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) {}
 
-            try {
-                const data = JSON.parse(slide.dataset.jsonData);
-                updateGlobalUI(data);
-            } catch (e) {}
-
-            if (hasInteracted) {
-                vid.volume = globalVolume;
-                vid.muted = (globalVolume === 0);
-            } else {
-                vid.muted = true;
-            }
-
-            if (vid.paused) {
-                vid.play().then(() => {
-                    if (bg.paused) bg.play();
-                }).catch(() => {
-                    vid.muted = true;
-                    vid.play();
-                    if (bg.paused) bg.play();
-                });
-            }
-        } else {
-            vid.pause();
-            bg.pause();
-        }
+            if (hasInteracted) { vid.volume = globalVolume; vid.muted = (globalVolume === 0); }
+            else vid.muted = true;
+            
+            if (vid.paused) { vid.play().then(() => bg.play()).catch(() => { vid.muted = true; vid.play(); bg.play(); }); }
+        } else { vid.pause(); bg.pause(); }
     });
 }, { threshold: 0.6 });
 
-// === 9. РЕНДЕР ЛЕНТЫ ===
 function renderFeed(videos, append = false) {
     if (!append) feedContainer.innerHTML = '';
-    videos.forEach(v => {
-        const slide = createSlide(v);
-        feedContainer.appendChild(slide);
-        observer.observe(slide);
-    });
+    videos.forEach(v => { const s = createSlide(v); feedContainer.appendChild(s); observer.observe(s); });
 }
 
 feedContainer.addEventListener('scroll', () => {
     if (feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight) < 300) {
-        if (currentTab === 'foryou') {
-            renderFeed(shuffle([...allVideos]), true);
-        } else {
+        if (currentTab === 'foryou') renderFeed(shuffle([...allVideos]), true);
+        else {
             const subs = allVideos.filter(v => subscribedAuthors.includes(v.author));
             if (subs.length > 0) renderFeed(subs, true);
         }
     }
 });
 
-// === 10. ПРЕДЛОЖКА (отправка в Vercel) ===
+// === 10. API: ПРЕДЛОЖКА ===
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const isHidden = suggestForm.style.display === 'none' || !suggestForm.style.display;
-        suggestForm.style.display = isHidden ? 'flex' : 'none';
+        suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex';
     });
 }
 
-if (sugBtn && tg) {
+if (sugBtn) {
     sugBtn.addEventListener('click', async () => {
         const url = sugUrl.value.trim();
         const author = sugAuthor.value.trim();
         const desc = sugDesc.value.trim();
 
-        if (!url) {
-            tg.showAlert('Вставь ссылку на видео');
-            return;
-        }
-
-        const payload = {
-            url,
-            author,
-            desc,
-            user: tg.initDataUnsafe?.user || null
-        };
-
+        if (!url) { tg?.showAlert('Вставь ссылку!'); return; }
+        
         try {
-            const res = await fetch('https://niko-feed.vercel.app/api/suggest', {
+            // ✅ Относительный путь (работает на Vercel)
+            const res = await fetch('/api/suggest', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    url, author, desc,
+                    user: tg?.initDataUnsafe?.user || null
+                })
             });
 
             if (res.ok) {
-                tg.showPopup({
-                    title: 'Готово',
-                    message: 'Видео отправлено в предложку',
-                    buttons: [{ id: 'ok', type: 'close', text: 'OK' }]
-                });
-                sugUrl.value = '';
-                sugAuthor.value = '';
-                sugDesc.value = '';
+                tg?.showPopup({ title: 'Готово', message: 'Отправлено админу!', buttons: [{type: 'ok'}] });
+                sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
                 suggestForm.style.display = 'none';
-            } else {
-                tg.showAlert('Ошибка отправки, попробуй позже');
-            }
+            } else tg?.showAlert('Ошибка API');
         } catch (e) {
-            tg.showAlert('Сеть не отвечает');
+            tg?.showAlert('Ошибка сети');
         }
     });
 }
 
-// === 11. SHARE → бот пишет юзеру ===
-if (uiShareBtn && tg) {
+// === 11. API: SHARE ===
+if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const data = getActiveSlideData();
-        if (!data) {
-            tg.showAlert('Не нашли текущее видео');
+        if (!data) return;
+
+        if (!tg?.initDataUnsafe?.user) {
+            alert(`Скопировано: ${data.videoUrl}`);
             return;
         }
 
         try {
-            const res = await fetch('https://niko-feed.vercel.app/api/share', {
+            const res = await fetch('/api/share', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     videoUrl: data.videoUrl,
                     author: data.author,
                     desc: data.desc,
-                    user: tg.initDataUnsafe?.user || null
+                    user: tg.initDataUnsafe.user
                 })
             });
 
-            if (res.ok) {
-                tg.showPopup({
-                    title: 'Проверяй бота',
-                    message: 'Бот отправил тебе это видео в личку',
-                    buttons: [{ id: 'ok', type: 'close', text: 'OK' }]
-                });
-            } else {
-                tg.showAlert('Не удалось связаться с ботом');
-            }
-        } catch (err) {
-            tg.showAlert('Сеть не отвечает');
-        }
+            if (res.ok) tg.showPopup({ title: 'Готово', message: 'Бот отправил видео!', buttons: [{type: 'ok'}] });
+            else tg.showAlert('Ошибка бота');
+        } catch (e) { tg.showAlert('Ошибка сети'); }
     });
 }
 
-// === 12. INIT ===
+// === INIT ===
 window.addEventListener('load', async () => {
     await loadVideosOnce();
     updateInd(tabForYou);
