@@ -3,6 +3,23 @@ const API_BASE = 'https://niko-feed.vercel.app';
 
 // === 0. TELEGRAM WEB APP ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+// === ПРОВЕРКА TELEGRAM + ПЕРЕНАПРАВЛЕНИЕ ===
+const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+const redirectBanner = document.getElementById('disable-redirect-banner');
+const disableBtn = document.getElementById('disable-redirect-btn');
+
+// Если НЕ в Telegram — показываем плашку и редиректим через 3 сек
+if (!isTelegram && localStorage.getItem('disableRedirect') !== 'true') {
+    redirectBanner.classList.add('show');
+    
+    // Редирект через 3 секунды
+    setTimeout(() => {
+        window.location.href = 'https://t.me/oneshotfeedbot';
+    }, 3000);
+}
+
+
 if (tg) {
     tg.expand();
     tg.ready();

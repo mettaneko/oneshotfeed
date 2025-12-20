@@ -659,3 +659,46 @@ input[type=range].volume-range::-webkit-slider-thumb {
     left: 15px;
     right: 60px; /* Отступ справа, чтобы не перекрывать кнопки */
 }
+
+/* Плашка перенаправления на бота */
+.disable-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, var(--accent-color), rgba(169,149,255,0.8));
+    color: #000;
+    padding: 12px 20px;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    font-weight: 600;
+    transform: translateY(-100%);
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.disable-banner.show {
+    transform: translateY(0);
+}
+.disable-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 400px;
+    text-align: center;
+    flex-wrap: wrap;
+}
+.disable-content i { font-size: 1.3rem; }
+.disable-btn {
+    background: rgba(0,0,0,0.2);
+    color: #000;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 20px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.disable-btn:hover { background: rgba(0,0,0,0.3); transform: scale(1.05); }

@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Niko Feed</title>
+    <title>OneShot Feed</title>
+    <meta name="description" content="OneShot Feed — Telegram-мини-приложение в стиле TikTok с лентой видео, рекомендациями и подписками по тематике OneShot. Скачивайте ролики напрямую через @OneshotFeedBot!">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/feed.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -72,6 +73,15 @@
         <button id="sug-send" class="suggest-send-btn">Отправить</button>
     </div>
 
+    <!-- ПЛАШКА "ОТКЛЮЧИТЬ ПЕРЕНАПРАВЛЕНИЕ" (скрыта по умолчанию) -->
+<div id="disable-redirect-banner" class="disable-banner">
+    <div class="disable-content">
+        <i class="fas fa-info-circle"></i>
+        <span>Открывай через <b>@OneshotFeedBot</b></span>
+    </div>
+</div>
+
     <script src="script.js"></script>
+
 </body>
 </html>
