@@ -6,10 +6,7 @@ export default async function handler(req, res) {
     const token = process.env.BOT_TOKEN;
     
     // === МУЛЬТИ-АДМИН ===
-    // Разбиваем строку "123,456" на массив ["123", "456"]
     const adminIds = (process.env.ADMIN_ID || '').split(',');
-    
-    // Функция проверки: Является ли этот chatId админом?
     const isAdmin = (id) => adminIds.includes(id.toString());
     
     const webAppUrl = 'https://mettaneko.github.io/oneshotfeed/';
@@ -27,14 +24,14 @@ export default async function handler(req, res) {
 📜 *История версий Niko Feed:*
 (Нумерация - Год.Месяц.Номер версии)
 
-**25.12.1** - Бета-тест.
-**25.12.2** - Добавлена предложка и подписки.
-**25.12.3** - Добавлена оптимизация для Telegram Mini-apps.
-**25.12.4** - Защита от спама и чуть улучшенный интерфейс.
-**25.12.5** - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
-**25.12.6** - Добавлена предложка напрямую в бота.
-**25.12.6H** - Откат предыдущего апдейта.
-**25.12.6R** - Фикс багов с кнопками стартового сообщения.
+*25.12.1* - Бета-тест.
+*25.12.2* - Добавлена предложка и подписки.
+*25.12.3* - Добавлена оптимизация для Telegram Mini-apps.
+*25.12.4* - Защита от спама и чуть улучшенный интерфейс.
+*25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
+*25.12.6* - Добавлена предложка напрямую в бота.
+*25.12.6H* - Откат предыдущего апдейта.
+*25.12.6R* - Фикс багов с кнопками стартового сообщения.
         `;
         await sendMessage(token, chatId, historyText, null, 'Markdown');
       }
@@ -93,12 +90,16 @@ export default async function handler(req, res) {
                           id: v.id, 
                           videoUrl: v.play, 
                           author: v.author.unique_id, 
-                          desc: 'on tiktok', // Описание как ты просил
+                          desc: 'on tiktok', 
                           cover: v.cover
                       };
                       
-                      await fetch(`${DB_URL}/rpush/feed_videos/${JSON.stringify(newVideo)}`, {
-                          headers: { Authorization: `Bearer ${DB_TOKEN}` }
+                      // !!! ВАЖНОЕ ИСПРАВЛЕНИЕ !!!
+                      // Отправляем JSON в body, а не в URL, чтобы не было ошибок "мусора"
+                      await fetch(`${DB_URL}/`, {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${DB_TOKEN}` },
+                          body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                       });
                       
                       await sendMessage(token, chatId, 
@@ -111,6 +112,14 @@ export default async function handler(req, res) {
                   await sendMessage(token, chatId, "❌ Ошибка: " + e.message);
               }
           }
+      }
+
+      // === КОМАНДА /CLEAR (Очистка) ===
+      else if (text === '/clear' && isAdmin(chatId)) {
+          await fetch(`${DB_URL}/del/feed_videos`, {
+              headers: { Authorization: `Bearer ${DB_TOKEN}` }
+          });
+          await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
       }
 
       // === РАССЫЛКА (Только Админы) ===
@@ -137,12 +146,12 @@ export default async function handler(req, res) {
           if (text.includes('http')) {
               // Рассылаем уведомление ВСЕМ админам
               const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
-              for (const admin of adminIds) {
+              const admins = (process.env.ADMIN_ID || '').split(',');
+              for (const admin of admins) {
                   await sendMessage(token, admin, `🚨 <b>ПРЕДЛОЖКА ОТ ${sender}:</b>\n${text}`, null, 'HTML');
               }
               await sendMessage(token, chatId, "✅ Передал админам!");
           } else {
-             // Удаляем сообщение юзера и шлем меню
              try {
                 await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
                     method: 'POST',
@@ -150,7 +159,6 @@ export default async function handler(req, res) {
                     body: JSON.stringify({ chat_id: chatId, message_id: msg.message_id })
                 });
              } catch(e){}
-             
              await sendMessage(token, chatId, "Меню:", { inline_keyboard: [[{ text: "📱 Открыть", web_app: { url: webAppUrl } }]] });
           }
       }
