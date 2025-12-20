@@ -7,6 +7,7 @@ export default async function handler(req, res) {
     
     // === МУЛЬТИ-АДМИН ===
     const adminIds = (process.env.ADMIN_ID || '').split(',');
+    // Функция проверки: Является ли этот chatId админом?
     const isAdmin = (id) => adminIds.includes(id.toString());
     
     const webAppUrl = 'https://mettaneko.github.io/oneshotfeed/';
@@ -26,7 +27,7 @@ export default async function handler(req, res) {
 
 *25.12.1* - Бета-тест.
 *25.12.2* - Добавлена предложка и подписки.
-*25.12.3* - Добавлена оптимизация для Telegram Mini-apps.
+*25.12.3* - Оптимизация для Telegram Mini-apps.
 *25.12.4* - Защита от спама и чуть улучшенный интерфейс.
 *25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
 *25.12.6* - Добавлена предложка напрямую в бота.
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
       const text = msg.text || msg.caption || '';
       const user = msg.from || { id: chatId, username: 'Channel' };
 
-      // Сохраняем юзера (для рассылки)
+      // Сохраняем юзера (для рассылки), если это личный чат
       if (DB_URL && DB_TOKEN && chatId > 0) {
         try {
             await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -61,7 +62,7 @@ export default async function handler(req, res) {
         } catch (e) {}
       }
 
-      // /start
+      // === КОМАНДА /START ===
       if (text === '/start') {
         await sendMessage(token, chatId, 
             "👋 Привет! Добро пожаловать в Niko Feed.\nСмотри, предлагай видео или просто читай обновления!", 
@@ -71,80 +72,100 @@ export default async function handler(req, res) {
         );
       } 
 
-      // === КОМАНДА /ADD (Только Админы) ===
-      else if (text.startsWith('/add') && isAdmin(chatId)) {
-          const parts = text.split(/\s+/);
-          let tikTokUrl = parts.find(p => p.includes('http'));
+      // === АДМИНСКИЕ КОМАНДЫ ===
+      // Если пишет админ - выполняем. Если нет - этот блок пропускается.
+      else if (isAdmin(chatId)) {
 
-          if (!tikTokUrl) {
-              await sendMessage(token, chatId, "❌ Нет ссылки.\nПример: <code>/add https://vm.tiktok.com/...</code>", null, 'HTML');
-          } else {
-              await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
-              try {
-                  const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
-                  const apiData = await apiRes.json();
+          // --- /ADD (Добавление видео) ---
+          if (text.startsWith('/add')) {
+              const parts = text.split(/\s+/);
+              let tikTokUrl = parts.find(p => p.includes('http'));
 
-                  if (apiData.code === 0 && apiData.data) {
-                      const v = apiData.data;
-                      const newVideo = {
-                          id: v.id, 
-                          videoUrl: v.play, 
-                          author: v.author.unique_id, 
-                          desc: 'on tiktok', 
-                          cover: v.cover
-                      };
-                      
-                      // Сохраняем (Добавил Content-Type для надежности)
-                      await fetch(`${DB_URL}/`, {
-                          method: 'POST',
-                          headers: { 
-                              Authorization: `Bearer ${DB_TOKEN}`,
-                              'Content-Type': 'application/json' 
-                          },
-                          body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
-                      });
-                      
-                      await sendMessage(token, chatId, 
-                          `✅ <b>Сохранено!</b>\n👤 @${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Видео</a>`, 
-                          null, 'HTML');
-                  } else {
-                      await sendMessage(token, chatId, "❌ Ошибка скачивания (возможно приватное видео).");
+              if (!tikTokUrl) {
+                  await sendMessage(token, chatId, "❌ Нет ссылки.\nПример: <code>/add https://vm.tiktok.com/...</code>", null, 'HTML');
+              } else {
+                  await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
+                  try {
+                      const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
+                      const apiData = await apiRes.json();
+
+                      if (apiData.code === 0 && apiData.data) {
+                          const v = apiData.data;
+
+                          // === ЗАЩИТА ОТ СЛАЙД-ШОУ И MP3 ===
+                          if ((v.images && v.images.length > 0) || (v.play && v.play.includes('.mp3'))) {
+                              await sendMessage(token, chatId, "❌ <b>Это слайд-шоу или аудио!</b>\nОтмена сохранения.", null, 'HTML');
+                              // Прерываем выполнение, в базу не пишем
+                              return res.status(200).json({ ok: true }); 
+                          }
+
+                          const newVideo = {
+                              id: v.id, 
+                              videoUrl: v.play, 
+                              author: v.author.unique_id, 
+                              desc: 'on tiktok', 
+                              cover: v.cover
+                          };
+                          
+                          // Безопасное сохранение в БД
+                          await fetch(`${DB_URL}/`, {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
+                          });
+                          
+                          await sendMessage(token, chatId, 
+                              `✅ <b>Сохранено!</b>\n👤 @${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Видео</a>`, 
+                              null, 'HTML');
+                      } else {
+                          await sendMessage(token, chatId, "❌ Ошибка скачивания (возможно приватное видео).");
+                      }
+                  } catch (e) {
+                      await sendMessage(token, chatId, "❌ Ошибка скрипта: " + e.message);
                   }
-              } catch (e) {
-                  await sendMessage(token, chatId, "❌ Ошибка: " + e.message);
               }
           }
-      }
 
-      // === КОМАНДА /CLEAR (Очистка) ===
-      else if (text === '/clear' && isAdmin(chatId)) {
-          await fetch(`${DB_URL}/del/feed_videos`, {
-              headers: { Authorization: `Bearer ${DB_TOKEN}` }
-          });
-          await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
-      }
-
-      // === РАССЫЛКА (Только Админы) ===
-      else if (text.startsWith('/broadcast') && isAdmin(chatId)) {
-          const bText = text.replace('/broadcast', '').trim();
-          if(!bText) return sendMessage(token, chatId, "Пиши текст после команды.");
-          
-          let users = [];
-          try {
-             const r = await fetch(`${DB_URL}/smembers/all_bot_users`, {headers:{Authorization:`Bearer ${DB_TOKEN}`}});
-             const d = await r.json();
-             users = d.result || [];
-          } catch(e){}
-
-          let count = 0;
-          for(const u of users) {
-              try { await sendMessage(token, u, `📢 <b>Новости:</b>\n${bText}`, null, 'HTML'); count++; } catch(e){}
+          // --- /CLEAR (Очистка базы) ---
+          else if (text === '/clear') {
+              await fetch(`${DB_URL}/del/feed_videos`, {
+                  headers: { Authorization: `Bearer ${DB_TOKEN}` }
+              });
+              await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
           }
-          await sendMessage(token, chatId, `Рассылка ушла ${count} людям.`);
+
+          // --- /BROADCAST (Рассылка) ---
+          else if (text.startsWith('/broadcast')) {
+              const bText = text.replace('/broadcast', '').trim();
+              if(!bText) return sendMessage(token, chatId, "Пиши текст после команды.");
+              
+              let users = [];
+              try {
+                 const r = await fetch(`${DB_URL}/smembers/all_bot_users`, {headers:{Authorization:`Bearer ${DB_TOKEN}`}});
+                 const d = await r.json();
+                 users = d.result || [];
+              } catch(e){}
+
+              let count = 0;
+              for(const u of users) {
+                  try { await sendMessage(token, u, `📢 <b>Новости:</b>\n${bText}`, null, 'HTML'); count++; } catch(e){}
+              }
+              await sendMessage(token, chatId, `Рассылка ушла ${count} людям.`);
+          }
+          
+          // Если админ написал просто текст (не команду) - можно игнорировать или эхо
       }
 
-      // === ПРЕДЛОЖКА (Обычные юзеры) ===
+      // === НЕ АДМИНЫ (Предложка) ===
       else if (!isAdmin(chatId) && chatId > 0) {
+          // Если юзер пытается использовать админские команды - игнорируем их
+          if (text.startsWith('/add') || text.startsWith('/clear') || text.startsWith('/broadcast')) {
+             // Можно просто ничего не делать (тупо игнор), 
+             // либо удалить сообщение и показать меню (как при непонятном тексте).
+             // Выбираем вариант с меню:
+          }
+          
+          // Логика предложки
           if (text.includes('http')) {
               // Рассылаем уведомление ВСЕМ админам
               const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
@@ -154,6 +175,7 @@ export default async function handler(req, res) {
               }
               await sendMessage(token, chatId, "✅ Передал админам!");
           } else {
+             // Если это не ссылка и не команда /start - удаляем и шлем меню
              try {
                 await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
                     method: 'POST',
