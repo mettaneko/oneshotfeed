@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     const body = req.body;
     const token = process.env.BOT_TOKEN;
     const adminId = process.env.ADMIN_ID;
-    const webAppUrl = 'https://niko-feed.vercel.app'; // ТВОЯ ССЫЛКА НА САЙТ
+    const webAppUrl = 'https://mettaneko.github.io/oneshotfeed/'; // ТВОЯ ССЫЛКА НА САЙТ
 
     // 1. Обработка нажатия кнопки (Callback Query)
     if (body.callback_query) {
@@ -27,6 +27,7 @@ export default async function handler(req, res) {
 *25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании \`/start\`.
 *25.12.6* - Добавлена предложка напрямую в бота.
 *25.12.6H* - Откат предыдущего апдейта.
+*25.12.6R* - Фикс багов с кнопками стартового сообщения.
         `;
         await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
           method: 'POST',
