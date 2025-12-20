@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     if (desc) message += `📝 *Описание*: ${desc}\n`;
     
     if (user) {
-      message += `\n👨‍💻 От: ${user.first_name || 'noname'} (ID: ${user.id})`;
+      message += `\n👨‍💻 От: ${user.first_name || 'noname'} (ID: ${user.id} / ${user.username})`;
     }
 
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
