@@ -25,8 +25,8 @@ export default async function handler(req, res) {
   try {
     const message = 
       '📹 *Видео из фида:*\n\n' +
-      `👤 Автор: @${author}\n` +
-      `🎥 URL: ${videoUrl}\n` +
+      `👤 Автор:  \`@${author} \`\n` +
+      `🎥 URL:  \`${videoUrl} \`\n` +
       (desc ? `📝 ${desc}` : '');
 
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
