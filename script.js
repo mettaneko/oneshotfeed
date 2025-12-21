@@ -1,8 +1,25 @@
 // === KONFIG ===
 const API_BASE = 'https://niko-feed.vercel.app'; 
+const BATCH_SIZE = 5; 
 
-// === 0. TELEGRAM WEB APP ===
+// 👇 ПРАВИЛЬНАЯ ССЫЛКА НА БОТА
+const BOT_LINK = 'https://t.me/oneshotfeedbot/app'; 
+
+// === 0. TELEGRAM WEB APP & REDIRECT ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+// === 🚨 АВТО-РЕДИРЕКТ 🚨 ===
+const isTelegramUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+
+if (!isTelegramUser) {
+    // 👇 ЗАКОММЕНТИРУЙ ЭТУ СТРОКУ, ЕСЛИ ХОЧЕШЬ ТЕСТИТЬ В БРАУЗЕРЕ БЕЗ РЕДИРЕКТА !!!
+    window.location.href = BOT_LINK; 
+    
+    // Показываем кнопку "Открыть в Telegram", если редирект отключен
+    const redirectBanner = document.getElementById('disable-redirect-banner');
+    if (redirectBanner) redirectBanner.classList.add('show');
+}
+
 if (tg) {
     tg.expand();
     tg.ready();
@@ -14,100 +31,127 @@ let audioCtx;
 // === 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
 let subscribedAuthors = [];
 let hasInteracted = false;
+let globalVolume = parseFloat(localStorage.getItem('niko_volume') || '1.0');
 
-// --- ГРОМКОСТЬ (С СОХРАНЕНИЕМ) ---
-let savedVol = localStorage.getItem('niko_volume');
-let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
+// ГЛАВНЫЕ МАССИВЫ (КЭШ)
+let allVideosCache = []; 
+let queue = [];          
 
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
-let allVideos = [];
 
-// DOM Элементы
+// DOM Elements
 const feedContainer = document.getElementById('feed');
 const tabForYou = document.getElementById('tab-foryou');
 const tabFollowing = document.getElementById('tab-following');
 const indicator = document.getElementById('nav-indicator');
 const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
-
-// Кнопки
 const uiSubBtn = document.getElementById('ui-sub-btn');
 const uiVolBtn = document.getElementById('ui-vol-btn');
 const uiVolCont = document.getElementById('ui-vol-cont');
 const uiVolRange = document.getElementById('ui-vol-range');
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
-
-// Форма
 const suggestForm = document.getElementById('suggest-form');
 const sugUrl = document.getElementById('sug-url');
 const sugAuthor = document.getElementById('sug-author');
 const sugDesc = document.getElementById('sug-desc');
 const sugBtn = document.getElementById('sug-send');
 
-// === ПРОВЕРКА TELEGRAM (ОПЦИОНАЛЬНО) ===
-const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-const redirectBanner = document.getElementById('disable-redirect-banner');
-
-if (!isTelegram && redirectBanner) {
-    redirectBanner.classList.add('show');
-    // window.location.href = 'https://t.me/niko_feed_bot'; // Раскомментируй для редиректа
-}
-if (redirectBanner) {
-    const disableBtn = document.getElementById('disable-redirect-btn');
-    if (disableBtn) {
-        disableBtn.addEventListener('click', () => {
-            redirectBanner.classList.remove('show');
-            setTimeout(() => redirectBanner.remove(), 500);
-        });
-    }
+// Баннер (если редирект отключен)
+if (!isTelegramUser && document.getElementById('disable-redirect-btn')) {
+    document.getElementById('disable-redirect-btn').addEventListener('click', () => {
+        document.getElementById('disable-redirect-banner').classList.remove('show');
+    });
 }
 
-// === 2. ЗАГРУЗКА ВИДЕО (ГИБРИДНАЯ: JSON + БД) ===
-async function loadVideosOnce() {
-    let localVideos = [];
-    let dbVideos = [];
-
-    // 1. Грузим из файла (videos.json) - СТАРЫЕ
-    try {
-        const res = await fetch('public/videos.json', { cache: 'no-store' });
-        if (res.ok) {
-            localVideos = await res.json();
-        } else {
-            const res2 = await fetch('videos.json');
-            if (res2.ok) localVideos = await res2.json();
-        }
-    } catch (e) { console.error('Local JSON error:', e); }
-
-    // 2. Грузим из Базы Данных (API) - НОВЫЕ
+// === 2. ЗАГРУЗКА ВИДЕО (Smart Fetch) ===
+async function fetchVideos(isUpdate = false) {
+    let newVideos = [];
+    
+    // 1. Запрос к базе
     try {
         const res = await fetch(`${API_BASE}/api/get_feed`);
         if (res.ok) {
-            dbVideos = await res.json();
+            newVideos = await res.json();
         }
-    } catch (e) { console.error('DB Feed error:', e); }
+    } catch (e) { console.error('DB Fetch error:', e); return; }
 
-    // 3. Склеиваем!
-    allVideos = [...dbVideos, ...localVideos];
-    
-    if (allVideos.length === 0) console.warn('No videos found!');
+    // 2. Фолбэк на локальный файл (ПУТЬ ИСПРАВЛЕН: 'videos.json' вместо 'public/videos.json')
+    if (newVideos.length === 0 && allVideosCache.length === 0 && !isUpdate) {
+        try {
+            const res = await fetch('videos.json');
+            if (res.ok) newVideos = await res.json();
+        } catch (e) {}
+    }
+
+    if (newVideos.length === 0) return;
+
+    // 3. Слияние с кэшем
+    const currentIds = new Set(allVideosCache.map(v => v.id));
+    const freshContent = newVideos.filter(v => !currentIds.has(v.id));
+
+    if (freshContent.length > 0) {
+        console.log(`🔥 Прилетело ${freshContent.length} новых видео!`);
+        allVideosCache = [...freshContent, ...allVideosCache];
+        queue.unshift(...freshContent);
+        
+        if (isUpdate && feedContainer.children.length < 3) {
+            addVideosToDom(BATCH_SIZE);
+        }
+    } else if (!isUpdate) {
+        allVideosCache = newVideos;
+    }
 }
 
-async function reloadVideosAndFeed() {
-    const oldVideos = allVideos.slice();
-    await loadVideosOnce();
-    const oldIds = new Set(oldVideos.map(v => v.id));
-    const newOnes = allVideos.filter(v => !oldIds.has(v.id));
-    if (newOnes.length === 0) return;
-    newOnes.forEach(v => {
+// === 3. УПРАВЛЕНИЕ ЛЕНТОЙ ===
+function prepareQueue(type) {
+    let source = [];
+    if (type === 'foryou') {
+        source = [...allVideosCache];
+    } else {
+        source = allVideosCache.filter(v => subscribedAuthors.includes(v.author));
+    }
+
+    if (source.length === 0) return;
+
+    queue = shuffle(source);
+    feedContainer.innerHTML = '';
+    addVideosToDom(BATCH_SIZE);
+}
+
+function addVideosToDom(count) {
+    if (queue.length < count) {
+        let refill = [...allVideosCache];
+        if (currentTab === 'following') {
+            refill = refill.filter(v => subscribedAuthors.includes(v.author));
+        }
+        if (refill.length > 0) {
+            queue.push(...shuffle(refill));
+        }
+    }
+
+    const chunk = queue.splice(0, count);
+
+    chunk.forEach(v => {
         const slide = createSlide(v);
         feedContainer.appendChild(slide);
         observer.observe(slide);
     });
+
+    const allSlides = document.querySelectorAll('.video-slide');
+    if (allSlides.length > 15) {
+        for (let i = 0; i < 5; i++) {
+             if (allSlides[i]) {
+                 observer.unobserve(allSlides[i]);
+                 allSlides[i].remove();
+             }
+        }
+    }
 }
 
-// === 3. СИНХРОНИЗАЦИЯ ПОДПИСОК ===
+// === 4. ПОДПИСКИ ===
 async function syncSubs() {
     const local = JSON.parse(localStorage.getItem('subscribedAuthors'));
     if (local) subscribedAuthors = local;
@@ -115,7 +159,7 @@ async function syncSubs() {
     if (tg?.initDataUnsafe?.user) {
         try {
             const res = await fetch(`${API_BASE}/api/get_subs`, {
-                method: 'POST',
+                method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: tg.initDataUnsafe.user.id })
             });
@@ -125,137 +169,57 @@ async function syncSubs() {
                 localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
                 updateSubBtnState();
             }
-        } catch (e) { console.error('Sync subs error:', e); }
+        } catch (e) {}
     }
 }
 
-// === 4. АУДИО И ОВЕРЛЕЙ ===
-function unlockAudioContext(e) {
-    if (e) e.stopPropagation();
-
-    if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    
-    const buffer = audioCtx.createBuffer(1, 1, 22050);
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer; 
-    source.connect(audioCtx.destination); 
-    source.start(0);
-
-    const overlay = document.getElementById('audio-unlock-overlay');
-    if (overlay) { 
-        overlay.classList.add('hidden'); 
-        setTimeout(() => overlay.remove(), 500); 
-    }
-    
-    hasInteracted = true;
-    
-    const activeSlide = document.querySelector('.video-slide.active-slide');
-    if (activeSlide) {
-        const vid = activeSlide.querySelector('.video-player');
-        if (vid) { 
-            vid.muted = false; 
-            vid.volume = globalVolume; 
-            if (vid.paused) vid.play();
-        }
-    }
-}
-
-const overlayEl = document.getElementById('audio-unlock-overlay');
-if (overlayEl) {
-    overlayEl.addEventListener('click', unlockAudioContext);
-    overlayEl.addEventListener('touchstart', unlockAudioContext);
-}
-
-// === 5. НАВИГАЦИЯ ===
-function updateInd(tab) {
-    if (!tab) return;
-    indicator.style.width = `${tab.offsetWidth}px`;
-    indicator.style.transform = `translateX(${tab.offsetLeft}px)`;
-}
-function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
-function switchToForYou() {
-    currentTab = 'foryou';
-    tabForYou.classList.add('active'); tabFollowing.classList.remove('active');
-    updateInd(tabForYou); renderFeed(shuffle([...allVideos]));
-}
-tabForYou.addEventListener('click', switchToForYou);
-tabFollowing.addEventListener('click', () => {
-    if (subscribedAuthors.length === 0) return;
-    currentTab = 'following';
-    tabFollowing.classList.add('active'); tabForYou.classList.remove('active');
-    updateInd(tabFollowing);
-    renderFeed(allVideos.filter(v => subscribedAuthors.includes(v.author)));
-});
-
-// === 6. UI ЛОГИКА ===
-function updateSubBtnState() {
-    if (!currentActiveAuthor) return;
-    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
-}
-function updateGlobalUI(videoData) {
-    if (uiAuthor) uiAuthor.innerText = `@${videoData.author}`;
-    if (uiDesc) uiDesc.innerText = videoData.desc;
-    currentActiveAuthor = videoData.author;
-    updateSubBtnState();
-}
-
-uiSubBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!currentActiveAuthor) return;
-    const isSub = subscribedAuthors.includes(currentActiveAuthor);
-    const action = isSub ? 'remove' : 'add';
-
-    if (action === 'add') subscribedAuthors.push(currentActiveAuthor);
-    else subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor);
-    
-    updateSubBtnState();
-    
-    if (currentTab === 'following') {
-        if (subscribedAuthors.length === 0) switchToForYou();
-        else renderFeed(allVideos.filter(v => subscribedAuthors.includes(v.author)));
-    }
-
-    if (tg?.initDataUnsafe?.user) {
-        try {
-            await fetch(`${API_BASE}/api/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action })
-            });
-        } catch (e) { console.error('Sub API error:', e); }
-    } else {
-        localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
-    }
-});
-
-function getActiveSlideData() {
-    const slide = document.querySelector('.video-slide.active-slide');
-    if (!slide) return null;
-    try { return JSON.parse(slide.dataset.jsonData); } catch { return null; }
-}
-
-// === 7. СЛАЙДЫ + ПЛЕЕР ===
+// === 5. СОЗДАНИЕ СЛАЙДОВ (FIXED REFERER) ===
 function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
     slide.dataset.jsonData = JSON.stringify(data);
-    slide.innerHTML = `<video class="video-blur-bg" loop muted playsinline src="${data.videoUrl}"></video><div class="video-wrapper"><video class="video-player" loop muted playsinline src="${data.videoUrl}"></video><div class="video-progress-container"><div class="video-progress-fill"></div></div></div>`;
+    const poster = data.cover ? `poster="${data.cover}"` : '';
+
+    slide.innerHTML = `
+        <video class="video-blur-bg" loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
+        <div class="video-wrapper">
+            <video class="video-player" ${poster} loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
+            <div class="video-progress-container">
+                <div class="video-progress-fill"></div>
+            </div>
+            <div class="video-error-msg" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; color:white; font-family:sans-serif;">
+                ⚠️ Ошибка<br><span style="font-size:12px; opacity:0.7">Нажми, чтобы повторить</span>
+            </div>
+        </div>`;
+        
     const vid = slide.querySelector('.video-player');
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
-    
-    vid.addEventListener('click', () => {
-        if (vid.paused) { 
-            vid.play(); 
-            bg.play(); 
-        } else { 
-            vid.pause(); 
-            bg.pause(); 
+    const errMsg = slide.querySelector('.video-error-msg');
+
+    vid.addEventListener('error', () => {
+        if (!vid.dataset.retried) {
+             vid.dataset.retried = "true";
+             const sep = data.videoUrl.includes('?') ? '&' : '?';
+             const retryUrl = `${data.videoUrl}${sep}t=${Date.now()}`;
+             vid.src = retryUrl;
+             bg.src = retryUrl;
+        } else {
+             errMsg.style.display = 'block';
         }
     });
 
+    const togglePlay = () => {
+        if (errMsg.style.display === 'block') {
+            vid.src = vid.src; 
+            errMsg.style.display = 'none';
+            return;
+        }
+        if (vid.paused) { vid.play(); bg.play(); } else { vid.pause(); bg.pause(); }
+    };
+    vid.parentElement.addEventListener('click', togglePlay);
+    
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime/vid.duration)*100}%`; });
     
     let isDragging = false;
@@ -263,9 +227,10 @@ function createSlide(data) {
         const rect = bar.getBoundingClientRect();
         vid.currentTime = Math.max(0, Math.min(1, 1 - (y - rect.top)/rect.height)) * vid.duration;
     };
-    const start = (e) => { e.preventDefault(); isDragging=true; handle(e.touches?e.touches[0].clientY:e.clientY); };
-    const move = (e) => { if(isDragging) { e.preventDefault(); handle(e.touches?e.touches[0].clientY:e.clientY); } };
+    const start = (e) => { e.preventDefault(); e.stopPropagation(); isDragging=true; handle(e.touches?e.touches[0].clientY:e.clientY); };
+    const move = (e) => { if(isDragging) { e.preventDefault(); e.stopPropagation(); handle(e.touches?e.touches[0].clientY:e.clientY); } };
     const end = () => isDragging=false;
+    
     bar.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
     bar.addEventListener('touchstart', start); window.addEventListener('touchmove', move); window.addEventListener('touchend', end);
     bar.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handle(e.clientY); });
@@ -278,44 +243,106 @@ const observer = new IntersectionObserver((entries) => {
         const slide = entry.target;
         const vid = slide.querySelector('.video-player');
         const bg = slide.querySelector('.video-blur-bg');
-        if (!vid || !bg) return;
+        
         if (entry.isIntersecting) {
             document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
+            
             try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) {}
-            if (hasInteracted) { vid.volume = globalVolume; vid.muted = (globalVolume === 0); } else vid.muted = true;
-            if (vid.paused) { vid.play().then(() => bg.play()).catch(() => { vid.muted=true; vid.play(); bg.play(); }); }
-        } else { vid.pause(); bg.pause(); }
+
+            if (hasInteracted) { 
+                vid.volume = globalVolume; 
+                vid.muted = (globalVolume === 0); 
+            } else { 
+                vid.muted = true; 
+            }
+            
+            vid.play().then(() => bg.play()).catch(() => { vid.muted=true; vid.play(); bg.play(); });
+
+            const allSlides = Array.from(document.querySelectorAll('.video-slide'));
+            const index = allSlides.indexOf(slide);
+            if (allSlides.length - index < 3) {
+                addVideosToDom(BATCH_SIZE);
+            }
+        } else {
+            vid.pause();
+            bg.pause();
+        }
     });
 }, { threshold: 0.6 });
 
-function renderFeed(videos, append = false) {
-    if (!append) feedContainer.innerHTML = '';
-    videos.forEach(v => { const s = createSlide(v); feedContainer.appendChild(s); observer.observe(s); });
+// === 6. UI HELPERS ===
+function updateSubBtnState() {
+    if (!currentActiveAuthor) return;
+    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
 }
-feedContainer.addEventListener('scroll', () => {
-    if (feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight) < 300) {
-        if (currentTab === 'foryou') renderFeed(shuffle([...allVideos]), true);
-        else if (subscribedAuthors.length) renderFeed(allVideos.filter(v => subscribedAuthors.includes(v.author)), true);
+function updateGlobalUI(data) {
+    if (uiAuthor) uiAuthor.innerText = data.author || '@unknown';
+    if (uiDesc) uiDesc.innerText = data.desc || '';
+    currentActiveAuthor = data.author;
+    updateSubBtnState();
+}
+function unlockAudioContext(e) {
+    if (e) e.stopPropagation();
+    if (!audioCtx) audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const overlay = document.getElementById('audio-unlock-overlay');
+    if (overlay) { 
+        overlay.classList.add('hidden'); 
+        setTimeout(() => overlay.remove(), 500); 
+    }
+    hasInteracted = true;
+    const v = document.querySelector('.active-slide .video-player');
+    if (v) { v.muted = false; v.volume = globalVolume; }
+}
+function updateInd(tab) {
+    if (!tab) return;
+    indicator.style.width = `${tab.offsetWidth}px`;
+    indicator.style.transform = `translateX(${tab.offsetLeft}px)`;
+}
+function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+
+// Event Listeners
+const overlayEl = document.getElementById('audio-unlock-overlay');
+if (overlayEl) overlayEl.addEventListener('click', unlockAudioContext);
+
+tabForYou.addEventListener('click', () => {
+    currentTab = 'foryou';
+    tabForYou.classList.add('active'); tabFollowing.classList.remove('active');
+    updateInd(tabForYou);
+    prepareQueue('foryou');
+});
+
+tabFollowing.addEventListener('click', () => {
+    if (subscribedAuthors.length === 0) return;
+    currentTab = 'following';
+    tabFollowing.classList.add('active'); tabForYou.classList.remove('active');
+    updateInd(tabFollowing);
+    prepareQueue('following');
+});
+
+uiSubBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!currentActiveAuthor) return;
+    const isSub = subscribedAuthors.includes(currentActiveAuthor);
+    const action = isSub ? 'remove' : 'add';
+    if (action === 'add') subscribedAuthors.push(currentActiveAuthor);
+    else subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor);
+    updateSubBtnState();
+    localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
+    if (tg?.initDataUnsafe?.user) {
+        fetch(`${API_BASE}/api/subscribe`, { method: 'POST', body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }).catch(()=>{});
     }
 });
 
 uiVolBtn.addEventListener('click', (e) => { e.stopPropagation(); uiVolCont.classList.toggle('active'); });
-
-// --- ОБНОВЛЕНИЕ ГРОМКОСТИ ---
 uiVolRange.addEventListener('input', (e) => { 
-    e.stopPropagation(); 
-    globalVolume = parseFloat(e.target.value); 
-    localStorage.setItem('niko_volume', globalVolume); // Сохраняем
-
-    const v = document.querySelector('.video-slide.active-slide .video-player'); 
-    if(v) { 
-        v.volume = globalVolume; 
-        v.muted = (globalVolume === 0); 
-    } 
+    e.stopPropagation(); globalVolume = parseFloat(e.target.value); 
+    localStorage.setItem('niko_volume', globalVolume);
+    const v = document.querySelector('.active-slide .video-player'); if(v) { v.volume = globalVolume; v.muted = (globalVolume === 0); } 
 });
 
-// === 8. API ФУНКЦИИ (Предложка + Шер) ===
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display==='flex')?'none':'flex'; });
 }
@@ -325,67 +352,37 @@ if (sugBtn) {
         const author = sugAuthor.value.trim();
         const desc = sugDesc.value.trim();
         if (!url) { tg?.showAlert('Вставь ссылку!'); return; }
-        
-        const originalText = sugBtn.innerText;
-        sugBtn.innerText = '...';
-        sugBtn.disabled = true;
-
+        sugBtn.innerText = '...'; sugBtn.disabled = true;
         try {
-            const res = await fetch(`${API_BASE}/api/suggest`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user })
-            });
-            
-            if (res.ok) { 
-                sugBtn.innerText = 'Отправлено!';
-                sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
-                setTimeout(() => {
-                    suggestForm.style.display = 'none';
-                    sugBtn.innerText = originalText;
-                    sugBtn.disabled = false;
-                }, 1000);
-            } else if (res.status === 429) {
-                tg?.showAlert('Подожди минуту!');
-                sugBtn.innerText = originalText;
-                sugBtn.disabled = false;
-            } else {
-                tg?.showAlert('Ошибка API');
-                sugBtn.innerText = originalText;
-                sugBtn.disabled = false;
-            }
-        } catch (e) { 
-            tg?.showAlert('Ошибка сети'); 
-            sugBtn.innerText = originalText;
-            sugBtn.disabled = false;
-        }
+            const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) });
+            if (res.ok) { sugBtn.innerText='Отправлено!'; setTimeout(() => { suggestForm.style.display='none'; sugBtn.innerText='Отправить'; sugBtn.disabled=false; }, 1000); }
+            else { tg?.showAlert('Ошибка'); sugBtn.innerText='Отправить'; sugBtn.disabled=false; }
+        } catch (e) { tg?.showAlert('Сбой сети'); sugBtn.innerText='Отправить'; sugBtn.disabled=false; }
     });
 }
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        const data = getActiveSlideData();
-        if (!data || !tg?.initDataUnsafe?.user) { if(data) alert(`Скопировано: ${data.videoUrl}`); return; }
+        const data = document.querySelector('.active-slide')?.dataset.jsonData;
+        if (!data) return;
+        const v = JSON.parse(data);
+        if (!tg?.initDataUnsafe?.user) { navigator.clipboard.writeText(v.videoUrl); alert('Ссылка скопирована!'); return; }
         try {
-            const res = await fetch(`${API_BASE}/api/share`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoUrl: data.videoUrl, author: data.author, desc: data.desc, user: tg.initDataUnsafe.user })
-            });
-            if (res.ok) tg.showPopup({title:'Готово', message:'Бот отправил видео!', buttons:[{type:'ok'}]});
-            else tg.showAlert('Ошибка бота');
-        } catch (e) { tg.showAlert('Ошибка сети'); }
+            const res = await fetch(`${API_BASE}/api/share`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ videoUrl: v.videoUrl, author: v.author, desc: v.desc, user: tg.initDataUnsafe.user }) });
+            if (res.ok) tg.showPopup({title:'Готово', message:'Видео отправлено ботом', buttons:[{type:'ok'}]});
+        } catch(e) { tg.showAlert('Ошибка сети'); }
     });
 }
 
 // === INIT ===
 window.addEventListener('load', async () => {
-    // Ставим ползунок
     if(uiVolRange) uiVolRange.value = globalVolume;
-
-    await loadVideosOnce(); // <--- ТУТ ГРУЗЯТСЯ И JSON, И БД
+    
+    await fetchVideos(false); 
     await syncSubs(); 
+    
     updateInd(tabForYou);
-    renderFeed(shuffle([...allVideos]));
+    prepareQueue('foryou');
+    
+    setInterval(() => fetchVideos(true), 60000);
 });
-setInterval(reloadVideosAndFeed, 30000);
