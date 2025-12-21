@@ -323,29 +323,40 @@ input[type=range].volume-range::-webkit-slider-thumb {
     transform: translateX(-50%);
     z-index: 100;
     display: flex;
+    justify-content: center; /* Центрируем табы */
     padding: 4px;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(15px);
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    
+    /* Ограничиваем ширину, чтобы не вылезало за экран */
+    width: auto;
+    max-width: 90vw; 
+    white-space: nowrap; /* Запрещаем перенос текста */
 }
+
 .nav-tab {
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
     font-family: var(--font-title);
     font-size: 0.95rem;
     font-weight: 700;
-    padding: 8px 24px;
+    padding: 8px 16px; /* Чуть уменьшил боковые отступы (было 24px) */
     cursor: pointer;
     transition: color 0.3s;
     z-index: 2;
     position: relative;
+    user-select: none; /* Чтобы текст не выделялся при тапах */
+    -webkit-tap-highlight-color: transparent;
 }
+
 .nav-tab.active {
     color: #fff;
     text-shadow: 0 0 10px rgba(255,255,255,0.2);
 }
+
 .nav-indicator {
     position: absolute;
     top: 4px;
@@ -354,8 +365,16 @@ input[type=range].volume-range::-webkit-slider-thumb {
     background: rgba(255, 255, 255, 0.15);
     border-radius: 25px;
     z-index: 1;
-    transition: all 0.3s;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* Плавная анимация */
     width: 0;
+}
+
+/* Адаптация для очень узких экранов (iPhone SE и т.д.) */
+@media (max-width: 360px) {
+    .nav-tab {
+        font-size: 0.85rem; /* Чуть меньше шрифт */
+        padding: 6px 12px;  /* Еще меньше отступы */
+    }
 }
 
 
