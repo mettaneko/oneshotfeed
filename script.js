@@ -1,21 +1,29 @@
-// === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
+// === НАСТРОЙКИ ===
+// 👇 ВСТАВЬ СЮДА ССЫЛКУ ИЗ VERCEL (например: https://oneshotfeed.vercel.app)
+// БЕЗ СЛЕША В КОНЦЕ!
+const API_BASE = 'https://niko-feed.vercel.app'; 
+
 let currentPage = 1;
 let isLoading = false;
 let noMoreVideos = false;
 const feedContainer = document.querySelector('.tiktok-feed');
+
+// Опции для автоплея (когда видео появляется на экране)
 const observerOptions = { root: null, rootMargin: '0px', threshold: 0.6 };
 
-// === 0. ПРОВЕРКА ТЕХ. РАБОТ ===
+// === 1. ПРОВЕРКА ТЕХ. РАБОТ ===
 async function checkMaintenance() {
     try {
-        // Проверяем статус в API (GitHub Pages -> Vercel API)
-        const res = await fetch('/api/status');
+        if (!API_BASE.includes('http')) {
+            console.warn('⚠️ API_BASE не настроен в script.js! Локальная версия может не работать.');
+            return false;
+        }
+        const res = await fetch(`${API_BASE}/api/status`);
         const data = await res.json();
         
         if (data.maintenance) {
-            // Если включено - редирект на заглушку
             window.location.href = 'maintenance.html';
-            return true; // Стоп скрипт
+            return true;
         }
     } catch (e) {
         console.error('Ошибка проверки статуса:', e);
@@ -23,27 +31,25 @@ async function checkMaintenance() {
     return false;
 }
 
-// === 1. ИНИЦИАЛИЗАЦИЯ ===
+// === 2. ИНИЦИАЛИЗАЦИЯ ===
 document.addEventListener('DOMContentLoaded', async () => {
-    // Сначала проверяем, не закрыт ли сайт
+    // Шторка звука
+    const unlockOverlay = document.getElementById('audio-unlock-overlay');
+    if (unlockOverlay) {
+        unlockOverlay.addEventListener('click', unlockAudio);
+    }
+
     const isClosed = await checkMaintenance();
     if (isClosed) return;
 
-    // Если открыт, грузим ленту
-    initFeed();
+    // Загрузка ленты
+    await loadMoreVideos();
 
-    // Запускаем бесконечный скролл
+    // Бесконечный скролл
     feedContainer.addEventListener('scroll', handleScroll);
-    
-    // Кнопка разблокировки звука
-    document.getElementById('audio-unlock-overlay')?.addEventListener('click', unlockAudio);
 });
 
-// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) ===
-async function initFeed() {
-    await loadMoreVideos();
-}
-
+// === 3. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) ===
 async function loadMoreVideos() {
     if (isLoading || noMoreVideos) return;
     isLoading = true;
@@ -51,11 +57,8 @@ async function loadMoreVideos() {
     try {
         console.log(`📡 Загружаю страницу ${currentPage}...`);
         
-        // Вставь сюда СВОЙ домен от Vercel
-        const API_BASE = 'https://oneshotfeed.vercel.app'; 
-
         const res = await fetch(`${API_BASE}/api/get_feed?page=${currentPage}`);
-        if (!res.ok) throw new Error('Network error');
+        if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
         
         const newVideos = await res.json();
 
@@ -67,7 +70,7 @@ async function loadMoreVideos() {
         }
 
         renderVideos(newVideos);
-        currentPage++; // Следующая страница
+        currentPage++; // Готовим следующую страницу
 
     } catch (e) {
         console.error("Ошибка загрузки:", e);
@@ -77,26 +80,25 @@ async function loadMoreVideos() {
     }
 }
 
-// === 3. РЕНДЕРИНГ ВИДЕО ===
+// === 4. РЕНДЕРИНГ (ТВОИ КНОПКИ И ДИЗАЙН) ===
 function renderVideos(videos) {
     videos.forEach(video => {
-        // Защита от битых данных
         if (!video.videoUrl) return;
 
         const slide = document.createElement('div');
         slide.className = 'video-slide';
         
-        // Разметка слайда
+        // Вставляем HTML (Твой дизайн сохранен)
         slide.innerHTML = `
-            <div class="video-blur-bg"></div>
+            <div class="video-blur-bg" style="background-image: url('${video.cover || ''}')"></div>
             <div class="video-wrapper">
                 <video class="video-player" 
                        src="${video.videoUrl}" 
                        loop 
                        playsinline 
                        webkit-playsinline
-                       preload="metadata"
-                       poster="${video.cover || ''}">
+                       poster="${video.cover || ''}"
+                       preload="metadata">
                 </video>
                 
                 <!-- Прогресс бар -->
@@ -104,8 +106,8 @@ function renderVideos(videos) {
                     <div class="video-progress-fill"></div>
                 </div>
 
-                <!-- Оверлей паузы (иконка) -->
-                <div class="pause-overlay" style="display:none;">
+                <!-- Пауза -->
+                <div class="pause-overlay" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; justify-content:center; align-items:center; z-index:5;">
                    <i class="fas fa-play" style="font-size: 3rem; color: rgba(255,255,255,0.5);"></i>
                 </div>
             </div>
@@ -120,153 +122,123 @@ function renderVideos(videos) {
                 </div>
 
                 <div class="glass-deck">
-                     <button class="control-btn btn-share" onclick="shareVideo('${video.videoUrl}', '${video.author}', '${video.desc || ''}')">
+                    <!-- Кнопка Share (Через твой share.js) -->
+                     <button class="control-btn btn-share" onclick="shareVideo('${video.videoUrl}', '${video.author}', '${video.desc ? video.desc.replace(/'/g, "\\'") : ''}')">
                         <i class="fas fa-share"></i>
                     </button>
-                    <!-- Кнопка Telegram (если есть юзернейм) -->
+                    
+                    <!-- Кнопка Telegram -->
                     <button class="control-btn" onclick="window.open('https://t.me/OneShotFeedBot', '_blank')">
                          <i class="fab fa-telegram-plane"></i>
+                    </button>
+
+                     <!-- Кнопка Volume (Заглушка для красоты, т.к. звук общий) -->
+                    <button class="control-btn">
+                         <i class="fas fa-volume-up"></i>
                     </button>
                 </div>
             </div>
         `;
 
-        // Установка фона (блюр)
-        if (video.cover) {
-            slide.querySelector('.video-blur-bg').style.backgroundImage = `url(${video.cover})`;
-        }
-
-        // Логика плеера (клик - пауза/плей)
+        // Логика плеера
         const videoEl = slide.querySelector('video');
         const wrapper = slide.querySelector('.video-wrapper');
         const pauseOverlay = slide.querySelector('.pause-overlay');
-        
-        wrapper.addEventListener('click', () => togglePlay(videoEl, pauseOverlay));
-        
-        // Логика прогресс бара
+
+        // Клик по видео -> Пауза/Плей
+        wrapper.addEventListener('click', () => {
+            if (videoEl.paused) {
+                videoEl.play();
+                pauseOverlay.style.display = 'none';
+            } else {
+                videoEl.pause();
+                pauseOverlay.style.display = 'flex';
+            }
+        });
+
+        // Прогресс бар
         setupProgressBar(slide, videoEl);
 
-        // Наблюдатель (чтобы играть только когда видео на экране)
+        // Добавляем в наблюдатель (для автоплея при скролле)
         observer.observe(slide);
         
         feedContainer.appendChild(slide);
     });
 }
 
-// === 4. OBSERVER (АВТОПЛЕЙ) ===
+// === 5. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+
+// Intersection Observer (Автоплей)
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const video = entry.target.querySelector('video');
         if (!video) return;
 
         if (entry.isIntersecting) {
-            // Видео появилось на экране
-            video.currentTime = 0; // Начинаем сначала
-            const playPromise = video.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(() => {
-                    // Автоплей заблокирован браузером (нужен тап)
-                    console.log('Autoplay blocked');
-                });
+            // Видео на экране
+            video.currentTime = 0;
+            const p = video.play();
+            if (p !== undefined) {
+                p.catch(() => { /* Автоплей заблокирован до клика */ });
             }
         } else {
-            // Видео ушло с экрана
+            // Видео ушло
             video.pause();
         }
     });
 }, observerOptions);
 
-// === 5. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-
-function togglePlay(video, overlay) {
-    if (video.paused) {
-        video.play();
-        overlay.style.display = 'none';
-    } else {
-        video.pause();
-        overlay.style.display = 'flex';
-        overlay.style.justifyContent = 'center';
-        overlay.style.alignItems = 'center';
-        overlay.style.position = 'absolute';
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
-    }
-}
-
 function setupProgressBar(slide, video) {
-    const progressContainer = slide.querySelector('.video-progress-container');
     const progressFill = slide.querySelector('.video-progress-fill');
-
-    // Обновление полоски
     video.addEventListener('timeupdate', () => {
         const percent = (video.currentTime / video.duration) * 100;
         progressFill.style.height = `${percent}%`;
     });
-
-    // Перемотка кликом
-    progressContainer.addEventListener('click', (e) => {
-        e.stopPropagation(); // Чтобы не сработала пауза
-        const rect = progressContainer.getBoundingClientRect();
-        const pos = (e.clientY - rect.top) / rect.height; // Vertical progress
-        // У тебя прогресс бар вертикальный? Если нет, используй clientX и width
-        // Судя по CSS (height: 60%, width: 4px) - он вертикальный справа.
-        // Но обычно fill растет снизу вверх. Проверь стили.
-        // Если fill bottom: 0, то клик сверху это 0% или 100%?
-        // Сделаем стандартно: 
-        const percent = 1 - pos; // Инвертируем, если 0 внизу
-        video.currentTime = percent * video.duration;
-    });
 }
 
-// Бесконечный скролл
 function handleScroll() {
     const distanceToBottom = feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight);
-    if (distanceToBottom < 800) { // Если осталось меньше 2 экранов
+    if (distanceToBottom < 800) { 
         loadMoreVideos();
     }
 }
 
-// Share Logic
+// Твоя функция Share
 async function shareVideo(url, author, desc) {
-    // Твой share.js
+    // Если поддерживается нативный шаринг (телефон)
     if (navigator.share) {
         try {
             await navigator.share({
                 title: `Video by @${author}`,
-                text: desc || 'Check this out!',
+                text: desc,
                 url: url
             });
-        } catch (err) {
-            console.log('Share canceled');
-        }
+        } catch (err) {}
     } else {
-        // Fallback: копируем ссылку
+        // Если ПК - просто копируем
         navigator.clipboard.writeText(url).then(() => alert('Ссылка скопирована!'));
     }
 }
 
 function unlockAudio() {
     const overlay = document.getElementById('audio-unlock-overlay');
-    overlay.classList.add('hidden');
-    // Находим активное видео и включаем звук
-    const activeSlide = document.querySelector('.video-slide'); // Первый слайд
-    if (activeSlide) {
-        const vid = activeSlide.querySelector('video');
-        vid.muted = false;
-        vid.play();
+    if (overlay) overlay.classList.add('hidden');
+    
+    // Включаем первое видео
+    const firstVid = document.querySelector('video');
+    if (firstVid) {
+        firstVid.muted = false;
+        firstVid.play();
     }
 }
 
 function showEmptyMessage() {
     const msg = document.createElement('div');
-    msg.style.color = 'white';
-    msg.style.textAlign = 'center';
-    msg.style.marginTop = '50vh';
-    msg.innerText = 'Лента пуста. Добавьте видео через бота!';
+    msg.style.cssText = 'color: white; text-align: center; margin-top: 50vh; font-family: sans-serif;';
+    msg.innerText = 'Лента пуста. Добавь видео в бота!';
     feedContainer.appendChild(msg);
 }
 
 function showErrorMessage() {
-    // Можно показать тост
-    console.log("Error loading feed");
+    console.log("Ошибка загрузки фида.");
 }
