@@ -52,6 +52,13 @@ export default async function handler(req, res) {
       const text = msg.text || msg.caption || '';
       const user = msg.from || { id: chatId, username: 'Channel' };
 
+      console.log('🔥 ПОЛУЧИЛ СООБЩЕНИЕ:', {
+        chatId,
+        isChannelPost: !!body.channel_post,
+        textPreview: text.slice(0, 80),
+        isAdmin: isAdmin(chatId),
+      });
+
       // Save User (только для личных чатов)
       if (DB_URL && DB_TOKEN && chatId > 0) {
         try {
@@ -62,7 +69,7 @@ export default async function handler(req, res) {
       }
 
       // === АВТО-ПАРСИНГ ИЗ КАНАЛА ===
-      if (msg.channel_post && isAdmin(chatId)) {
+      if (body.channel_post && isAdmin(chatId)) {
         const tiktokRegex = /(https?:\/\/(?:www\.|vm\.|vt\.|m\.)?tiktok\.com\/[^\s]+)/g;
         const links = text.match(tiktokRegex);
 
@@ -89,7 +96,7 @@ export default async function handler(req, res) {
                     date: Date.now()
                   }),
                   report: {
-                    author: authorName,
+                    author: authorName.replace('@', ''),
                     originalLink: link
                   }
                 };
@@ -105,14 +112,12 @@ export default async function handler(req, res) {
           const reports = validResults.map(item => item.report);
 
           if (videosToPush.length > 0) {
-            // Сохраняем в базу
             await fetch(`${DB_URL}/`, {
               method: 'POST',
               headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
               body: JSON.stringify(["RPUSH", "feed_videos", ...videosToPush])
             });
 
-            // Отчет админам
             let reportText = `✅ <b>Авто-импорт из канала:</b>\n`;
             reports.forEach(r => {
               reportText += `\n👤 <b>${r.author}</b>\n📝 on tiktok\n🔗 <a href="${r.originalLink}">TikTok</a>\n`;
@@ -129,8 +134,7 @@ export default async function handler(req, res) {
       }
 
       // === ЛИЧНЫЕ СООБЩЕНИЯ ===
-      
-      // /START
+
       if (text === '/start') {
         await sendMessage(token, chatId, 
             "👋 Привет! Добро пожаловать в Niko Feed. \n Делись, смотри видео по OneShot или просто следи за обновлениями! ", 
@@ -143,7 +147,6 @@ export default async function handler(req, res) {
       // === ADMIN COMMANDS ===
       else if (isAdmin(chatId)) {
 
-          // --- /ADD ---
           if (text.startsWith('/add') || text.includes('tiktok.com')) {
               const parts = text.split(/\s+/);
               let tikTokUrl = parts.find(p => p.includes('http'));
@@ -223,7 +226,6 @@ export default async function handler(req, res) {
               }
           }
 
-          // Остальные админ-команды без изменений...
           else if (text.startsWith('/maintenance')) {
              const parts = text.split(/\s+/);
              const mode = parts[1];
@@ -272,7 +274,6 @@ export default async function handler(req, res) {
           }
       }
 
-      // === NOT ADMIN (Предложки) ===
       else if (!isAdmin(chatId) && chatId > 0) {
           if (text.startsWith('/add') || text.startsWith('/clear') || text.startsWith('/maintenance')) return res.status(200).json({ ok: true });
           
@@ -288,7 +289,6 @@ export default async function handler(req, res) {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Bot Error' }); }
 }
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 async function getTikTokMetadata(url) {
     try {
         const res = await fetch(`https://www.tiktok.com/oembed?url=${url}`);
