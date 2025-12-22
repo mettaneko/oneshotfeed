@@ -1,4 +1,4 @@
-const API_BASE = 'https://niko-feed.vercel.app'; 
+const API_BASE = ''; 
 const BATCH_SIZE = 5; 
 const BOT_LINK = 'https://t.me/oneshotfeedbot'; 
 const ADMIN_CODE_KEY = 'admin_bypass_token'; 
