@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Технические работы</title>
-    <!-- Подключаем шрифты -->
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -25,6 +24,7 @@
             height: 100vh;
             text-align: center;
             overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
         }
         h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 800; }
         p { color: rgba(255,255,255,0.6); font-size: 0.9rem; max-width: 300px; line-height: 1.5; margin-bottom: 30px; }
@@ -38,18 +38,18 @@
 
         /* Developer Section */
         .dev-section {
-            margin-top: 30px;
+            margin-top: 40px;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 15px;
-            opacity: 0.8;
+            opacity: 0.3; /* Полупрозрачный, чтобы не мешать обычным юзерам */
             transition: opacity 0.3s;
         }
-        .dev-section:hover { opacity: 1; }
+        .dev-section:hover, .dev-section:focus-within { opacity: 1; }
 
         .dev-label {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: rgba(255,255,255,0.4);
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -74,7 +74,7 @@
             font-size: 1.5rem;
             letter-spacing: 10px;
             text-align: center;
-            width: 160px;
+            width: 180px;
             outline: none;
             transition: 0.3s;
         }
@@ -82,6 +82,7 @@
             border-color: var(--accent-color);
             box-shadow: 0 0 15px rgba(169, 149, 255, 0.2);
             background: rgba(255,255,255,0.08);
+            opacity: 1;
         }
         .code-input::placeholder {
             font-size: 1rem; letter-spacing: 2px; opacity: 0.2;
@@ -91,7 +92,7 @@
         }
 
         .btn {
-            margin-top: 20px;
+            margin-top: 30px;
             padding: 10px 24px;
             background: rgba(255,255,255,0.1);
             border: 1px solid rgba(255,255,255,0.2);
@@ -115,7 +116,6 @@
         }
         .error-msg.show { opacity: 1; }
 
-        /* Spinner for checking */
         .spinner-mini {
             width: 20px;
             height: 20px;
@@ -141,7 +141,7 @@
         <div class="dev-label">Если вы разработчик:</div>
         
         <div class="auth-container">
-            <input type="tel" id="2fa-input" class="code-input" maxlength="6" placeholder="______" autocomplete="one-time-code" inputmode="numeric">
+            <input type="tel" id="2fa-input" class="code-input" maxlength="6" placeholder="______" autocomplete="off" inputmode="numeric">
             <div class="spinner-mini" id="loading-spinner"></div>
             <div id="error-text" class="error-msg">Неверный код</div>
         </div>
@@ -150,36 +150,53 @@
     <a href="#" onclick="location.reload()" class="btn">Обновить</a>
 
     <script>
-        const API_BASE = ''; 
+        const SESSION_DURATION = 5 * 60 * 1000; // 5 минут
 
-        if (localStorage.getItem('admin_bypass_token')) {
+        // 1. ПРОВЕРКА СУЩЕСТВУЮЩЕГО ТОКЕНА
+        function isTokenValid() {
+            const token = localStorage.getItem('admin_bypass_token');
+            if (!token) return false;
+            try {
+                const payload = JSON.parse(atob(token));
+                // Если прошло меньше 5 минут
+                if (Date.now() - payload.ts < SESSION_DURATION) {
+                    return true;
+                }
+            } catch (e) {}
+            localStorage.removeItem('admin_bypass_token'); // Удаляем тухлый
+            return false;
+        }
+
+        if (isTokenValid()) {
             window.location.href = '/';
         }
 
+        // 2. ПРОВЕРКА: ЗАКОНЧИЛИСЬ ЛИ РАБОТЫ?
         setInterval(() => {
-            // Исправленный путь
-            fetch(`${API_BASE}/api/get_feed`)
+            fetch('/api/get_feed')
                 .then(r => r.json())
                 .then(d => {
+                    // Если maintenance: false, пускаем всех
                     if (!d.maintenance) window.location.href = '/';
                 })
                 .catch(() => {});
         }, 5000);
 
+        // 3. ЛОГИКА ВВОДА КОДА
         const input = document.getElementById('2fa-input');
         const err = document.getElementById('error-text');
         const spinner = document.getElementById('loading-spinner');
 
         input.addEventListener('input', async (e) => {
             const val = input.value;
+            
             if (val.length === 6) {
                 input.disabled = true;
                 spinner.style.display = 'block';
                 err.classList.remove('show');
 
                 try {
-                    // Исправленный путь
-                    const res = await fetch(`${API_BASE}/api/auth`, {
+                    const res = await fetch('/api/auth', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code: val })
@@ -187,6 +204,7 @@
 
                     if (res.ok) {
                         const data = await res.json();
+                        // Сохраняем токен
                         localStorage.setItem('admin_bypass_token', data.token);
                         
                         input.style.borderColor = '#4cd964';
@@ -200,8 +218,10 @@
                     spinner.style.display = 'none';
                     input.disabled = false;
                     input.focus();
+                    
                     err.classList.add('show');
-                    input.style.borderColor = '#ff6961';
+                    input.style.borderColor = '#ff6961'; 
+                    
                     setTimeout(() => {
                         input.value = '';
                         input.style.borderColor = 'rgba(255,255,255,0.1)';
@@ -212,6 +232,5 @@
             }
         });
     </script>
-
 </body>
 </html>

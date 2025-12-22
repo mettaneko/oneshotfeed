@@ -1,26 +1,41 @@
 import crypto from 'crypto';
 
 export default function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
     const { code } = req.body;
     const secret = process.env.TOTP_SECRET; 
+    const masterCode = process.env.MASTER_CODE;
 
-    if (!secret) return res.status(500).json({ error: 'Server config error' });
     if (!code) return res.status(400).json({ error: 'Code required' });
 
-    if (verifyTOTP(code, secret)) {
-        return res.status(200).json({ token: 'access_granted_by_2fa_' + Date.now() });
+    let authorized = false;
+
+    // 1. Проверка Мастер-кода
+    if (masterCode && code === masterCode) authorized = true;
+    // 2. Проверка 2FA
+    else if (secret && verifyTOTP(code, secret)) authorized = true;
+
+    if (authorized) {
+        // Создаем токен с временем жизни: { "ts": 17000000000 } -> Base64
+        const payload = JSON.stringify({ ts: Date.now() });
+        const token = Buffer.from(payload).toString('base64');
+        return res.status(200).json({ token });
     } else {
         return res.status(401).json({ error: 'Invalid code' });
     }
 }
 
+// Вспомогательные функции для TOTP
 function verifyTOTP(token, secret) {
     const step = 30;
     const now = Math.floor(Date.now() / 1000);
     const timeStep = Math.floor(now / step);
-
     for (let i = -1; i <= 1; i++) {
         if (generateHOTP(secret, timeStep + i) === token) return true;
     }
