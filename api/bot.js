@@ -52,7 +52,7 @@ export default async function handler(req, res) {
     if (!msg) return res.status(200).json({ ok: true });
 
     const chatId = msg.chat.id;
-    const senderChatId = msg.sender_chat?.id || null; // каналы
+    const senderChatId = msg.sender_chat?.id || null;
     const effectiveChatId = senderChatId || chatId;
 
     const text = msg.text || msg.caption || '';
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
       isAdmin: isAdmin(effectiveChatId)
     });
 
-    // Save User (только личка)
+    // Save User
     if (DB_URL && DB_TOKEN && chatId > 0) {
       try {
         await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -81,10 +81,10 @@ export default async function handler(req, res) {
     if (isChannel && isAdmin(effectiveChatId)) {
       const tiktokRegex = /(https?:\/\/(?:www\.|vm\.|vt\.|m\.)?tiktok\.com\/[^\s]+)/g;
 
-      // 1) прямые ссылки в тексте/подписи
+      // 1) Текст
       const directLinks = text.match(tiktokRegex) || [];
 
-      // 2) ссылки из entities (красивые ссылки в тексте / подписи)
+      // 2) Entities
       const entities = (msg.entities || []).concat(msg.caption_entities || []);
       const entityLinks = [];
 
@@ -97,11 +97,29 @@ export default async function handler(req, res) {
         }
       }
 
-      // итоговый список без дублей
       const allLinks = Array.from(new Set([...directLinks, ...entityLinks]));
 
       if (allLinks.length > 0) {
         console.log(`📩 Канал ${effectiveChatId}: найдено ${allLinks.length} ссылок`);
+
+        // 🔥 ПОЛУЧАЕМ ТЕКУЩУЮ БАЗУ ДЛЯ ПРОВЕРКИ ДУБЛЕЙ 🔥
+        let existingIds = new Set();
+        try {
+          // LRANGE 0 -1 вернет весь список
+          const r = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+          });
+          const d = await r.json();
+          const items = d.result || [];
+          items.forEach(itemStr => {
+            try {
+              const obj = JSON.parse(itemStr);
+              if (obj.id) existingIds.add(obj.id);
+            } catch (e) {}
+          });
+        } catch (e) {
+          console.error('Failed to fetch existing videos for deduplication:', e);
+        }
 
         const results = await Promise.all(
           allLinks.map(async link => {
@@ -112,8 +130,17 @@ export default async function handler(req, res) {
 
               if (jsonData.code === 0 && jsonData.data) {
                 const v = jsonData.data;
-                const authorName = v.author ? v.author.unique_id : 'tiktok_user';
+                
+                // 🔥 ПРОВЕРКА НА ДУБЛЬ
+                if (existingIds.has(v.id)) {
+                  console.log(`⚠️ Дубликат пропущен: ${v.id}`);
+                  return {
+                    status: 'duplicate',
+                    originalLink: link
+                  };
+                }
 
+                const authorName = v.author ? v.author.unique_id : 'tiktok_user';
                 const videoObj = {
                   id: v.id,
                   videoUrl: `https://www.tikwm.com/video/media/play/${v.id}.mp4`,
@@ -124,6 +151,7 @@ export default async function handler(req, res) {
                 };
 
                 return {
+                  status: 'ok',
                   json: JSON.stringify(videoObj),
                   report: {
                     author: videoObj.author,
@@ -140,8 +168,12 @@ export default async function handler(req, res) {
         );
 
         const validResults = results.filter(Boolean);
-        const videosToPush = validResults.map(i => i.json);
-        const reports = validResults.map(i => i.report);
+        const videosToPush = validResults
+          .filter(r => r.status === 'ok')
+          .map(r => r.json);
+        const newReports = validResults
+          .filter(r => r.status === 'ok')
+          .map(r => r.report);
 
         if (videosToPush.length > 0) {
           await fetch(`${DB_URL}/`, {
@@ -153,18 +185,19 @@ export default async function handler(req, res) {
             body: JSON.stringify(['RPUSH', 'feed_videos', ...videosToPush])
           });
 
-          let reportText = `✅ <b>Авто-импорт из канала:</b>\n`;
-          reports.forEach(r => {
+          let reportText = `✅ <b>Авто-импорт из канала (${videosToPush.length} новых):</b>\n`;
+          newReports.forEach(r => {
             const jsonPretty = JSON.stringify(r.json, null, 2);
             reportText += `\n👤 <b>${r.author}</b>\n📝 on tiktok\n🔗 <a href="${r.originalLink}">TikTok</a>\n<pre>${jsonPretty}</pre>\n`;
           });
 
-          // отчёт только людям, не каналам
           for (const adminId of adminIds) {
             if (!adminId) continue;
             if (adminId.startsWith('-100')) continue;
             await sendMessage(token, adminId, reportText, null, 'HTML');
           }
+        } else if (validResults.some(r => r.status === 'duplicate')) {
+             console.log('Все найденные видео уже есть в базе.');
         }
       }
 
@@ -185,7 +218,7 @@ export default async function handler(req, res) {
         }
       );
     } else if (isAdmin(chatId)) {
-      // --- /ADD ---
+      // --- /ADD (здесь тоже можно добавить проверку, но пока оставляем как есть) ---
       if (text.startsWith('/add') || text.includes('tiktok.com')) {
         const parts = text.split(/\s+/);
         const tikTokUrl = parts.find(p => p.includes('http'));
