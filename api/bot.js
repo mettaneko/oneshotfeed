@@ -219,7 +219,7 @@ export default async function handler(req, res) {
                   users = d.result || [];
               } catch(e){}
               for(const u of users) {
-                  try { await sendMessage(token, u, `📢 ${bText}`, null, 'HTML'); } catch(e){}
+                  try { await sendMessage(token, u, `📢 Новости \n${bText}`, null, 'HTML'); } catch(e){}
               }
               await sendMessage(token, chatId, `Разослано.`);
           }
