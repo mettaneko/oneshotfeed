@@ -150,14 +150,18 @@
     <a href="#" onclick="location.reload()" class="btn">Обновить</a>
 
     <script>
-        // Если уже есть токен, сразу пускаем
+        // УКАЖИТЕ ЗДЕСЬ ВАШ ДОМЕН VERCEL
+        // Если сайт открыт прямо с Vercel, можно оставить пустым ''
+        // Если сайт на GitHub Pages, обязательно вставьте 'https://niko-feed.vercel.app'
+        const API_BASE = 'https://niko-feed.vercel.app'; 
+
         if (localStorage.getItem('admin_bypass_token')) {
             window.location.href = '/';
         }
 
-        // Проверка: может работы уже кончились?
         setInterval(() => {
-            fetch('/api/get_feed')
+            // Исправленный путь
+            fetch(`${API_BASE}/api/get_feed`)
                 .then(r => r.json())
                 .then(d => {
                     if (!d.maintenance) window.location.href = '/';
@@ -165,23 +169,20 @@
                 .catch(() => {});
         }, 5000);
 
-        // Логика ввода кода
         const input = document.getElementById('2fa-input');
         const err = document.getElementById('error-text');
         const spinner = document.getElementById('loading-spinner');
 
         input.addEventListener('input', async (e) => {
             const val = input.value;
-            
             if (val.length === 6) {
-                // Блокируем инпут и показываем загрузку
                 input.disabled = true;
                 spinner.style.display = 'block';
                 err.classList.remove('show');
 
                 try {
-                    // Отправляем код на сервер для проверки Google Auth
-                    const res = await fetch('/api/auth', {
+                    // Исправленный путь
+                    const res = await fetch(`${API_BASE}/api/auth`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code: val })
@@ -189,10 +190,9 @@
 
                     if (res.ok) {
                         const data = await res.json();
-                        // Успех! Сохраняем токен
                         localStorage.setItem('admin_bypass_token', data.token);
                         
-                        input.style.borderColor = '#4cd964'; // Green
+                        input.style.borderColor = '#4cd964';
                         input.style.color = '#4cd964';
                         
                         setTimeout(() => window.location.href = '/', 500);
@@ -200,15 +200,11 @@
                         throw new Error('Invalid code');
                     }
                 } catch (e) {
-                    // Ошибка
                     spinner.style.display = 'none';
                     input.disabled = false;
                     input.focus();
-                    
                     err.classList.add('show');
-                    input.style.borderColor = '#ff6961'; // Red
-                    
-                    // Сброс через секунду
+                    input.style.borderColor = '#ff6961';
                     setTimeout(() => {
                         input.value = '';
                         input.style.borderColor = 'rgba(255,255,255,0.1)';
@@ -219,5 +215,6 @@
             }
         });
     </script>
+
 </body>
 </html>
