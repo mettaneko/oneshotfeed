@@ -3,9 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OneShot Feed</title>
+    <title>Технические работы</title>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/maintenance_style.css">
+    <style>
+        :root {
+            --text-color: rgb(226, 226, 226);
+            --background-color: rgb(20, 20, 25);
+            --accent-color: rgb(169, 149, 255);
+            --font-sans: "Manrope", sans-serif;
+        }
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: var(--font-sans);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 800; }
+        p { color: rgba(255,255,255,0.6); font-size: 0.9rem; max-width: 300px; line-height: 1.5; margin-bottom: 30px; }
+        .icon { font-size: 4rem; margin-bottom: 20px; animation: float 3s ease-in-out infinite; }
+        
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* Developer Section */
+        .dev-section {
+            margin-top: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            opacity: 0.3; /* Полупрозрачный, чтобы не мешать обычным юзерам */
+            transition: opacity 0.3s;
+        }
+        .dev-section:hover, .dev-section:focus-within { opacity: 1; }
+
+        .dev-label {
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.4);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .auth-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
+        
+        .code-input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 12px;
+            color: white;
+            font-family: monospace;
+            font-size: 1.5rem;
+            letter-spacing: 10px;
+            text-align: center;
+            width: 180px;
+            outline: none;
+            transition: 0.3s;
+        }
+        .code-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px rgba(169, 149, 255, 0.2);
+            background: rgba(255,255,255,0.08);
+            opacity: 1;
+        }
+        .code-input::placeholder {
+            font-size: 1rem; letter-spacing: 2px; opacity: 0.2;
+        }
+        .code-input:disabled {
+            opacity: 0.5; cursor: not-allowed;
+        }
+
+        .btn {
+            margin-top: 30px;
+            padding: 10px 24px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            border-radius: 30px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: 0.2s;
+            display: inline-block;
+        }
+        .btn:hover { background: #fff; color: #000; }
+        
+        .error-msg { 
+            color: #ff6961; 
+            font-size: 0.8rem; 
+            height: 1.2em; 
+            opacity: 0; 
+            transition: opacity 0.3s;
+            font-weight: 600;
+        }
+        .error-msg.show { opacity: 1; }
+
+        .spinner-mini {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top: 2px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            position: absolute;
+            right: -30px;
+            top: 15px;
+            display: none;
+        }
+        @keyframes spin { 0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);} }
+
+    </style>
 </head>
 <body>
     <div class="icon">🚧</div>
@@ -23,7 +148,89 @@
     </div>
 
     <a href="#" onclick="location.reload()" class="btn">Обновить</a>
-    
-    <script src="maintenance.js"></script>
+
+    <script>
+        const SESSION_DURATION = 5 * 60 * 1000; // 5 минут
+
+        // 1. ПРОВЕРКА СУЩЕСТВУЮЩЕГО ТОКЕНА
+        function isTokenValid() {
+            const token = localStorage.getItem('admin_bypass_token');
+            if (!token) return false;
+            try {
+                const payload = JSON.parse(atob(token));
+                // Если прошло меньше 5 минут
+                if (Date.now() - payload.ts < SESSION_DURATION) {
+                    return true;
+                }
+            } catch (e) {}
+            localStorage.removeItem('admin_bypass_token'); // Удаляем тухлый
+            return false;
+        }
+
+        if (isTokenValid()) {
+            window.location.href = '/';
+        }
+
+        // 2. ПРОВЕРКА: ЗАКОНЧИЛИСЬ ЛИ РАБОТЫ?
+        setInterval(() => {
+            fetch('/api/get_feed')
+                .then(r => r.json())
+                .then(d => {
+                    // Если maintenance: false, пускаем всех
+                    if (!d.maintenance) window.location.href = '/';
+                })
+                .catch(() => {});
+        }, 5000);
+
+        // 3. ЛОГИКА ВВОДА КОДА
+        const input = document.getElementById('2fa-input');
+        const err = document.getElementById('error-text');
+        const spinner = document.getElementById('loading-spinner');
+
+        input.addEventListener('input', async (e) => {
+            const val = input.value;
+            
+            if (val.length === 6) {
+                input.disabled = true;
+                spinner.style.display = 'block';
+                err.classList.remove('show');
+
+                try {
+                    const res = await fetch('/api/auth', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: val })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        // Сохраняем токен
+                        localStorage.setItem('admin_bypass_token', data.token);
+                        
+                        input.style.borderColor = '#4cd964';
+                        input.style.color = '#4cd964';
+                        
+                        setTimeout(() => window.location.href = '/', 500);
+                    } else {
+                        throw new Error('Invalid code');
+                    }
+                } catch (e) {
+                    spinner.style.display = 'none';
+                    input.disabled = false;
+                    input.focus();
+                    
+                    err.classList.add('show');
+                    input.style.borderColor = '#ff6961'; 
+                    
+                    setTimeout(() => {
+                        input.value = '';
+                        input.style.borderColor = 'rgba(255,255,255,0.1)';
+                        input.style.color = 'white';
+                        err.classList.remove('show');
+                    }, 1500);
+                }
+            }
+        });
+    </script>
 </body>
 </html>
