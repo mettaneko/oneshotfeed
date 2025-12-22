@@ -2,13 +2,10 @@
   "name": "oneshotfeed",
   "version": "1.0.0",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "start": "node api/index.js" 
   },
   "dependencies": {
-    "next": "^14.2.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    // Удали зависимости Next/React, если они не нужны для твоих API функций
+    // Если в api/auth.js ты не используешь сторонние либы, то dependencies можно оставить пустым или удалить вовсе
   }
 }
