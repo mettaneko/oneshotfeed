@@ -5,8 +5,11 @@ export default async function handler(req, res) {
     const body = req.body;
     const token = process.env.BOT_TOKEN;
 
-    const adminIds = (process.env.ADMIN_ID || '').split(',').map(s => s.trim()).filter(Boolean);
-    const isAdmin = (id) => adminIds.includes(id.toString());
+    const adminIds = (process.env.ADMIN_ID || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+    const isAdmin = id => adminIds.includes(id.toString());
 
     const webAppUrl = 'https://feed.mettaneko.ru/';
     const DB_URL = process.env.KV_REST_API_URL;
@@ -46,13 +49,10 @@ export default async function handler(req, res) {
 
     // === 2. MESSAGES & CHANNEL POSTS ===
     const msg = body.message || body.channel_post;
-    if (!msg) {
-      return res.status(200).json({ ok: true });
-    }
+    if (!msg) return res.status(200).json({ ok: true });
 
-    // chat.id для личек и групп, sender_chat.id – для каналов
     const chatId = msg.chat.id;
-    const senderChatId = msg.sender_chat?.id || null;
+    const senderChatId = msg.sender_chat?.id || null; // каналы
     const effectiveChatId = senderChatId || chatId;
 
     const text = msg.text || msg.caption || '';
@@ -65,10 +65,10 @@ export default async function handler(req, res) {
       effectiveChatId,
       isChannel,
       textPreview: text.slice(0, 80),
-      isAdmin: isAdmin(effectiveChatId),
+      isAdmin: isAdmin(effectiveChatId)
     });
 
-    // Save User (только для личных чатов, положительное id)
+    // Save User (только личка)
     if (DB_URL && DB_TOKEN && chatId > 0) {
       try {
         await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -80,13 +80,31 @@ export default async function handler(req, res) {
     // === АВТО-ПАРСИНГ ИЗ КАНАЛА ===
     if (isChannel && isAdmin(effectiveChatId)) {
       const tiktokRegex = /(https?:\/\/(?:www\.|vm\.|vt\.|m\.)?tiktok\.com\/[^\s]+)/g;
-      const links = text.match(tiktokRegex);
 
-      if (links && links.length > 0) {
-        console.log(`📩 Канал ${effectiveChatId}: найдено ${links.length} ссылок`);
+      // 1) прямые ссылки в тексте/подписи
+      const directLinks = text.match(tiktokRegex) || [];
+
+      // 2) ссылки из entities (красивые ссылки в тексте / подписи)
+      const entities = (msg.entities || []).concat(msg.caption_entities || []);
+      const entityLinks = [];
+
+      for (const ent of entities) {
+        if (ent.type === 'text_link' && ent.url) {
+          if (tiktokRegex.test(ent.url)) entityLinks.push(ent.url);
+        } else if (ent.type === 'url') {
+          const raw = text.slice(ent.offset, ent.offset + ent.length);
+          if (tiktokRegex.test(raw)) entityLinks.push(raw);
+        }
+      }
+
+      // итоговый список без дублей
+      const allLinks = Array.from(new Set([...directLinks, ...entityLinks]));
+
+      if (allLinks.length > 0) {
+        console.log(`📩 Канал ${effectiveChatId}: найдено ${allLinks.length} ссылок`);
 
         const results = await Promise.all(
-          links.map(async (link) => {
+          allLinks.map(async link => {
             try {
               const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(link)}`;
               const response = await fetch(apiUrl);
@@ -96,18 +114,21 @@ export default async function handler(req, res) {
                 const v = jsonData.data;
                 const authorName = v.author ? v.author.unique_id : 'tiktok_user';
 
+                const videoObj = {
+                  id: v.id,
+                  videoUrl: `https://www.tikwm.com/video/media/play/${v.id}.mp4`,
+                  cover: v.cover,
+                  desc: 'on tiktok',
+                  author: authorName.replace('@', ''),
+                  date: Date.now()
+                };
+
                 return {
-                  json: JSON.stringify({
-                    id: v.id,
-                    videoUrl: `https://www.tikwm.com/video/media/play/${v.id}.mp4`,
-                    cover: v.cover,
-                    desc: 'on tiktok',
-                    author: authorName.replace('@', ''),
-                    date: Date.now()
-                  }),
+                  json: JSON.stringify(videoObj),
                   report: {
-                    author: authorName.replace('@', ''),
-                    originalLink: link
+                    author: videoObj.author,
+                    originalLink: link,
+                    json: videoObj
                   }
                 };
               }
@@ -119,8 +140,8 @@ export default async function handler(req, res) {
         );
 
         const validResults = results.filter(Boolean);
-        const videosToPush = validResults.map((i) => i.json);
-        const reports = validResults.map((i) => i.report);
+        const videosToPush = validResults.map(i => i.json);
+        const reports = validResults.map(i => i.report);
 
         if (videosToPush.length > 0) {
           await fetch(`${DB_URL}/`, {
@@ -133,14 +154,16 @@ export default async function handler(req, res) {
           });
 
           let reportText = `✅ <b>Авто-импорт из канала:</b>\n`;
-          reports.forEach((r) => {
-            reportText += `\n👤 <b>${r.author}</b>\n📝 on tiktok\n🔗 <a href="${r.originalLink}">TikTok</a>\n`;
+          reports.forEach(r => {
+            const jsonPretty = JSON.stringify(r.json, null, 2);
+            reportText += `\n👤 <b>${r.author}</b>\n📝 on tiktok\n🔗 <a href="${r.originalLink}">TikTok</a>\n<pre>${jsonPretty}</pre>\n`;
           });
 
+          // отчёт только людям, не каналам
           for (const adminId of adminIds) {
-            if (adminId) {
-              await sendMessage(token, adminId, reportText, null, 'HTML');
-            }
+            if (!adminId) continue;
+            if (adminId.startsWith('-100')) continue;
+            await sendMessage(token, adminId, reportText, null, 'HTML');
           }
         }
       }
@@ -148,8 +171,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // === ЛИЧНЫЕ СООБЩЕНИЯ / КОМАНДЫ ===
-
+    // === ЛИЧНЫЕ / КОМАНДЫ ===
     if (text === '/start') {
       await sendMessage(
         token,
@@ -166,7 +188,7 @@ export default async function handler(req, res) {
       // --- /ADD ---
       if (text.startsWith('/add') || text.includes('tiktok.com')) {
         const parts = text.split(/\s+/);
-        const tikTokUrl = parts.find((p) => p.includes('http'));
+        const tikTokUrl = parts.find(p => p.includes('http'));
 
         if (!tikTokUrl) {
           if (text.startsWith('/add')) {
@@ -197,7 +219,9 @@ export default async function handler(req, res) {
             if (tikData) {
               finalId = tikData.id;
               finalCover = tikData.cover;
-              finalAuthor = tikData.author ? tikData.author.unique_id.replace('@', '') : 'unknown';
+              finalAuthor = tikData.author
+                ? tikData.author.unique_id.replace('@', '')
+                : 'unknown';
               finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
 
               if (tikData.images && tikData.images.length > 0) {
@@ -369,7 +393,7 @@ async function getCobaltLink(url) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        url: url,
+        url,
         vCodec: 'h264',
         vQuality: '720',
         filenamePattern: 'basic'
