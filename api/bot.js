@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // === 2. MESSAGES ===
+    // === 2. MESSAGES & CHANNEL POSTS ===
     const msg = body.message || body.channel_post;
 
     if (msg) {
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       const text = msg.text || msg.caption || '';
       const user = msg.from || { id: chatId, username: 'Channel' };
 
-      // Save User
+      // Save User (только для личных чатов)
       if (DB_URL && DB_TOKEN && chatId > 0) {
         try {
             await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -61,6 +61,75 @@ export default async function handler(req, res) {
         } catch (e) {}
       }
 
+      // === АВТО-ПАРСИНГ ИЗ КАНАЛА ===
+      if (msg.channel_post && isAdmin(chatId)) {
+        const tiktokRegex = /(https?:\/\/(?:www\.|vm\.|vt\.|m\.)?tiktok\.com\/[^\s]+)/g;
+        const links = text.match(tiktokRegex);
+
+        if (links && links.length > 0) {
+          console.log(`📩 Канал ${chatId}: найдено ${links.length} ссылок`);
+          
+          const results = await Promise.all(links.map(async (link) => {
+            try {
+              const apiUrl = `https://www.tikwm.com/api/?url=${encodeURIComponent(link)}`;
+              const response = await fetch(apiUrl);
+              const jsonData = await response.json();
+
+              if (jsonData.code === 0 && jsonData.data) {
+                const v = jsonData.data;
+                const authorName = v.author ? v.author.unique_id : 'tiktok_user';
+                
+                return {
+                  json: JSON.stringify({
+                    id: v.id,
+                    videoUrl: `https://www.tikwm.com/video/media/play/${v.id}.mp4`,
+                    cover: v.cover,
+                    desc: 'on tiktok',
+                    author: authorName.replace('@', ''),
+                    date: Date.now()
+                  }),
+                  report: {
+                    author: authorName,
+                    originalLink: link
+                  }
+                };
+              }
+            } catch (error) {
+              console.error(`❌ Failed: ${link}`, error);
+            }
+            return null;
+          }));
+
+          const validResults = results.filter(item => item !== null);
+          const videosToPush = validResults.map(item => item.json);
+          const reports = validResults.map(item => item.report);
+
+          if (videosToPush.length > 0) {
+            // Сохраняем в базу
+            await fetch(`${DB_URL}/`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(["RPUSH", "feed_videos", ...videosToPush])
+            });
+
+            // Отчет админам
+            let reportText = `✅ <b>Авто-импорт из канала:</b>\n`;
+            reports.forEach(r => {
+              reportText += `\n👤 <b>${r.author}</b>\n📝 on tiktok\n🔗 <a href="${r.originalLink}">TikTok</a>\n`;
+            });
+
+            for (const adminId of adminIds) {
+              if (adminId.trim()) {
+                await sendMessage(token, adminId.trim(), reportText, null, 'HTML');
+              }
+            }
+          }
+        }
+        return res.status(200).json({ ok: true });
+      }
+
+      // === ЛИЧНЫЕ СООБЩЕНИЯ ===
+      
       // /START
       if (text === '/start') {
         await sendMessage(token, chatId, 
@@ -84,7 +153,6 @@ export default async function handler(req, res) {
               } else {
                   await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
                   try {
-                      // 1. Пробуем TikWM
                       let tikData = null;
                       try {
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
@@ -92,38 +160,31 @@ export default async function handler(req, res) {
                         if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                       } catch (e) {}
 
-                      // 2. Пробуем Cobalt (резерв)
-                      let cobaltUrl = await getCobaltLink(tikTokUrl);
+                      let cobaltUrl = null;
+                      if (!tikData) cobaltUrl = await getCobaltLink(tikTokUrl);
 
-                      // 3. OEmbed (метаданные)
                       let oembedData = null;
-                      if (!tikData) {
-                          oembedData = await getTikTokMetadata(tikTokUrl);
-                      }
+                      if (!tikData) oembedData = await getTikTokMetadata(tikTokUrl);
 
-                      // === СБОРКА ДАННЫХ ===
                       let finalVideoUrl = null;
                       let finalCover = null;
                       let finalAuthor = 'unknown';
                       let finalId = null;
+                      let finalDesc = 'on tiktok';
 
                       if (tikData) {
                           finalId = tikData.id;
                           finalCover = tikData.cover;
-                          finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                          
-                          // 🔥 ИСПРАВЛЕНИЕ: Используем "вечную" ссылку вместо временной CDN
+                          finalAuthor = tikData.author ? tikData.author.unique_id.replace('@', '') : 'unknown';
                           finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                           
                           if (tikData.images && tikData.images.length > 0) {
                              await sendMessage(token, chatId, "❌ Это слайд-шоу!");
                              return res.status(200).json({ ok: true }); 
                           }
-                      } 
-                      else if (cobaltUrl) {
+                      } else if (cobaltUrl) {
                           finalVideoUrl = cobaltUrl;
                           finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
-                          
                           if (oembedData) {
                               finalAuthor = oembedData.author_name || 'TikTok User';
                               finalCover = oembedData.thumbnail_url || 'https://via.placeholder.com/150';
@@ -133,7 +194,6 @@ export default async function handler(req, res) {
                           }
                       }
 
-                      // === СОХРАНЕНИЕ ===
                       if (finalVideoUrl) {
                           if (!finalVideoUrl.startsWith('http')) finalVideoUrl = `https://www.tikwm.com${finalVideoUrl}`;
 
@@ -141,7 +201,7 @@ export default async function handler(req, res) {
                               id: finalId, 
                               videoUrl: finalVideoUrl, 
                               author: finalAuthor, 
-                              desc: 'on tiktok', 
+                              desc: finalDesc,
                               cover: finalCover
                           };
                           
@@ -152,7 +212,7 @@ export default async function handler(req, res) {
                           });
                           
                           await sendMessage(token, chatId, 
-                              `✅ <b>Сохранено!</b>\n👤 ${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Ссылка</a>`, 
+                              `✅ <b>Сохранено!</b>\n👤 <b>${newVideo.author}</b>\n📝 ${newVideo.desc}\n🔗 <a href="${newVideo.videoUrl}">Ссылка</a>`, 
                               null, 'HTML');
                       } else {
                           await sendMessage(token, chatId, "❌ <b>Ошибка!</b> Видео не скачалось.");
@@ -163,10 +223,10 @@ export default async function handler(req, res) {
               }
           }
 
-          // --- /MAINTENANCE (Управление тех. работами) ---
+          // Остальные админ-команды без изменений...
           else if (text.startsWith('/maintenance')) {
              const parts = text.split(/\s+/);
-             const mode = parts[1]; // on или off
+             const mode = parts[1];
 
              if (mode === 'on') {
                  await fetch(`${DB_URL}/set/maintenance_mode/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
@@ -176,23 +236,14 @@ export default async function handler(req, res) {
                  await sendMessage(token, chatId, "🟢 <b>Заглушка ВЫКЛЮЧЕНА!</b>", null, 'HTML');
              } else {
                  await sendMessage(token, chatId, 
-                     `🔧 <b>Меню:</b>\n\n` + 
-                     `🔴 /maintenance on\n` + 
-                     `🟢 /maintenance off\n` +
-                     `🗑 /clear\n` +
-                     `📊 /count\n` +
-                     `📡 /status`, 
+                     `🔧 <b>Меню:</b>\n\n🔴 /maintenance on\n🟢 /maintenance off\n🗑 /clear\n📊 /count\n📡 /status`, 
                      null, 'HTML');
              }
           }
-
-          // --- /CLEAR ---
           else if (text === '/clear') {
               await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
               await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
           }
-
-          // --- /COUNT ---
           else if (text === '/count') {
                try {
                   const r = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
@@ -200,16 +251,12 @@ export default async function handler(req, res) {
                   await sendMessage(token, chatId, `📊 Видео: ${d.result || 0}`, null, 'HTML');
                } catch(e) { await sendMessage(token, chatId, "❌ Ошибка Redis"); }
           }
-
-          // --- /STATUS ---
           else if (text === '/status') {
                try {
                   const r = await fetch(`${DB_URL}/ping`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                   await sendMessage(token, chatId, `Redis: ${r.ok ? '🟢 OK' : '🔴 ERROR'}`, null, 'HTML');
                } catch(e) { await sendMessage(token, chatId, "❌ Нет коннекта"); }
           }
-
-          // --- /BROADCAST ---
           else if (text.startsWith('/broadcast')) {
               const bText = text.replace('/broadcast', '').trim();
               let users = [];
@@ -225,14 +272,13 @@ export default async function handler(req, res) {
           }
       }
 
-      // === NOT ADMIN (Silent Suggestion) ===
+      // === NOT ADMIN (Предложки) ===
       else if (!isAdmin(chatId) && chatId > 0) {
           if (text.startsWith('/add') || text.startsWith('/clear') || text.startsWith('/maintenance')) return res.status(200).json({ ok: true });
           
           if (text.includes('http')) {
               const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
-              const admins = (process.env.ADMIN_ID || '').split(',');
-              for (const admin of admins) {
+              for (const admin of adminIds) {
                   await sendMessage(token, admin, `🚨 <b>ПРЕДЛОЖКА ОТ ${sender}:</b>\n${text}`, null, 'HTML');
               }
           }
@@ -242,6 +288,7 @@ export default async function handler(req, res) {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Bot Error' }); }
 }
 
+// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 async function getTikTokMetadata(url) {
     try {
         const res = await fetch(`https://www.tiktok.com/oembed?url=${url}`);
