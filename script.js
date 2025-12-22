@@ -1,7 +1,7 @@
-// === KONFIG ===
 const API_BASE = 'https://niko-feed.vercel.app'; 
 const BATCH_SIZE = 5; 
 const BOT_LINK = 'https://t.me/oneshotfeedbot'; 
+const ADMIN_CODE_KEY = 'admin_bypass_token'; 
 
 // === 0. TELEGRAM WEB APP ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -56,38 +56,36 @@ async function fetchVideos(isUpdate = false) {
     let newVideos = [];
     
     try {
-        // Запрашиваем основную ленту (в ней же теперь проверка maintenance)
         const res = await fetch(`${API_BASE}/api/get_feed`);
         
         if (res.ok) {
             const data = await res.json();
             
-            // ПРОВЕРКА: Режим обслуживания
-            if (data.maintenance === true) {
-                console.log('🚧 Maintenance Mode Active');
+            // ПРОВЕРКА MAINTENANCE + 2FA
+            const hasToken = localStorage.getItem(ADMIN_CODE_KEY); 
+            
+            if (data.maintenance === true && !hasToken) {
                 if (window.location.pathname.indexOf('maintenance.html') === -1) {
                     window.location.href = 'maintenance.html';
                 }
                 return;
             } else {
-                // Если режим выключен, а мы на заглушке - возвращаемся
                 if (window.location.pathname.indexOf('maintenance.html') !== -1) {
                     window.location.href = '/'; 
                     return;
                 }
             }
 
-            // Обработка массива видео
             if (Array.isArray(data)) {
                 newVideos = data;
+            } else if (data.result && Array.isArray(data.result)) {
+                newVideos = data.result.map(i => { try{return JSON.parse(i)}catch(e){return null} }).filter(Boolean);
             }
         }
     } catch (e) { console.error('API Error', e); }
 
-    // Если мы на странице maintenance, но API упал (или мы тут остались) — стоп
     if (window.location.pathname.indexOf('maintenance.html') !== -1) return;
 
-    // Fallback на локальный JSON (для тестов, если API пуст)
     if (newVideos.length === 0 && allVideosCache.length === 0 && !isUpdate) {
         try {
             const res = await fetch('videos.json');
@@ -97,23 +95,19 @@ async function fetchVideos(isUpdate = false) {
     
     if (!newVideos || newVideos.length === 0) return;
 
-    // Фильтрация дублей
     const currentIds = new Set(allVideosCache.map(v => v.id));
     const freshContent = newVideos.filter(v => v && !currentIds.has(v.id));
 
     if (freshContent.length > 0) {
         console.log(`🔥 New: ${freshContent.length}`);
-        // Добавляем новые (они уже перевернуты сервером, так что просто добавляем)
         allVideosCache = [...freshContent, ...allVideosCache];
         queue.unshift(...freshContent);
         
         if (isUpdate && feedContainer.children.length < 3) addVideosToDom(BATCH_SIZE);
         else if (!isUpdate) {
-             // Первый запуск
              prepareQueue('foryou');
         }
     } else if (!isUpdate) {
-        // Если ничего нового, но это первый запуск (из кэша или json)
         allVideosCache = newVideos;
         prepareQueue('foryou');
     }
@@ -170,7 +164,7 @@ async function syncSubs() {
     }
 }
 
-// === 5. СЛАЙДЫ (C FIX 403) ===
+// === 5. СЛАЙДЫ ===
 function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
@@ -182,14 +176,14 @@ function createSlide(data) {
         <div class="video-wrapper">
             <video class="video-player" ${poster} loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
             <div class="video-progress-container"><div class="video-progress-fill"></div></div>
-            <div class="error-msg" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:white; font-weight:bold; text-shadow:0 0 5px black;">Loading...</div>
+            <div class="video-error-msg" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:white;">Восстанавливаем...</div>
         </div>`;
         
     const vid = slide.querySelector('.video-player');
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container'); 
-    const errMsg = slide.querySelector('.error-msg');
+    const errMsg = slide.querySelector('.video-error-msg');
 
     // State
     vid.dataset.userPaused = "false";
@@ -201,49 +195,47 @@ function createSlide(data) {
     vid.referrerPolicy = "no-referrer";
     bg.referrerPolicy = "no-referrer";
 
+    // Сброс времени при создании
+    vid.currentTime = 0;
+
     const setStatusColor = (status) => {
         bar.classList.remove('error-state', 'fatal-error');
         if (status === 'error') bar.classList.add('error-state');
         else if (status === 'fatal') bar.classList.add('fatal-error');
     };
 
-    // 🔥 ГЛАВНЫЙ ФИКС: Обработка ошибки загрузки (403)
+    // --- ОБРАБОТКА ОШИБОК ---
     vid.addEventListener('error', (e) => {
-        const errCode = vid.error ? vid.error.code : 0;
-        let retries = parseInt(vid.dataset.retryCount || 0);
-        console.warn(`⚠️ Video Error (Code: ${errCode}) for ID ${data.id}. Retry: ${retries}`);
+        const retries = parseInt(vid.dataset.retryCount || 0);
+        
+        if (!slide.classList.contains('active-slide')) return;
 
-        // Если это ошибка загрузки (например 403 Forbidden или 404)
         if (retries === 0) {
             vid.dataset.retryCount = "1";
-            
-            // Формируем "вечную" ссылку через TikWM
             const backupUrl = `https://www.tikwm.com/video/media/play/${data.id}.mp4`;
             
-            console.log(`🔄 Switching to Backup URL: ${backupUrl}`);
-            
-            // Показываем лоадер или меняем статус
             setStatusColor('error');
-            if(errMsg) { errMsg.style.display = 'block'; errMsg.innerText = 'Reloading...'; }
+            if(errMsg) { errMsg.style.display = 'block'; errMsg.innerText = 'Восстанавливаем...'; }
 
-            // Подменяем источник
             vid.src = backupUrl;
             bg.src = backupUrl;
-            vid.load();
+            vid.currentTime = 0;
             
-            const p = vid.play();
-            if (p) p.catch(()=>{});
-
-        } else if (retries === 1) {
-            // Если и backup не помог - все плохо
-            vid.dataset.retryCount = "2";
+            vid.load();
+            vid.play().catch(()=>{});
+        } else {
             setStatusColor('fatal');
-            if(errMsg) { errMsg.style.display = 'block'; errMsg.innerText = 'Video unavailable'; }
+            if(errMsg) { errMsg.style.display = 'block'; errMsg.innerText = 'Ошибка видео'; }
         }
     });
     
-    // Если видео загрузилось успешно - убираем ошибки
+    // --- ПРИ УСПЕШНОМ ЗАПУСКЕ ---
     vid.addEventListener('playing', () => {
+        if (!slide.classList.contains('active-slide')) {
+            vid.pause();
+            vid.muted = true;
+            return;
+        }
         if(errMsg) errMsg.style.display = 'none';
         setStatusColor('ok');
     });
@@ -254,7 +246,6 @@ function createSlide(data) {
         
         if (retries >= 3) {
             setStatusColor('fatal');
-            vid.dataset.stuckCount = "0"; 
             return;
         }
 
@@ -264,38 +255,37 @@ function createSlide(data) {
         
         const sep = vid.src.includes('?') ? '&' : '?';
         const retryUrl = `${vid.src}${sep}t=${Date.now()}`;
-        const savedTime = vid.currentTime;
-
+        
         vid.removeAttribute('src');
         vid.load();
 
         setTimeout(() => {
             vid.src = retryUrl;
             bg.src = retryUrl;
+            vid.currentTime = 0;
             vid.load();
 
             const onMeta = () => {
-                if (Number.isFinite(savedTime) && savedTime > 0) vid.currentTime = savedTime;
-                if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; } 
-                else { vid.muted = true; }
+                vid.currentTime = 0;
+                if (hasInteracted && slide.classList.contains('active-slide')) { 
+                    vid.muted = (globalVolume === 0); 
+                    vid.volume = globalVolume; 
+                } else { 
+                    vid.muted = true; 
+                }
 
                 vid.play().then(() => {
                     bg.play().catch(()=>{});
                     setStatusColor('ok');
                     vid.dataset.retryCount = "0"; 
-                    vid.dataset.stuckCount = "0";
                     vid.dataset.reloading = "false";
-                    if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; }
                     if(errMsg) errMsg.style.display = 'none';
                 }).catch(e => {
                     vid.muted = true;
                     vid.play().then(() => {
-                        if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; }
                         setStatusColor('ok');
                         vid.dataset.reloading = "false";
                         if(errMsg) errMsg.style.display = 'none';
-                    }).catch(() => {
-                        vid.dataset.reloading = "false";
                     });
                 });
                 vid.removeEventListener('loadedmetadata', onMeta);
@@ -315,12 +305,8 @@ function createSlide(data) {
     vid.parentElement.addEventListener('click', () => {
         if (vid.paused) {
             vid.dataset.userPaused = "false";
-            // Если есть ошибка, клик - это принудительный релоад
             if (parseInt(vid.dataset.retryCount || 0) > 0 || bar.classList.contains('error-state')) {
-                 // Сброс счетчика для новой попытки
                  vid.dataset.retryCount = "0";
-                 // Возвращаем оригинальный URL для ретрая или оставляем текущий
-                 // slide.safeReload(); используем safeReload
                  slide.safeReload();
             } else {
                  vid.play().then(() => { bg.play(); setStatusColor('ok'); }).catch(()=>{});
@@ -366,19 +352,13 @@ function createSlide(data) {
     return slide;
 }
 
-// === 6. HEARTBEAT ===
+// === 6. HEARTBEAT & OBSERVER ===
 setInterval(() => {
     const activeSlide = document.querySelector('.active-slide');
     if (!activeSlide) return;
     const vid = activeSlide.querySelector('.video-player');
-    const bg = activeSlide.querySelector('.video-blur-bg');
     const bar = activeSlide.querySelector('.video-progress-container');
     if (!vid || vid.dataset.reloading === "true") return;
-
-    if (vid.paused && vid.dataset.userPaused === "false" && vid.readyState > 2) {
-        vid.play().catch(()=>{}); bg.play().catch(()=>{});
-        return;
-    }
 
     if (!vid.paused && vid.dataset.userPaused === "false") {
         const currentTime = vid.currentTime;
@@ -387,14 +367,12 @@ setInterval(() => {
         if (Math.abs(currentTime - lastTime) < 0.1) {
             let stuck = parseInt(vid.dataset.stuckCount || 0) + 1;
             vid.dataset.stuckCount = stuck;
-            
-            if (stuck >= 2 && bar && !bar.classList.contains('fatal-error')) bar.classList.add('error-state');
-
+            if (stuck >= 2 && bar) bar.classList.add('error-state');
             if (stuck >= 3) {
                  if (parseInt(vid.dataset.retryCount || 0) < 3) {
                      if (activeSlide.safeReload) activeSlide.safeReload();
-                 } else {
-                     if (bar) { bar.classList.remove('error-state'); bar.classList.add('fatal-error'); }
+                 } else if (bar) { 
+                     bar.classList.remove('error-state'); bar.classList.add('fatal-error'); 
                  }
             }
         } else {
@@ -416,14 +394,20 @@ const observer = new IntersectionObserver((entries) => {
             slide.classList.add('active-slide');
             try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) {}
 
+            if (vid.currentTime > 1) vid.currentTime = 0;
+
             vid.dataset.userPaused = "false"; 
             vid.dataset.stuckCount = "0";
             vid.dataset.retryCount = "0"; 
-            vid.dataset.reloading = "false";
             
             if(bar) bar.classList.remove('error-state', 'fatal-error');
             
-            if (hasInteracted) { vid.volume=globalVolume; vid.muted=(globalVolume===0); } else vid.muted=true;
+            if (hasInteracted) { 
+                vid.volume = globalVolume; 
+                vid.muted = (globalVolume === 0); 
+            } else { 
+                vid.muted = true; 
+            }
             
             vid.play().then(()=>bg.play()).catch(()=>{ vid.muted=true; vid.play(); });
 
@@ -433,6 +417,7 @@ const observer = new IntersectionObserver((entries) => {
             slide.classList.remove('active-slide');
             vid.pause();
             bg.pause();
+            vid.muted = true; 
         }
     });
 }, { threshold: 0.6 });
@@ -521,9 +506,8 @@ if (uiShareBtn) uiShareBtn.addEventListener('click', async (e) => {
 });
 
 window.addEventListener('load', async () => {
-    // Цикл для страницы maintenance
     if (window.location.pathname.indexOf('maintenance.html') !== -1) {
-        setInterval(() => fetchVideos(true), 5000); // Опрос раз в 5 сек
+        setInterval(() => fetchVideos(true), 5000);
         fetchVideos(true);
         return;
     }
