@@ -31,7 +31,7 @@ export default async function handler(req, res) {
 *25.12.6H* - Откат предыдущего апдейта.
 *25.12.6R* - Фикс багов с кнопками стартового сообщения.
 *25.12.7* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
-*25.12.9* - Фикс протухающих ссылок и добавление режима тех. работ.
+*25.12.8* - Исправление протухания ссылок (403 Forbidden) и добавление режима тех. работ.
         `;
         await sendMessage(token, chatId, historyText, null, 'Markdown');
       }
@@ -64,7 +64,7 @@ export default async function handler(req, res) {
       // /START
       if (text === '/start') {
         await sendMessage(token, chatId, 
-            "👋 Привет! Добро пожаловать в Niko Feed.", 
+            "👋 Привет! Добро пожаловать в Niko Feed. \n Делись, смотри видео по OneShot или просто следи за обновлениями! ", 
             {
              inline_keyboard: [[{ text: "📱 Открыть", web_app: { url: webAppUrl } }], [{ text: "📜 История", callback_data: "version_history" }]]
             }
@@ -80,12 +80,11 @@ export default async function handler(req, res) {
               let tikTokUrl = parts.find(p => p.includes('http'));
 
               if (!tikTokUrl) {
-                  // Если просто текст, игнорируем или пишем ошибку только если явно /add
                   if (text.startsWith('/add')) await sendMessage(token, chatId, "❌ Нет ссылки.", null, 'HTML');
               } else {
                   await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
                   try {
-                      // 1. Пробуем TikWM (основной источник)
+                      // 1. Пробуем TikWM
                       let tikData = null;
                       try {
                         const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
@@ -108,15 +107,12 @@ export default async function handler(req, res) {
                       let finalAuthor = 'unknown';
                       let finalId = null;
 
-                      // СТРАТЕГИЯ: Если TikWM дал ID, мы формируем "вечную" ссылку на их плеер.
-                      // Если TikWM упал, используем Cobalt (но ссылка может протухнуть).
-
                       if (tikData) {
                           finalId = tikData.id;
                           finalCover = tikData.cover;
                           finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
                           
-                          // ВМЕСТО tikData.play БЕРЕМ ВЕЧНУЮ ССЫЛКУ:
+                          // 🔥 ИСПРАВЛЕНИЕ: Используем "вечную" ссылку вместо временной CDN
                           finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                           
                           if (tikData.images && tikData.images.length > 0) {
@@ -167,22 +163,22 @@ export default async function handler(req, res) {
               }
           }
 
-          // --- /MAINTENANCE (NEW) ---
+          // --- /MAINTENANCE (Управление тех. работами) ---
           else if (text.startsWith('/maintenance')) {
              const parts = text.split(/\s+/);
-             const mode = parts[1]; // on / off
+             const mode = parts[1]; // on или off
 
              if (mode === 'on') {
                  await fetch(`${DB_URL}/set/maintenance_mode/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                 await sendMessage(token, chatId, "🚧 <b>Режим обслуживания ВКЛЮЧЕН!</b>", null, 'HTML');
+                 await sendMessage(token, chatId, "🔴 <b>Заглушка ВКЛЮЧЕНА!</b>", null, 'HTML');
              } else if (mode === 'off') {
                  await fetch(`${DB_URL}/set/maintenance_mode/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                 await sendMessage(token, chatId, "✅ <b>Режим обслуживания ВЫКЛЮЧЕН!</b>", null, 'HTML');
+                 await sendMessage(token, chatId, "🟢 <b>Заглушка ВЫКЛЮЧЕНА!</b>", null, 'HTML');
              } else {
                  await sendMessage(token, chatId, 
-                     `🔧 <b>Меню:</b>\n` + 
-                     `🚧 /maintenance on\n` + 
-                     `✅ /maintenance off\n` +
+                     `🔧 <b>Меню:</b>\n\n` + 
+                     `🔴 /maintenance on\n` + 
+                     `🟢 /maintenance off\n` +
                      `🗑 /clear\n` +
                      `📊 /count\n` +
                      `📡 /status`, 
@@ -260,7 +256,6 @@ async function getTikTokMetadata(url) {
 
 async function getCobaltLink(url) {
     try {
-        // Cobalt Mirror
         const response = await fetch("https://co.wuk.sh/api/json", {
             method: "POST",
             headers: { "Accept": "application/json", "Content-Type": "application/json" },
