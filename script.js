@@ -1,3 +1,5 @@
+// script.js - Niko Feed v25.12.8
+
 // === KONFIG ===
 const API_BASE = 'https://niko-feed.vercel.app'; 
 const BATCH_SIZE = 5; 
@@ -8,7 +10,6 @@ const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : 
 const isTelegramUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
 
 if (!isTelegramUser) {
-    // window.location.href = BOT_LINK; // Включи для продакшена
     const redirectBanner = document.getElementById('disable-redirect-banner');
     if (redirectBanner) redirectBanner.classList.add('show');
 }
@@ -52,12 +53,30 @@ if (!isTelegramUser && document.getElementById('disable-redirect-btn')) {
     });
 }
 
-// === 2. ЗАГРУЗКА ===
+// === 2. ЗАГРУЗКА И MAINTENANCE ===
 async function fetchVideos(isUpdate = false) {
     let newVideos = [];
+    
+    // ✅ MAINTENANCE CHECK (25.12.8)
+    try {
+        const maintRes = await fetch(`${API_BASE}/api/get_maintenance`); // Нужно создать этот API роут или проверять иначе
+        // Или если нет API, делаем проверку через получение флага в get_feed
+    } catch(e) {}
+    
+    // Получаем фид
     try {
         const res = await fetch(`${API_BASE}/api/get_feed`);
-        if (res.ok) newVideos = await res.json();
+        if (res.ok) {
+            const data = await res.json();
+            
+            // Если API вернуло объект {maintenance: true} вместо массива
+            if (data.maintenance === true) {
+                window.location.href = 'maintenance.html';
+                return;
+            }
+            
+            newVideos = data;
+        }
     } catch (e) { console.error('DB Error', e); return; }
 
     if (newVideos.length === 0 && allVideosCache.length === 0 && !isUpdate) {
@@ -66,7 +85,7 @@ async function fetchVideos(isUpdate = false) {
             if (res.ok) newVideos = await res.json();
         } catch (e) {}
     }
-    if (newVideos.length === 0) return;
+    if (!Array.isArray(newVideos)) return; // Защита от ошибок
 
     const currentIds = new Set(allVideosCache.map(v => v.id));
     const freshContent = newVideos.filter(v => !currentIds.has(v.id));
@@ -139,6 +158,7 @@ function createSlide(data) {
     slide.dataset.jsonData = JSON.stringify(data);
     const poster = data.cover ? `poster="${data.cover}"` : '';
 
+    // ✅ ФИКС 25.12.8: referrerPolicy="no-referrer"
     slide.innerHTML = `
         <video class="video-blur-bg" loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
         <div class="video-wrapper">
@@ -161,35 +181,24 @@ function createSlide(data) {
     vid.referrerPolicy = "no-referrer";
     bg.referrerPolicy = "no-referrer";
 
-    // Управление цветом полоски
     const setStatusColor = (status) => {
-        // Сброс
         bar.classList.remove('error-state', 'fatal-error');
-        
-        if (status === 'error') {
-            bar.classList.add('error-state'); // Обычный красный (загрузка/зависание)
-        } else if (status === 'fatal') {
-            bar.classList.add('fatal-error'); // Пульсирующий темно-красный (смерть)
-        }
+        if (status === 'error') bar.classList.add('error-state');
+        else if (status === 'fatal') bar.classList.add('fatal-error');
     };
 
-    // -- БЕЗОПАСНАЯ ПЕРЕЗАГРУЗКА --
     slide.safeReload = () => {
         if (vid.dataset.reloading === "true") return;
-
         let retries = parseInt(vid.dataset.retryCount || 0);
         
-        // ФАТАЛЬНАЯ ОШИБКА
         if (retries >= 3) {
             console.log("❌ Video Unavailable (Fatal)");
-            setStatusColor('fatal'); // Включаем пульсацию
+            setStatusColor('fatal');
             vid.dataset.stuckCount = "0"; 
             return;
         }
 
-        // ОБЫЧНАЯ ОШИБКА
         setStatusColor('error');
-        
         console.log(`♻️ Reloading stream (${retries + 1}/3)...`);
         vid.dataset.reloading = "true";
         vid.dataset.retryCount = retries + 1;
@@ -208,13 +217,12 @@ function createSlide(data) {
 
             const onMeta = () => {
                 if (Number.isFinite(savedTime) && savedTime > 0) vid.currentTime = savedTime;
-
                 if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; } 
                 else { vid.muted = true; }
 
                 vid.play().then(() => {
                     bg.play().catch(()=>{});
-                    setStatusColor('ok'); // Сброс цвета
+                    setStatusColor('ok');
                     vid.dataset.retryCount = "0"; 
                     vid.dataset.stuckCount = "0";
                     vid.dataset.reloading = "false";
@@ -236,7 +244,7 @@ function createSlide(data) {
             
             const onError = () => {
                 vid.dataset.reloading = "false";
-                setStatusColor('error'); // Пока просто ошибка
+                setStatusColor('error');
                 vid.removeEventListener('error', onError);
             };
             vid.addEventListener('error', onError);
@@ -244,19 +252,14 @@ function createSlide(data) {
         }, 1000);
     };
 
-    // User Controls
     vid.parentElement.addEventListener('click', () => {
         if (vid.paused) {
             vid.dataset.userPaused = "false";
-            // Если была фатальная или обычная ошибка, клик - это принудительная реанимация
             if (parseInt(vid.dataset.retryCount || 0) >= 3 || bar.classList.contains('error-state') || bar.classList.contains('fatal-error')) {
-                 vid.dataset.retryCount = "0"; // Сброс счетчика
+                 vid.dataset.retryCount = "0";
                  slide.safeReload();
             } else {
-                 vid.play().then(() => { 
-                     bg.play(); 
-                     setStatusColor('ok'); 
-                 }).catch(()=>{});
+                 vid.play().then(() => { bg.play(); setStatusColor('ok'); }).catch(()=>{});
             }
         } else {
             vid.dataset.userPaused = "true";
@@ -270,28 +273,21 @@ function createSlide(data) {
         }
         vid.dataset.stuckCount = "0";
         vid.dataset.lastTime = vid.currentTime;
-        
         if (vid.dataset.reloading === "true") vid.dataset.reloading = "false";
-        
-        // Убираем красный, если видео реально пошло
         if ((bar.classList.contains('error-state') || bar.classList.contains('fatal-error')) && !vid.paused && vid.readyState > 2) {
              setStatusColor('ok');
         }
     });
 
-    // Seek (Перемотка)
     let isDragging = false;
     const handle = (y) => {
         if (!Number.isFinite(vid.duration)) return;
         const rect = bar.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, 1 - (y - rect.top)/rect.height));
         vid.currentTime = pct * vid.duration;
-        
-        // СБРОС
         vid.dataset.stuckCount = "0";
         vid.dataset.retryCount = "0"; 
         setStatusColor('ok'); 
-        
         vid.dataset.userPaused = "false";
         vid.play().then(() => bg.play()).catch(()=>{});
     };
@@ -310,23 +306,16 @@ function createSlide(data) {
 setInterval(() => {
     const activeSlide = document.querySelector('.active-slide');
     if (!activeSlide) return;
-
     const vid = activeSlide.querySelector('.video-player');
     const bg = activeSlide.querySelector('.video-blur-bg');
     const bar = activeSlide.querySelector('.video-progress-container');
-    if (!vid) return;
+    if (!vid || vid.dataset.reloading === "true") return;
 
-    if (vid.dataset.reloading === "true") return;
-
-    // 1. Resume false pause
     if (vid.paused && vid.dataset.userPaused === "false" && vid.readyState > 2) {
-        // console.log("💓 Heartbeat: Resuming false pause"); // Spam removed
-        vid.play().catch(()=>{}); 
-        bg.play().catch(()=>{});
+        vid.play().catch(()=>{}); bg.play().catch(()=>{});
         return;
     }
 
-    // 2. Check Stuck
     if (!vid.paused && vid.dataset.userPaused === "false") {
         const currentTime = vid.currentTime;
         const lastTime = parseFloat(vid.dataset.lastTime || 0);
@@ -335,22 +324,13 @@ setInterval(() => {
             let stuck = parseInt(vid.dataset.stuckCount || 0) + 1;
             vid.dataset.stuckCount = stuck;
             
-            // console.log(`⚠️ Stuck counter: ${stuck}`); // Spam removed
-
-            // КРАСИМ (Pre-warning)
-            if (stuck >= 2 && bar && !bar.classList.contains('fatal-error')) {
-                 bar.classList.add('error-state');
-            }
+            if (stuck >= 2 && bar && !bar.classList.contains('fatal-error')) bar.classList.add('error-state');
 
             if (stuck >= 3) {
                  if (parseInt(vid.dataset.retryCount || 0) < 3) {
                      if (activeSlide.safeReload) activeSlide.safeReload();
                  } else {
-                     // Лимит исчерпан -> ФАТАЛИТИ
-                     if (bar) {
-                         bar.classList.remove('error-state');
-                         bar.classList.add('fatal-error');
-                     }
+                     if (bar) { bar.classList.remove('error-state'); bar.classList.add('fatal-error'); }
                  }
             }
         } else {

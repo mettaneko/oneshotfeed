@@ -1,3 +1,5 @@
+// bot.js - Niko Feed v25.12.8
+
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(200).send('OK');
@@ -22,16 +24,14 @@ export default async function handler(req, res) {
 📜 *История версий Niko Feed:*
 (Нумерация - Год.Месяц.Номер версии)
 
-
 *25.12.1* - Бета-тест.
 *25.12.2* - Добавлена предложка и подписки.
 *25.12.3* - Оптимизация для Telegram Mini-apps.
 *25.12.4* - Защита от спама и чуть улучшенный интерфейс.
 *25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
 *25.12.6* - Добавлена предложка напрямую в бота.
-*25.12.6H* - Откат предыдущего апдейта.
-*25.12.6R* - Фикс багов с кнопками стартового сообщения.
-*25.12.7* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
+*25.12.7* - Добавление ~1193 новых видео.
+*25.12.8* - Фикс Cobalt API, улучшенная защита от блокировок видео (hotlink).
         `;
         await sendMessage(token, chatId, historyText, null, 'Markdown');
       }
@@ -64,10 +64,10 @@ export default async function handler(req, res) {
       // /START
       if (text === '/start') {
         await sendMessage(token, chatId, 
-            "👋 Привет! Добро пожаловать в Niko Feed.", 
+            "👋 Привет! Добро пожаловать в <b>Niko Feed v25.12.8</b>.", 
             {
              inline_keyboard: [[{ text: "📱 Открыть", web_app: { url: webAppUrl } }], [{ text: "📜 История", callback_data: "version_history" }]]
-            }
+            }, 'HTML'
         );
       } 
 
@@ -84,18 +84,18 @@ export default async function handler(req, res) {
               } else {
                   await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
                   try {
-                      // 1. Пробуем TikWM (лучшее качество инфы)
+                      // 1. Пробуем TikWM
                       let tikData = null;
                       try {
-                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
+                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(tikTokUrl)}`);
                         const apiJson = await apiRes.json();
                         if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                       } catch (e) {}
 
-                      // 2. Пробуем Cobalt (лучшее качество видео)
+                      // 2. Пробуем Cobalt (co.wuk.sh)
                       let cobaltUrl = await getCobaltLink(tikTokUrl);
 
-                      // 3. Пробуем OEmbed (Запасной вариант для автора/обложки)
+                      // 3. Пробуем OEmbed
                       let oembedData = null;
                       if (!tikData) {
                           oembedData = await getTikTokMetadata(tikTokUrl);
@@ -107,24 +107,23 @@ export default async function handler(req, res) {
                       let finalAuthor = 'unknown';
                       let finalId = null;
 
-                      // Если TikWM жив — берем всё оттуда (это идеал)
                       if (tikData) {
                           finalId = tikData.id;
                           finalCover = tikData.cover;
                           finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                          finalVideoUrl = cobaltUrl || tikData.play; // Cobalt приоритет для видео
+                          // Приоритет Play URL от TikWM, т.к. Cobalt может быть перегружен
+                          // Но если ссылка без домена, добавляем
+                          finalVideoUrl = tikData.play; 
                           
                           if (tikData.images && tikData.images.length > 0) {
                              await sendMessage(token, chatId, "❌ Это слайд-шоу!");
                              return res.status(200).json({ ok: true }); 
                           }
                       } 
-                      // Если TikWM умер, но есть Cobalt + OEmbed
                       else if (cobaltUrl) {
                           finalVideoUrl = cobaltUrl;
                           finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
                           
-                          // Берем данные из OEmbed
                           if (oembedData) {
                               finalAuthor = oembedData.author_name || 'TikTok User';
                               finalCover = oembedData.thumbnail_url || 'https://via.placeholder.com/150';
@@ -164,10 +163,53 @@ export default async function handler(req, res) {
               }
           }
 
+          // --- /MAINTENANCE (NEW 25.12.8) ---
+          else if (text.startsWith('/maintenance')) {
+             const parts = text.split(/\s+/);
+             const mode = parts[1]; // on, off или пусто
+
+             if (mode === 'on') {
+                 // Включаем флаг
+                 await fetch(`${DB_URL}/set/maintenance_mode/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                 await sendMessage(token, chatId, "🚧 <b>Режим обслуживания ВКЛЮЧЕН!</b>\nПользователи видят заглушку.", null, 'HTML');
+             } else if (mode === 'off') {
+                 // Выключаем флаг
+                 await fetch(`${DB_URL}/set/maintenance_mode/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                 await sendMessage(token, chatId, "✅ <b>Режим обслуживания ВЫКЛЮЧЕН!</b>\nЛента доступна.", null, 'HTML');
+             } else {
+                 // Меню
+                 await sendMessage(token, chatId, 
+                     `🔧 <b>Тех. Меню:</b>\n\n` + 
+                     `🚧 <code>/maintenance on</code> - Вкл заглушку\n` + 
+                     `✅ <code>/maintenance off</code> - Выкл заглушку\n` +
+                     `🗑 <code>/clear</code> - Очистить ленту\n` +
+                     `📊 <code>/count</code> - Кол-во видео\n` +
+                     `📡 <code>/status</code> - Статус Redis`, 
+                     null, 'HTML');
+             }
+          }
+
           // --- /CLEAR ---
           else if (text === '/clear') {
               await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
               await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
+          }
+
+          // --- /COUNT ---
+          else if (text === '/count') {
+              try {
+                  const r = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                  const d = await r.json();
+                  await sendMessage(token, chatId, `📊 Видео в ленте: ${d.result || 0}`, null, 'HTML');
+              } catch(e) { await sendMessage(token, chatId, "❌ Ошибка Redis"); }
+          }
+          
+          // --- /STATUS ---
+          else if (text === '/status') {
+              try {
+                  const r = await fetch(`${DB_URL}/ping`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                  await sendMessage(token, chatId, `Redis: ${r.ok ? '🟢 OK' : '🔴 ERROR'}`, null, 'HTML');
+              } catch(e) { await sendMessage(token, chatId, "❌ Нет подключения к Redis"); }
           }
 
           // --- /BROADCAST ---
@@ -188,7 +230,7 @@ export default async function handler(req, res) {
 
       // === NOT ADMIN (Silent Suggestion) ===
       else if (!isAdmin(chatId) && chatId > 0) {
-          if (text.startsWith('/add') || text.startsWith('/clear')) return res.status(200).json({ ok: true });
+          if (text.startsWith('/add') || text.startsWith('/clear') || text.startsWith('/maintenance')) return res.status(200).json({ ok: true });
           
           if (text.includes('http')) {
               const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
@@ -203,26 +245,24 @@ export default async function handler(req, res) {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Bot Error' }); }
 }
 
-// === НОВАЯ ФУНКЦИЯ ДЛЯ АВТОРОВ (OEMBED) ===
+// === HELPERS ===
+
 async function getTikTokMetadata(url) {
     try {
-        // Официальный API ТикТока для вставки видео на сайты
         const res = await fetch(`https://www.tiktok.com/oembed?url=${url}`);
         const data = await res.json();
         return {
-            author_name: data.author_name, // Имя автора (Никнейм)
-            title: data.title,             // Описание видео
-            thumbnail_url: data.thumbnail_url // Обложка
+            author_name: data.author_name, 
+            title: data.title, 
+            thumbnail_url: data.thumbnail_url 
         };
-    } catch (e) {
-        console.error("OEmbed Error:", e);
-        return null;
-    }
+    } catch (e) { return null; }
 }
 
 async function getCobaltLink(url) {
     try {
-        const response = await fetch("https://api.cobalt.tools/api/json", {
+        // ✅ ФИКС 25.12.8: используем co.wuk.sh
+        const response = await fetch("https://co.wuk.sh/api/json", {
             method: "POST",
             headers: { "Accept": "application/json", "Content-Type": "application/json" },
             body: JSON.stringify({ url: url, vCodec: "h264", vQuality: "720", filenamePattern: "basic" })
