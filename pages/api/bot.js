@@ -1,5 +1,3 @@
-// bot.js - Niko Feed v25.12.8
-
 export default async function handler(req, res) {
   try {
     if (req.method !== 'POST') return res.status(200).send('OK');
@@ -30,8 +28,10 @@ export default async function handler(req, res) {
 *25.12.4* - Защита от спама и чуть улучшенный интерфейс.
 *25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
 *25.12.6* - Добавлена предложка напрямую в бота.
-*25.12.7* - Добавление ~1193 новых видео.
-*25.12.8* - Фикс Cobalt API, улучшенная защита от блокировок видео (hotlink).
+*25.12.6H* - Откат предыдущего апдейта.
+*25.12.6R* - Фикс багов с кнопками стартового сообщения.
+*25.12.7* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
+*25.12.9* - Фикс протухающих ссылок и добавление режима тех. работ.
         `;
         await sendMessage(token, chatId, historyText, null, 'Markdown');
       }
@@ -64,10 +64,10 @@ export default async function handler(req, res) {
       // /START
       if (text === '/start') {
         await sendMessage(token, chatId, 
-            "👋 Привет! Добро пожаловать в <b>Niko Feed v25.12.8</b>.", 
+            "👋 Привет! Добро пожаловать в Niko Feed.", 
             {
              inline_keyboard: [[{ text: "📱 Открыть", web_app: { url: webAppUrl } }], [{ text: "📜 История", callback_data: "version_history" }]]
-            }, 'HTML'
+            }
         );
       } 
 
@@ -75,27 +75,28 @@ export default async function handler(req, res) {
       else if (isAdmin(chatId)) {
 
           // --- /ADD ---
-          if (text.startsWith('/add')) {
+          if (text.startsWith('/add') || text.includes('tiktok.com')) {
               const parts = text.split(/\s+/);
               let tikTokUrl = parts.find(p => p.includes('http'));
 
               if (!tikTokUrl) {
-                  await sendMessage(token, chatId, "❌ Нет ссылки.", null, 'HTML');
+                  // Если просто текст, игнорируем или пишем ошибку только если явно /add
+                  if (text.startsWith('/add')) await sendMessage(token, chatId, "❌ Нет ссылки.", null, 'HTML');
               } else {
                   await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
                   try {
-                      // 1. Пробуем TikWM
+                      // 1. Пробуем TikWM (основной источник)
                       let tikData = null;
                       try {
-                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(tikTokUrl)}`);
+                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
                         const apiJson = await apiRes.json();
                         if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                       } catch (e) {}
 
-                      // 2. Пробуем Cobalt (co.wuk.sh)
+                      // 2. Пробуем Cobalt (резерв)
                       let cobaltUrl = await getCobaltLink(tikTokUrl);
 
-                      // 3. Пробуем OEmbed
+                      // 3. OEmbed (метаданные)
                       let oembedData = null;
                       if (!tikData) {
                           oembedData = await getTikTokMetadata(tikTokUrl);
@@ -107,13 +108,16 @@ export default async function handler(req, res) {
                       let finalAuthor = 'unknown';
                       let finalId = null;
 
+                      // СТРАТЕГИЯ: Если TikWM дал ID, мы формируем "вечную" ссылку на их плеер.
+                      // Если TikWM упал, используем Cobalt (но ссылка может протухнуть).
+
                       if (tikData) {
                           finalId = tikData.id;
                           finalCover = tikData.cover;
                           finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                          // Приоритет Play URL от TikWM, т.к. Cobalt может быть перегружен
-                          // Но если ссылка без домена, добавляем
-                          finalVideoUrl = tikData.play; 
+                          
+                          // ВМЕСТО tikData.play БЕРЕМ ВЕЧНУЮ ССЫЛКУ:
+                          finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                           
                           if (tikData.images && tikData.images.length > 0) {
                              await sendMessage(token, chatId, "❌ Это слайд-шоу!");
@@ -152,7 +156,7 @@ export default async function handler(req, res) {
                           });
                           
                           await sendMessage(token, chatId, 
-                              `✅ <b>Сохранено!</b>\n👤 ${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Видео</a>`, 
+                              `✅ <b>Сохранено!</b>\n👤 ${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Ссылка</a>`, 
                               null, 'HTML');
                       } else {
                           await sendMessage(token, chatId, "❌ <b>Ошибка!</b> Видео не скачалось.");
@@ -163,28 +167,25 @@ export default async function handler(req, res) {
               }
           }
 
-          // --- /MAINTENANCE (NEW 25.12.8) ---
+          // --- /MAINTENANCE (NEW) ---
           else if (text.startsWith('/maintenance')) {
              const parts = text.split(/\s+/);
-             const mode = parts[1]; // on, off или пусто
+             const mode = parts[1]; // on / off
 
              if (mode === 'on') {
-                 // Включаем флаг
                  await fetch(`${DB_URL}/set/maintenance_mode/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                 await sendMessage(token, chatId, "🚧 <b>Режим обслуживания ВКЛЮЧЕН!</b>\nПользователи видят заглушку.", null, 'HTML');
+                 await sendMessage(token, chatId, "🚧 <b>Режим обслуживания ВКЛЮЧЕН!</b>", null, 'HTML');
              } else if (mode === 'off') {
-                 // Выключаем флаг
                  await fetch(`${DB_URL}/set/maintenance_mode/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                 await sendMessage(token, chatId, "✅ <b>Режим обслуживания ВЫКЛЮЧЕН!</b>\nЛента доступна.", null, 'HTML');
+                 await sendMessage(token, chatId, "✅ <b>Режим обслуживания ВЫКЛЮЧЕН!</b>", null, 'HTML');
              } else {
-                 // Меню
                  await sendMessage(token, chatId, 
-                     `🔧 <b>Тех. Меню:</b>\n\n` + 
-                     `🚧 <code>/maintenance on</code> - Вкл заглушку\n` + 
-                     `✅ <code>/maintenance off</code> - Выкл заглушку\n` +
-                     `🗑 <code>/clear</code> - Очистить ленту\n` +
-                     `📊 <code>/count</code> - Кол-во видео\n` +
-                     `📡 <code>/status</code> - Статус Redis`, 
+                     `🔧 <b>Меню:</b>\n` + 
+                     `🚧 /maintenance on\n` + 
+                     `✅ /maintenance off\n` +
+                     `🗑 /clear\n` +
+                     `📊 /count\n` +
+                     `📡 /status`, 
                      null, 'HTML');
              }
           }
@@ -197,19 +198,19 @@ export default async function handler(req, res) {
 
           // --- /COUNT ---
           else if (text === '/count') {
-              try {
+               try {
                   const r = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                   const d = await r.json();
-                  await sendMessage(token, chatId, `📊 Видео в ленте: ${d.result || 0}`, null, 'HTML');
-              } catch(e) { await sendMessage(token, chatId, "❌ Ошибка Redis"); }
+                  await sendMessage(token, chatId, `📊 Видео: ${d.result || 0}`, null, 'HTML');
+               } catch(e) { await sendMessage(token, chatId, "❌ Ошибка Redis"); }
           }
-          
+
           // --- /STATUS ---
           else if (text === '/status') {
-              try {
+               try {
                   const r = await fetch(`${DB_URL}/ping`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                   await sendMessage(token, chatId, `Redis: ${r.ok ? '🟢 OK' : '🔴 ERROR'}`, null, 'HTML');
-              } catch(e) { await sendMessage(token, chatId, "❌ Нет подключения к Redis"); }
+               } catch(e) { await sendMessage(token, chatId, "❌ Нет коннекта"); }
           }
 
           // --- /BROADCAST ---
@@ -245,8 +246,6 @@ export default async function handler(req, res) {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Bot Error' }); }
 }
 
-// === HELPERS ===
-
 async function getTikTokMetadata(url) {
     try {
         const res = await fetch(`https://www.tiktok.com/oembed?url=${url}`);
@@ -261,7 +260,7 @@ async function getTikTokMetadata(url) {
 
 async function getCobaltLink(url) {
     try {
-        // ✅ ФИКС 25.12.8: используем co.wuk.sh
+        // Cobalt Mirror
         const response = await fetch("https://co.wuk.sh/api/json", {
             method: "POST",
             headers: { "Accept": "application/json", "Content-Type": "application/json" },

@@ -1,464 +1,287 @@
-// script.js - Niko Feed v25.12.8
+export default async function handler(req, res) {
+  try {
+    if (req.method !== 'POST') return res.status(200).send('OK');
 
-// === KONFIG ===
-const API_BASE = 'https://niko-feed.vercel.app'; 
-const BATCH_SIZE = 5; 
-const BOT_LINK = 'https://t.me/oneshotfeedbot'; 
-
-// === 0. TELEGRAM WEB APP ===
-const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-const isTelegramUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-
-if (!isTelegramUser) {
-    const redirectBanner = document.getElementById('disable-redirect-banner');
-    if (redirectBanner) redirectBanner.classList.add('show');
-}
-if (tg) { tg.expand(); tg.ready(); }
-
-const AudioContext = window.AudioContext || window.webkitAudioContext;
-let audioCtx;
-
-// === 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
-let subscribedAuthors = [];
-let hasInteracted = false;
-let globalVolume = parseFloat(localStorage.getItem('niko_volume') || '1.0');
-
-let allVideosCache = []; 
-let queue = [];          
-let currentTab = 'foryou';
-let currentActiveAuthor = null;
-
-// DOM
-const feedContainer = document.getElementById('feed');
-const tabForYou = document.getElementById('tab-foryou');
-const tabFollowing = document.getElementById('tab-following');
-const indicator = document.getElementById('nav-indicator');
-const uiAuthor = document.getElementById('ui-author');
-const uiDesc = document.getElementById('ui-desc');
-const uiSubBtn = document.getElementById('ui-sub-btn');
-const uiVolBtn = document.getElementById('ui-vol-btn');
-const uiVolCont = document.getElementById('ui-vol-cont');
-const uiVolRange = document.getElementById('ui-vol-range');
-const uiShareBtn = document.getElementById('ui-share-btn');
-const uiSuggestBtn = document.getElementById('ui-suggest-btn');
-const suggestForm = document.getElementById('suggest-form');
-const sugUrl = document.getElementById('sug-url');
-const sugAuthor = document.getElementById('sug-author');
-const sugDesc = document.getElementById('sug-desc');
-const sugBtn = document.getElementById('sug-send');
-
-if (!isTelegramUser && document.getElementById('disable-redirect-btn')) {
-    document.getElementById('disable-redirect-btn').addEventListener('click', () => {
-        document.getElementById('disable-redirect-banner').classList.remove('show');
-    });
-}
-
-// === 2. ЗАГРУЗКА И MAINTENANCE ===
-async function fetchVideos(isUpdate = false) {
-    let newVideos = [];
+    const body = req.body;
+    const token = process.env.BOT_TOKEN;
     
-    // ✅ MAINTENANCE CHECK (25.12.8)
-    try {
-        const maintRes = await fetch(`${API_BASE}/api/get_maintenance`); // Нужно создать этот API роут или проверять иначе
-        // Или если нет API, делаем проверку через получение флага в get_feed
-    } catch(e) {}
+    const adminIds = (process.env.ADMIN_ID || '').split(',');
+    const isAdmin = (id) => adminIds.includes(id.toString());
     
-    // Получаем фид
-    try {
-        const res = await fetch(`${API_BASE}/api/get_feed`);
-        if (res.ok) {
-            const data = await res.json();
-            
-            // Если API вернуло объект {maintenance: true} вместо массива
-            if (data.maintenance === true) {
-                window.location.href = 'maintenance.html';
-                return;
-            }
-            
-            newVideos = data;
-        }
-    } catch (e) { console.error('DB Error', e); return; }
+    const webAppUrl = 'https://mettaneko.github.io/oneshotfeed/';
+    const DB_URL = process.env.KV_REST_API_URL;
+    const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
-    if (newVideos.length === 0 && allVideosCache.length === 0 && !isUpdate) {
+    // === 1. BUTTONS ===
+    if (body.callback_query) {
+      const chatId = body.callback_query.message.chat.id;
+      const data = body.callback_query.data;
+      
+      if (data === 'version_history') {
+        const historyText = `
+📜 *История версий Niko Feed:*
+(Нумерация - Год.Месяц.Номер версии)
+
+*25.12.1* - Бета-тест.
+*25.12.2* - Добавлена предложка и подписки.
+*25.12.3* - Оптимизация для Telegram Mini-apps.
+*25.12.4* - Защита от спама и чуть улучшенный интерфейс.
+*25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
+*25.12.6* - Добавлена предложка напрямую в бота.
+*25.12.6H* - Откат предыдущего апдейта.
+*25.12.6R* - Фикс багов с кнопками стартового сообщения.
+*25.12.7* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
+*25.12.9* - Фикс протухающих ссылок и добавление режима тех. работ.
+        `;
+        await sendMessage(token, chatId, historyText, null, 'Markdown');
+      }
+      
+      await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: body.callback_query.id })
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    // === 2. MESSAGES ===
+    const msg = body.message || body.channel_post;
+
+    if (msg) {
+      const chatId = msg.chat.id;
+      const text = msg.text || msg.caption || '';
+      const user = msg.from || { id: chatId, username: 'Channel' };
+
+      // Save User
+      if (DB_URL && DB_TOKEN && chatId > 0) {
         try {
-            const res = await fetch('videos.json');
-            if (res.ok) newVideos = await res.json();
-        } catch (e) {}
-    }
-    if (!Array.isArray(newVideos)) return; // Защита от ошибок
-
-    const currentIds = new Set(allVideosCache.map(v => v.id));
-    const freshContent = newVideos.filter(v => !currentIds.has(v.id));
-
-    if (freshContent.length > 0) {
-        console.log(`🔥 New: ${freshContent.length}`);
-        allVideosCache = [...freshContent, ...allVideosCache];
-        queue.unshift(...freshContent);
-        if (isUpdate && feedContainer.children.length < 3) addVideosToDom(BATCH_SIZE);
-    } else if (!isUpdate) {
-        allVideosCache = newVideos;
-    }
-}
-
-// === 3. ЛЕНТА ===
-function prepareQueue(type) {
-    let source = [];
-    if (type === 'foryou') source = [...allVideosCache];
-    else source = allVideosCache.filter(v => subscribedAuthors.includes(v.author));
-    if (source.length === 0) return;
-    queue = shuffle(source);
-    feedContainer.innerHTML = '';
-    addVideosToDom(BATCH_SIZE);
-}
-
-function addVideosToDom(count) {
-    if (queue.length < count) {
-        let refill = [...allVideosCache];
-        if (currentTab === 'following') refill = refill.filter(v => subscribedAuthors.includes(v.author));
-        if (refill.length > 0) queue.push(...shuffle(refill));
-    }
-    const chunk = queue.splice(0, count);
-    chunk.forEach(v => {
-        const slide = createSlide(v);
-        feedContainer.appendChild(slide);
-        observer.observe(slide);
-    });
-    const allSlides = document.querySelectorAll('.video-slide');
-    if (allSlides.length > 15) {
-        for (let i = 0; i < 5; i++) {
-             if (allSlides[i]) { observer.unobserve(allSlides[i]); allSlides[i].remove(); }
-        }
-    }
-}
-
-// === 4. ПОДПИСКИ ===
-async function syncSubs() {
-    const local = JSON.parse(localStorage.getItem('subscribedAuthors'));
-    if (local) subscribedAuthors = local;
-    if (tg?.initDataUnsafe?.user) {
-        try {
-            const res = await fetch(`${API_BASE}/api/get_subs`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: tg.initDataUnsafe.user.id })
+            await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
+                headers: { Authorization: `Bearer ${DB_TOKEN}` }
             });
-            const data = await res.json();
-            if (data.subs) {
-                subscribedAuthors = data.subs;
-                localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
-                updateSubBtnState();
-            }
         } catch (e) {}
-    }
-}
+      }
 
-// === 5. СЛАЙДЫ ===
-function createSlide(data) {
-    const slide = document.createElement('div');
-    slide.className = 'video-slide';
-    slide.dataset.jsonData = JSON.stringify(data);
-    const poster = data.cover ? `poster="${data.cover}"` : '';
-
-    // ✅ ФИКС 25.12.8: referrerPolicy="no-referrer"
-    slide.innerHTML = `
-        <video class="video-blur-bg" loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
-        <div class="video-wrapper">
-            <video class="video-player" ${poster} loop muted playsinline referrerpolicy="no-referrer" src="${data.videoUrl}"></video>
-            <div class="video-progress-container"><div class="video-progress-fill"></div></div>
-        </div>`;
-        
-    const vid = slide.querySelector('.video-player');
-    const bg = slide.querySelector('.video-blur-bg');
-    const fill = slide.querySelector('.video-progress-fill');
-    const bar = slide.querySelector('.video-progress-container'); 
-
-    // State
-    vid.dataset.userPaused = "false";
-    vid.dataset.lastTime = "0";
-    vid.dataset.stuckCount = "0";
-    vid.dataset.retryCount = "0"; 
-    vid.dataset.reloading = "false"; 
-
-    vid.referrerPolicy = "no-referrer";
-    bg.referrerPolicy = "no-referrer";
-
-    const setStatusColor = (status) => {
-        bar.classList.remove('error-state', 'fatal-error');
-        if (status === 'error') bar.classList.add('error-state');
-        else if (status === 'fatal') bar.classList.add('fatal-error');
-    };
-
-    slide.safeReload = () => {
-        if (vid.dataset.reloading === "true") return;
-        let retries = parseInt(vid.dataset.retryCount || 0);
-        
-        if (retries >= 3) {
-            console.log("❌ Video Unavailable (Fatal)");
-            setStatusColor('fatal');
-            vid.dataset.stuckCount = "0"; 
-            return;
-        }
-
-        setStatusColor('error');
-        console.log(`♻️ Reloading stream (${retries + 1}/3)...`);
-        vid.dataset.reloading = "true";
-        vid.dataset.retryCount = retries + 1;
-        
-        const sep = data.videoUrl.includes('?') ? '&' : '?';
-        const retryUrl = `${data.videoUrl}${sep}t=${Date.now()}`;
-        const savedTime = vid.currentTime;
-
-        vid.removeAttribute('src');
-        vid.load();
-
-        setTimeout(() => {
-            vid.src = retryUrl;
-            bg.src = retryUrl;
-            vid.load();
-
-            const onMeta = () => {
-                if (Number.isFinite(savedTime) && savedTime > 0) vid.currentTime = savedTime;
-                if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; } 
-                else { vid.muted = true; }
-
-                vid.play().then(() => {
-                    bg.play().catch(()=>{});
-                    setStatusColor('ok');
-                    vid.dataset.retryCount = "0"; 
-                    vid.dataset.stuckCount = "0";
-                    vid.dataset.reloading = "false";
-                    if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; }
-                }).catch(e => {
-                    if (e.name !== 'AbortError') console.warn("Autoplay blocked:", e);
-                    vid.muted = true;
-                    vid.play().then(() => {
-                        if (hasInteracted) { vid.muted = (globalVolume === 0); vid.volume = globalVolume; }
-                        setStatusColor('ok');
-                        vid.dataset.reloading = "false";
-                    }).catch(() => {
-                        vid.dataset.reloading = "false";
-                    });
-                });
-                vid.removeEventListener('loadedmetadata', onMeta);
-            };
-            vid.addEventListener('loadedmetadata', onMeta);
-            
-            const onError = () => {
-                vid.dataset.reloading = "false";
-                setStatusColor('error');
-                vid.removeEventListener('error', onError);
-            };
-            vid.addEventListener('error', onError);
-
-        }, 1000);
-    };
-
-    vid.parentElement.addEventListener('click', () => {
-        if (vid.paused) {
-            vid.dataset.userPaused = "false";
-            if (parseInt(vid.dataset.retryCount || 0) >= 3 || bar.classList.contains('error-state') || bar.classList.contains('fatal-error')) {
-                 vid.dataset.retryCount = "0";
-                 slide.safeReload();
-            } else {
-                 vid.play().then(() => { bg.play(); setStatusColor('ok'); }).catch(()=>{});
+      // /START
+      if (text === '/start') {
+        await sendMessage(token, chatId, 
+            "👋 Привет! Добро пожаловать в Niko Feed.", 
+            {
+             inline_keyboard: [[{ text: "📱 Открыть", web_app: { url: webAppUrl } }], [{ text: "📜 История", callback_data: "version_history" }]]
             }
-        } else {
-            vid.dataset.userPaused = "true";
-            vid.pause(); bg.pause();
-        }
-    });
-    
-    vid.addEventListener('timeupdate', () => { 
-        if(Number.isFinite(vid.duration) && vid.duration > 0) {
-            fill.style.height=`${(vid.currentTime/vid.duration)*100}%`;
-        }
-        vid.dataset.stuckCount = "0";
-        vid.dataset.lastTime = vid.currentTime;
-        if (vid.dataset.reloading === "true") vid.dataset.reloading = "false";
-        if ((bar.classList.contains('error-state') || bar.classList.contains('fatal-error')) && !vid.paused && vid.readyState > 2) {
-             setStatusColor('ok');
-        }
-    });
+        );
+      } 
 
-    let isDragging = false;
-    const handle = (y) => {
-        if (!Number.isFinite(vid.duration)) return;
-        const rect = bar.getBoundingClientRect();
-        const pct = Math.max(0, Math.min(1, 1 - (y - rect.top)/rect.height));
-        vid.currentTime = pct * vid.duration;
-        vid.dataset.stuckCount = "0";
-        vid.dataset.retryCount = "0"; 
-        setStatusColor('ok'); 
-        vid.dataset.userPaused = "false";
-        vid.play().then(() => bg.play()).catch(()=>{});
-    };
+      // === ADMIN COMMANDS ===
+      else if (isAdmin(chatId)) {
 
-    const start=(e)=>{e.preventDefault();e.stopPropagation();isDragging=true;handle(e.touches?e.touches[0].clientY:e.clientY);};
-    const move=(e)=>{if(isDragging){e.preventDefault();e.stopPropagation();handle(e.touches?e.touches[0].clientY:e.clientY);}};
-    const end=()=>isDragging=false;
-    bar.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-    bar.addEventListener('touchstart', start); window.addEventListener('touchmove', move); window.addEventListener('touchend', end);
-    bar.addEventListener('click', (e)=>{e.preventDefault();e.stopPropagation();handle(e.clientY);});
-    
-    return slide;
-}
+          // --- /ADD ---
+          if (text.startsWith('/add') || text.includes('tiktok.com')) {
+              const parts = text.split(/\s+/);
+              let tikTokUrl = parts.find(p => p.includes('http'));
 
-// === 6. HEARTBEAT ===
-setInterval(() => {
-    const activeSlide = document.querySelector('.active-slide');
-    if (!activeSlide) return;
-    const vid = activeSlide.querySelector('.video-player');
-    const bg = activeSlide.querySelector('.video-blur-bg');
-    const bar = activeSlide.querySelector('.video-progress-container');
-    if (!vid || vid.dataset.reloading === "true") return;
+              if (!tikTokUrl) {
+                  // Если просто текст, игнорируем или пишем ошибку только если явно /add
+                  if (text.startsWith('/add')) await sendMessage(token, chatId, "❌ Нет ссылки.", null, 'HTML');
+              } else {
+                  await sendMessage(token, chatId, "⏳ <b>Загружаю...</b>", null, 'HTML');
+                  try {
+                      // 1. Пробуем TikWM (основной источник)
+                      let tikData = null;
+                      try {
+                        const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
+                        const apiJson = await apiRes.json();
+                        if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
+                      } catch (e) {}
 
-    if (vid.paused && vid.dataset.userPaused === "false" && vid.readyState > 2) {
-        vid.play().catch(()=>{}); bg.play().catch(()=>{});
-        return;
+                      // 2. Пробуем Cobalt (резерв)
+                      let cobaltUrl = await getCobaltLink(tikTokUrl);
+
+                      // 3. OEmbed (метаданные)
+                      let oembedData = null;
+                      if (!tikData) {
+                          oembedData = await getTikTokMetadata(tikTokUrl);
+                      }
+
+                      // === СБОРКА ДАННЫХ ===
+                      let finalVideoUrl = null;
+                      let finalCover = null;
+                      let finalAuthor = 'unknown';
+                      let finalId = null;
+
+                      // СТРАТЕГИЯ: Если TikWM дал ID, мы формируем "вечную" ссылку на их плеер.
+                      // Если TikWM упал, используем Cobalt (но ссылка может протухнуть).
+
+                      if (tikData) {
+                          finalId = tikData.id;
+                          finalCover = tikData.cover;
+                          finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
+                          
+                          // ВМЕСТО tikData.play БЕРЕМ ВЕЧНУЮ ССЫЛКУ:
+                          finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
+                          
+                          if (tikData.images && tikData.images.length > 0) {
+                             await sendMessage(token, chatId, "❌ Это слайд-шоу!");
+                             return res.status(200).json({ ok: true }); 
+                          }
+                      } 
+                      else if (cobaltUrl) {
+                          finalVideoUrl = cobaltUrl;
+                          finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
+                          
+                          if (oembedData) {
+                              finalAuthor = oembedData.author_name || 'TikTok User';
+                              finalCover = oembedData.thumbnail_url || 'https://via.placeholder.com/150';
+                          } else {
+                              finalAuthor = 'Niko Feed Bot';
+                              finalCover = 'https://via.placeholder.com/150';
+                          }
+                      }
+
+                      // === СОХРАНЕНИЕ ===
+                      if (finalVideoUrl) {
+                          if (!finalVideoUrl.startsWith('http')) finalVideoUrl = `https://www.tikwm.com${finalVideoUrl}`;
+
+                          const newVideo = {
+                              id: finalId, 
+                              videoUrl: finalVideoUrl, 
+                              author: finalAuthor, 
+                              desc: 'on tiktok', 
+                              cover: finalCover
+                          };
+                          
+                          await fetch(`${DB_URL}/`, {
+                              method: 'POST',
+                              headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
+                          });
+                          
+                          await sendMessage(token, chatId, 
+                              `✅ <b>Сохранено!</b>\n👤 ${newVideo.author}\n🔗 <a href="${newVideo.videoUrl}">Ссылка</a>`, 
+                              null, 'HTML');
+                      } else {
+                          await sendMessage(token, chatId, "❌ <b>Ошибка!</b> Видео не скачалось.");
+                      }
+                  } catch (e) {
+                      await sendMessage(token, chatId, "❌ Error: " + e.message);
+                  }
+              }
+          }
+
+          // --- /MAINTENANCE (NEW) ---
+          else if (text.startsWith('/maintenance')) {
+             const parts = text.split(/\s+/);
+             const mode = parts[1]; // on / off
+
+             if (mode === 'on') {
+                 await fetch(`${DB_URL}/set/maintenance_mode/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                 await sendMessage(token, chatId, "🚧 <b>Режим обслуживания ВКЛЮЧЕН!</b>", null, 'HTML');
+             } else if (mode === 'off') {
+                 await fetch(`${DB_URL}/set/maintenance_mode/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                 await sendMessage(token, chatId, "✅ <b>Режим обслуживания ВЫКЛЮЧЕН!</b>", null, 'HTML');
+             } else {
+                 await sendMessage(token, chatId, 
+                     `🔧 <b>Меню:</b>\n` + 
+                     `🚧 /maintenance on\n` + 
+                     `✅ /maintenance off\n` +
+                     `🗑 /clear\n` +
+                     `📊 /count\n` +
+                     `📡 /status`, 
+                     null, 'HTML');
+             }
+          }
+
+          // --- /CLEAR ---
+          else if (text === '/clear') {
+              await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+              await sendMessage(token, chatId, "🗑 <b>База очищена!</b>", null, 'HTML');
+          }
+
+          // --- /COUNT ---
+          else if (text === '/count') {
+               try {
+                  const r = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                  const d = await r.json();
+                  await sendMessage(token, chatId, `📊 Видео: ${d.result || 0}`, null, 'HTML');
+               } catch(e) { await sendMessage(token, chatId, "❌ Ошибка Redis"); }
+          }
+
+          // --- /STATUS ---
+          else if (text === '/status') {
+               try {
+                  const r = await fetch(`${DB_URL}/ping`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                  await sendMessage(token, chatId, `Redis: ${r.ok ? '🟢 OK' : '🔴 ERROR'}`, null, 'HTML');
+               } catch(e) { await sendMessage(token, chatId, "❌ Нет коннекта"); }
+          }
+
+          // --- /BROADCAST ---
+          else if (text.startsWith('/broadcast')) {
+              const bText = text.replace('/broadcast', '').trim();
+              let users = [];
+              try {
+                  const r = await fetch(`${DB_URL}/smembers/all_bot_users`, {headers:{Authorization:`Bearer ${DB_TOKEN}`}});
+                  const d = await r.json();
+                  users = d.result || [];
+              } catch(e){}
+              for(const u of users) {
+                  try { await sendMessage(token, u, `📢 ${bText}`, null, 'HTML'); } catch(e){}
+              }
+              await sendMessage(token, chatId, `Разослано.`);
+          }
+      }
+
+      // === NOT ADMIN (Silent Suggestion) ===
+      else if (!isAdmin(chatId) && chatId > 0) {
+          if (text.startsWith('/add') || text.startsWith('/clear') || text.startsWith('/maintenance')) return res.status(200).json({ ok: true });
+          
+          if (text.includes('http')) {
+              const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
+              const admins = (process.env.ADMIN_ID || '').split(',');
+              for (const admin of admins) {
+                  await sendMessage(token, admin, `🚨 <b>ПРЕДЛОЖКА ОТ ${sender}:</b>\n${text}`, null, 'HTML');
+              }
+          }
+      }
     }
+    res.status(200).json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Bot Error' }); }
+}
 
-    if (!vid.paused && vid.dataset.userPaused === "false") {
-        const currentTime = vid.currentTime;
-        const lastTime = parseFloat(vid.dataset.lastTime || 0);
-        
-        if (Math.abs(currentTime - lastTime) < 0.1) {
-            let stuck = parseInt(vid.dataset.stuckCount || 0) + 1;
-            vid.dataset.stuckCount = stuck;
-            
-            if (stuck >= 2 && bar && !bar.classList.contains('fatal-error')) bar.classList.add('error-state');
+async function getTikTokMetadata(url) {
+    try {
+        const res = await fetch(`https://www.tiktok.com/oembed?url=${url}`);
+        const data = await res.json();
+        return {
+            author_name: data.author_name, 
+            title: data.title, 
+            thumbnail_url: data.thumbnail_url 
+        };
+    } catch (e) { return null; }
+}
 
-            if (stuck >= 3) {
-                 if (parseInt(vid.dataset.retryCount || 0) < 3) {
-                     if (activeSlide.safeReload) activeSlide.safeReload();
-                 } else {
-                     if (bar) { bar.classList.remove('error-state'); bar.classList.add('fatal-error'); }
-                 }
-            }
-        } else {
-            vid.dataset.stuckCount = "0";
-            vid.dataset.lastTime = currentTime;
-        }
-    }
-}, 1000);
+async function getCobaltLink(url) {
+    try {
+        // Cobalt Mirror
+        const response = await fetch("https://co.wuk.sh/api/json", {
+            method: "POST",
+            headers: { "Accept": "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({ url: url, vCodec: "h264", vQuality: "720", filenamePattern: "basic" })
+        });
+        const data = await response.json();
+        return data.url || null;
+    } catch (e) { return null; }
+}
 
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        const slide = entry.target;
-        const vid = slide.querySelector('.video-player');
-        const bg = slide.querySelector('.video-blur-bg');
-        const bar = slide.querySelector('.video-progress-container');
-        
-        if (entry.isIntersecting) {
-            document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
-            slide.classList.add('active-slide');
-            try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) {}
+function extractIdFromUrl(url) {
+    const match = url.match(/\/video\/(\d+)/);
+    return match ? match[1] : null;
+}
 
-            vid.dataset.userPaused = "false"; 
-            vid.dataset.stuckCount = "0";
-            vid.dataset.retryCount = "0"; 
-            vid.dataset.reloading = "false";
-            
-            if(bar) bar.classList.remove('error-state', 'fatal-error');
-            
-            if (hasInteracted) { vid.volume=globalVolume; vid.muted=(globalVolume===0); } else vid.muted=true;
-            
-            vid.play().then(()=>bg.play()).catch(()=>{ vid.muted=true; vid.play(); });
-
-            const allSlides = Array.from(document.querySelectorAll('.video-slide'));
-            if (allSlides.length - allSlides.indexOf(slide) < 3) addVideosToDom(BATCH_SIZE);
-        } else {
-            slide.classList.remove('active-slide');
-            vid.pause();
-            bg.pause();
-        }
+async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Markdown') {
+    const body = { chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true };
+    if (keyboard) body.reply_markup = keyboard;
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
     });
-}, { threshold: 0.6 });
-
-// === UI & LISTENERS ===
-function updateSubBtnState() {
-    if (!currentActiveAuthor) return;
-    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
 }
-function updateGlobalUI(data) {
-    if (uiAuthor) uiAuthor.innerText = data.author || '@unknown';
-    if (uiDesc) uiDesc.innerText = data.desc || '';
-    currentActiveAuthor = data.author;
-    updateSubBtnState();
-}
-function unlockAudioContext(e) {
-    if (e) e.stopPropagation();
-    if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-    const overlay = document.getElementById('audio-unlock-overlay');
-    if (overlay) { overlay.classList.add('hidden'); setTimeout(() => overlay.remove(), 500); }
-    hasInteracted = true;
-    const v = document.querySelector('.active-slide .video-player');
-    if (v) { v.muted = false; v.volume = globalVolume; }
-}
-function updateInd(tab) {
-    if (!tab) return;
-    indicator.style.width = `${tab.offsetWidth}px`;
-    indicator.style.transform = `translateX(${tab.offsetLeft}px)`;
-}
-function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
-
-const overlayEl = document.getElementById('audio-unlock-overlay');
-if (overlayEl) overlayEl.addEventListener('click', unlockAudioContext);
-
-tabForYou.addEventListener('click', () => {
-    currentTab = 'foryou';
-    tabForYou.classList.add('active'); tabFollowing.classList.remove('active');
-    updateInd(tabForYou); prepareQueue('foryou');
-});
-tabFollowing.addEventListener('click', () => {
-    if (subscribedAuthors.length === 0) return;
-    currentTab = 'following';
-    tabFollowing.classList.add('active'); tabForYou.classList.remove('active');
-    updateInd(tabFollowing); prepareQueue('following');
-});
-uiSubBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!currentActiveAuthor) return;
-    const isSub = subscribedAuthors.includes(currentActiveAuthor);
-    const action = isSub ? 'remove' : 'add';
-    if (action === 'add') subscribedAuthors.push(currentActiveAuthor);
-    else subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor);
-    updateSubBtnState();
-    localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
-    if (tg?.initDataUnsafe?.user) fetch(`${API_BASE}/api/subscribe`, { method: 'POST', body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }).catch(()=>{});
-});
-uiVolBtn.addEventListener('click', (e) => { e.stopPropagation(); uiVolCont.classList.toggle('active'); });
-uiVolRange.addEventListener('input', (e) => { 
-    e.stopPropagation(); globalVolume = parseFloat(e.target.value); 
-    localStorage.setItem('niko_volume', globalVolume);
-    const v = document.querySelector('.active-slide .video-player'); if(v) { v.volume = globalVolume; v.muted = (globalVolume === 0); } 
-});
-
-if (uiSuggestBtn && suggestForm) uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display=(suggestForm.style.display==='flex')?'none':'flex'; });
-if (sugBtn) sugBtn.addEventListener('click', async () => {
-    const url = sugUrl.value.trim(); const author = sugAuthor.value.trim(); const desc = sugDesc.value.trim();
-    if (!url) { tg?.showAlert('Вставь ссылку!'); return; }
-    sugBtn.innerText='...'; sugBtn.disabled=true;
-    try {
-        const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) });
-        if (res.ok) { sugBtn.innerText='Отправлено!'; setTimeout(()=>{ suggestForm.style.display='none'; sugBtn.innerText='Отправить'; sugBtn.disabled=false; }, 1000); }
-        else { tg?.showAlert('Ошибка'); sugBtn.innerText='Отправить'; sugBtn.disabled=false; }
-    } catch (e) { tg?.showAlert('Сбой сети'); sugBtn.innerText='Отправить'; sugBtn.disabled=false; }
-});
-if (uiShareBtn) uiShareBtn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const data = document.querySelector('.active-slide')?.dataset.jsonData;
-    if (!data) return;
-    const v = JSON.parse(data);
-    if (!tg?.initDataUnsafe?.user) { navigator.clipboard.writeText(v.videoUrl); alert('Ссылка скопирована!'); return; }
-    try {
-        const res = await fetch(`${API_BASE}/api/share`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ videoUrl: v.videoUrl, author: v.author, desc: v.desc, user: tg.initDataUnsafe.user }) });
-        if (res.ok) tg.showPopup({title:'Готово', message:'Видео отправлено ботом', buttons:[{type:'ok'}]});
-    } catch(e) { tg.showAlert('Ошибка сети'); }
-});
-
-window.addEventListener('load', async () => {
-    if(uiVolRange) uiVolRange.value = globalVolume;
-    await fetchVideos(false); await syncSubs(); 
-    updateInd(tabForYou); prepareQueue('foryou');
-    setInterval(() => fetchVideos(true), 60000);
-});

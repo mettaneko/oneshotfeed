@@ -1,30 +1,36 @@
-// get_feed.js (API)
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
   const DB_URL = process.env.KV_REST_API_URL;
   const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
+  if (!DB_URL) return res.status(500).json({ error: 'No DB config' });
+
   try {
-    // 1. ПРОВЕРКА MAINTENANCE
+    // 1. Проверяем статус техобслуживания
+    // Пытаемся получить ключ maintenance_mode
     const maintRes = await fetch(`${DB_URL}/get/maintenance_mode`, {
         headers: { Authorization: `Bearer ${DB_TOKEN}` }
     });
     const maintData = await maintRes.json();
     
+    // Если в Redis лежит "true", возвращаем флаг
     if (maintData.result === 'true') {
         return res.status(200).json({ maintenance: true });
     }
 
-    // 2. ОБЫЧНАЯ ВЫДАЧА
+    // 2. Обычная выдача видео
     const response = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
         headers: { Authorization: `Bearer ${DB_TOKEN}` }
     });
     const data = await response.json();
 
     const videos = (data.result || [])
-      .map(item => { try { return JSON.parse(item); } catch { return null; } })
+      .map(item => {
+        try { return JSON.parse(item); } catch { return null; }
+      })
       .filter(Boolean);
 
     res.status(200).json(videos);
