@@ -205,7 +205,14 @@ function switchFeed(feedType) {
     state.activeFeed = feedType;
     state.currentPage = 0;
     state.hasMore = true;
-    document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.feed === feedType));
+
+    const nav = document.querySelector('.top-nav');
+    nav.dataset.active = feedType; // <-- ДОБАВЛЕНО
+
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.feed === feedType);
+    });
+
     container.innerHTML = '<div class="loading-state"><div class="blink">_</div></div>';
     lazyLoadObserver.disconnect();
     loadMoreVideos();
