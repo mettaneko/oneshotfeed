@@ -323,40 +323,29 @@ input[type=range].volume-range::-webkit-slider-thumb {
     transform: translateX(-50%);
     z-index: 100;
     display: flex;
-    justify-content: center; /* Центрируем табы */
     padding: 4px;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(15px);
     border-radius: 30px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    
-    /* Ограничиваем ширину, чтобы не вылезало за экран */
-    width: auto;
-    max-width: 90vw; 
-    white-space: nowrap; /* Запрещаем перенос текста */
 }
-
 .nav-tab {
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
     font-family: var(--font-title);
     font-size: 0.95rem;
     font-weight: 700;
-    padding: 8px 16px; /* Чуть уменьшил боковые отступы (было 24px) */
+    padding: 8px 24px;
     cursor: pointer;
     transition: color 0.3s;
     z-index: 2;
     position: relative;
-    user-select: none; /* Чтобы текст не выделялся при тапах */
-    -webkit-tap-highlight-color: transparent;
 }
-
 .nav-tab.active {
     color: #fff;
     text-shadow: 0 0 10px rgba(255,255,255,0.2);
 }
-
 .nav-indicator {
     position: absolute;
     top: 4px;
@@ -365,16 +354,8 @@ input[type=range].volume-range::-webkit-slider-thumb {
     background: rgba(255, 255, 255, 0.15);
     border-radius: 25px;
     z-index: 1;
-    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1); /* Плавная анимация */
+    transition: all 0.3s;
     width: 0;
-}
-
-/* Адаптация для очень узких экранов (iPhone SE и т.д.) */
-@media (max-width: 360px) {
-    .nav-tab {
-        font-size: 0.85rem; /* Чуть меньше шрифт */
-        padding: 6px 12px;  /* Еще меньше отступы */
-    }
 }
 
 
@@ -721,56 +702,3 @@ input[type=range].volume-range::-webkit-slider-thumb {
     transition: all 0.2s;
 }
 .disable-btn:hover { background: rgba(0,0,0,0.3); transform: scale(1.05); }
-
-/* Индикатор загрузки/ошибки (Heartbeat) */
-.video-error-msg {
-    background: rgba(0, 0, 0, 0.6) !important;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px !important;
-    padding: 12px 20px !important;
-    font-family: var(--font-sans);
-    font-weight: 600;
-    font-size: 0.9rem;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 0.8; }
-    50% { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
-    100% { opacity: 0.8; }
-}
-/* Добавить в feed.css */
-/* === ИНДИКАТОР ОШИБКИ === */
-
-/* === ИНДИКАТОРЫ ОШИБКИ === */
-
-/* 1. Временная ошибка (зависание/релоад) */
-.video-progress-container.error-state {
-    background-color: rgba(255, 105, 97, 0.3) !important;
-    box-shadow: 0 0 15px rgba(255, 105, 97, 0.5) !important;
-}
-.video-progress-container.error-state .video-progress-fill {
-    background-color: #ff6961 !important; /* Pastel Red */
-}
-
-/* 2. Фатальная ошибка (видео мертво) - ПУЛЬСАЦИЯ */
-.video-progress-container.fatal-error {
-    animation: fatalPulse 2s infinite alternate;
-    box-shadow: 0 0 20px rgba(139, 0, 0, 0.8) !important;
-}
-.video-progress-container.fatal-error .video-progress-fill {
-    background-color: #8b0000 !important; /* Dark Red */
-    animation: fatalFillPulse 2s infinite alternate;
-}
-
-@keyframes fatalPulse {
-    0% { background-color: rgba(139, 0, 0, 0.4); }
-    100% { background-color: rgba(255, 0, 0, 0.2); }
-}
-
-@keyframes fatalFillPulse {
-    0% { background-color: #8b0000; } /* Dark Red */
-    100% { background-color: #ff0000; } /* Red */
-}
