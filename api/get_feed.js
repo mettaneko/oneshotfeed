@@ -1,32 +1,40 @@
+// api/get_feed.js
+import { kv } from '@vercel/kv';
+
 export default async function handler(req, res) {
+    // Разрешаем CORS (чтобы работать с любого домена)
+    res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET');
-    
-    const DB_URL = process.env.KV_REST_API_URL;
-    const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
     try {
-        const response = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
-            headers: { Authorization: `Bearer ${DB_TOKEN}` }
-        });
-        const data = await response.json();
+        // Получаем номер страницы (0, 1, 2...) из URL
+        // По умолчанию 0
+        const page = parseInt(req.query.page || '0');
+        const limit = 5; // Грузим по 5 видео за раз (Lazy Load)
 
-        // Превращаем строки из Redis в объекты и переворачиваем (новые сверху)
-        const videos = (data.result || [])
-            .map(str => JSON.parse(str))
-            .reverse();
+        const start = page * limit;
+        const end = start + limit - 1;
 
-        // Получаем статус техработ (если есть)
-        const maintRes = await fetch(`${DB_URL}/get/maintenance_mode`, {
-            headers: { Authorization: `Bearer ${DB_TOKEN}` }
-        });
-        const maintData = await maintRes.json();
+        // Достаем диапазон видео из списка 'feed_videos'
+        // LRANGE возвращает массив строк (если ты хранил JSON как строки)
+        // или массив объектов (если Vercel KV сам распарсил)
+        const rawVideos = await kv.lrange('feed_videos', start, end);
 
-        res.status(200).json({
-            videos: videos,
-            maintenance: maintData.result === 'true'
+        // Если данных нет — возвращаем пустой массив
+        if (!rawVideos || rawVideos.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        // Если данные лежат как строки JSON — парсим их
+        // Если уже объекты — просто отдаем
+        const videos = rawVideos.map(item => {
+            return typeof item === 'string' ? JSON.parse(item) : item;
         });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+
+        res.status(200).json(videos);
+
+    } catch (error) {
+        console.error("Redis Error:", error);
+        res.status(500).json({ error: 'Failed to fetch feed' });
     }
 }
