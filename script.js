@@ -53,7 +53,7 @@ const redirectBanner = document.getElementById('disable-redirect-banner');
 
 if (!isTelegram && redirectBanner) {
     redirectBanner.classList.add('show');
-    window.location.href = 'https://t.me/oneshotfeedbot'; // Раскомментируй для редиректа
+    // window.location.href = 'https://t.me/oneshotfeedbot'; // Раскомментируй для редиректа
 }
 
 if (redirectBanner) {
