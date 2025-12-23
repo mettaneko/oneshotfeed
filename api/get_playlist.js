@@ -15,6 +15,7 @@ function validateTelegramAuth(initData, botToken) {
         }
         dataCheckString = dataCheckString.slice(0, -1);
 
+        // --- ИСПРАВЛЕНО ЗДЕСЬ ---
         const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
         const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
         
@@ -28,7 +29,7 @@ function validateTelegramAuth(initData, botToken) {
     return null;
 }
 
-// ФУНКЦИЯ ПЕРЕМЕШИВАНИЯ МАССИВА (Алгоритм Фишера-Йетса)
+// ФУНКЦИЯ ПЕРЕМЕШИВАНИЯ МАССИВА
 function shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -38,7 +39,7 @@ function shuffle(array) {
 }
 
 export default async function handler(req, res) {
-    // CORS (на случай, если домены снова разойдутся)
+    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
@@ -49,10 +50,10 @@ export default async function handler(req, res) {
         token: process.env.KV_REST_API_TOKEN,
     });
 
-    const { type } = req.query; // 'foryou' или 'following'
+    const { type } = req.query;
 
     try {
-        // 1. Получаем ПОСЛЕДНИЕ 500 видео из базы (разумный лимит)
+        // 1. Получаем ПОСЛЕДНИЕ 500 видео из базы
         const allVideoStrings = await kv.lrange('feed_videos', 0, 499);
         if (!allVideoStrings || allVideoStrings.length === 0) {
             return res.status(200).json([]);
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
             .map(str => { try { return JSON.parse(str); } catch { return null; } })
             .filter(Boolean);
 
-        // 2. Если это лента подписок, ФИЛЬТРУЕМ видео
+        // 2. Если это лента подписок, фильтруем видео
         if (type === 'following') {
             const initData = req.headers['x-telegram-auth'];
             const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
@@ -84,6 +85,6 @@ export default async function handler(req, res) {
 
     } catch (e) {
         console.error(`Get Playlist Error (type: ${type}):`, e);
-        res.status(500).json([]);
+        res.status(500).json({ error: 'Server crashed', message: e.message });
     }
 }
