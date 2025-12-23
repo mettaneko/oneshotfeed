@@ -1,49 +1,56 @@
+// script.js
+
+// --- БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ---
 (async function() {
-    const API_BASE = 'https://feed.mettaneko.ru'; // Убедись, что API_BASE совпадает
+    const API_BASE = 'https://feed.mettaneko.ru';
     const SESSION_DURATION = 5 * 60 * 1000;
     const ACCESS_TOKEN_KEY = 'maintenance_access_pass';
 
-    try {
-        // 1. Проверяем, включен ли вообще режим тех. работ
-        const statusResponse = await fetch(`${API_BASE}/api/maintenance`);
-        const data = await statusResponse.json();
+    // Функция, которая проверяет статус и решает, нужно ли перенаправлять пользователя
+    const checkStatusAndRedirect = async () => {
+        try {
+            const response = await fetch(`${API_BASE}/api/maintenance`);
+            if (!response.ok) return; // Если API недоступен, ничего не делаем
 
-        if (!data.maintenance) {
-            // Режим выключен, пускаем всех.
-            return;
+            const data = await response.json();
+
+            // Если режим тех. работ ВКЛЮЧЕН
+            if (data.maintenance) {
+                let hasValidPass = false;
+                const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+
+                if (token) {
+                    try {
+                        const payload = JSON.parse(atob(token));
+                        // Проверяем, не истек ли пропуск
+                        if (Date.now() <= (payload.ts + SESSION_DURATION)) {
+                            hasValidPass = true;
+                        }
+                    } catch (e) { /* Невалидный токен, считаем что пропуска нет */ }
+                }
+                
+                // Если валидного пропуска нет, немедленно перенаправляем
+                if (!hasValidPass && window.location.pathname !== '/maintenance.html') {
+                    window.location.replace('/maintenance.html');
+                }
+            }
+        } catch (e) {
+            console.error("Maintenance check failed.", e);
         }
+    };
 
-    } catch (e) {
-        // Если не удалось получить статус, на всякий случай считаем, что режим включен.
-        console.error("Could not fetch maintenance status, assuming it's on.", e);
-    }
-    
-    // 2. Если мы здесь, значит режим тех. работ ВКЛЮЧЕН. Проверяем пропуск.
-    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-    if (!token) {
-        window.location.replace('/maintenance.html');
-        return;
-    }
+    // 1. Выполняем проверку немедленно при загрузке страницы
+    await checkStatusAndRedirect();
 
-    try {
-        const payload = JSON.parse(atob(token));
-        const { ts } = payload;
-        const now = Date.now();
+    // 2. Устанавливаем периодическую проверку каждые 10 секунд
+    setInterval(checkStatusAndRedirect, 10000); 
 
-        if (now > (ts + SESSION_DURATION)) {
-            localStorage.removeItem(ACCESS_TOKEN_KEY);
-            window.location.replace('/maintenance.html');
-            return;
-        }
-    } catch (e) {
-        localStorage.removeItem(ACCESS_TOKEN_KEY);
-        window.location.replace('/maintenance.html');
-        return;
-    }
 })();
+// --- КОНЕЦ БЛОКА УПРАВЛЕНИЯ ---
+
 
 // === KONFIG ===
-const API_BASE = 'https://feed.mettaneko.ru'; // <-- БЕЗ СЛЭША
+const API_BASE = 'https://feed.mettaneko.ru';
 
 // === 0. TELEGRAM WEB APP ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
