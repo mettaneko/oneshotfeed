@@ -1,38 +1,29 @@
-import { kv } from '@vercel/kv';
-import { jwt } from 'jsonwebtoken';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
-
 export default async function handler(req, res) {
-    // Тут логика ленты подписок
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-    try {
-        const { userId } = jwt.verify(token, JWT_SECRET);
-        const subscribedTo = await kv.smembers(`user:${userId}:subscriptions`);
-        
-        if (subscribedTo.length === 0) return res.status(200).json([]);
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-        // Очень упрощенная логика: берем последние видео от всех, на кого подписан
-        // В проде тут нужен будет более сложный алгоритм
-        let videoIds = [];
-        for (const authorId of subscribedTo) {
-            const authorVideos = await kv.zrange(`user:${authorId}:videos`, 0, 5, { rev: true });
-            videoIds.push(...authorVideos);
-        }
-        
-        if (videoIds.length === 0) return res.status(200).json([]);
+  const { userId } = req.body;
+  const URL = process.env.KV_REST_API_URL;
+  const TOKEN = process.env.KV_REST_API_TOKEN;
 
-        const pipeline = kv.pipeline();
-        videoIds.forEach(id => pipeline.hgetall(`video:${id}`));
-        const videos = await pipeline.exec();
+  if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
 
-        // Все видео в ленте подписок помечаются как "подписан"
-        const processedVideos = videos.map(v => ({...v, subscribed: true}));
+  try {
+    // Получаем список подписок (smembers)
+    const dbRes = await fetch(`${URL}/smembers/subs:${userId}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    
+    const data = await dbRes.json();
+    const subs = Array.isArray(data.result) ? data.result : [];
 
-        res.status(200).json(processedVideos);
-
-    } catch (e) {
-        res.status(401).json({ error: 'Invalid token' });
-    }
+    res.status(200).json({ subs });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'DB Error' });
+  }
 }

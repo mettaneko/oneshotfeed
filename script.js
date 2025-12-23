@@ -1,216 +1,193 @@
-document.addEventListener('DOMContentLoaded', () => {
-    // Этот код запустится только когда вся страница будет готова
+// === KONFIG ===
+const API_BASE = ''; 
+const BATCH_SIZE = 5; 
+const LOAD_TIMEOUT = 5000; 
 
-    // 1. ИНИЦИАЛИЗАЦИЯ И DOM
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+// === 0. TELEGRAM WEB APP ===
+const tg = window.Telegram?.WebApp || null;
+const isVersionAtLeast = (ver) => tg && tg.isVersionAtLeast(ver);
+if (tg) { tg.expand(); tg.ready(); }
+
+// === 1. GLOBAL VARS ===
+let subscribedAuthors = [];
+let hasInteracted = false;
+let globalMuted = localStorage.getItem('niko_muted') === 'true';
+
+let allVideosCache = []; 
+let queue = [];          
+let currentTab = 'foryou';
+
+const showNotify = (msg) => (isVersionAtLeast('6.2') ? tg.showAlert(msg) : alert(msg));
+
+// === 2. FETCH & QUEUE ===
+async function fetchVideos(isUpdate = false) {
     try {
-        if (parseFloat(tg.version) >= 6.1) {
-            tg.setHeaderColor('#0a0a0f');
-            tg.setBackgroundColor('#0a0a0f');
+        const res = await fetch(`${API_BASE}/api/get_feed`);
+        const data = await res.json();
+        if (data.videos) {
+            const currentIds = new Set(allVideosCache.map(v => v.id));
+            const fresh = data.videos.filter(v => v && !currentIds.has(v.id));
+            if (fresh.length > 0) {
+                allVideosCache = [...fresh, ...allVideosCache];
+                if (!isUpdate) prepareQueue(currentTab);
+            }
         }
-    } catch (e) { console.error('TG Color Error:', e); }
+    } catch (e) { console.error("Load error:", e); }
+}
 
-    const container = document.getElementById('feed-container');
-    const startOverlay = document.getElementById('start-overlay');
-    const uiAuthor = document.querySelector('.author-info .author');
-    const uiDesc = document.querySelector('.author-info .desc');
-    const subscribeBtn = document.querySelector('.subscribe-btn i');
+function prepareQueue(type) {
+    let source = (type === 'foryou') 
+        ? [...allVideosCache] 
+        : allVideosCache.filter(v => subscribedAuthors.includes(v.author));
+    queue = source.sort(() => Math.random() - 0.5);
+    document.getElementById('feed').innerHTML = '';
+    addVideosToDom(BATCH_SIZE);
+}
 
-    const state = {
-        token: null, currentPage: 0, isLoading: false, hasMore: true,
-        isMuted: true, activeFeed: 'foryou', currentVideo: null
+function addVideosToDom(count) {
+    const chunk = queue.splice(0, count);
+    chunk.forEach(v => {
+        const slide = createSlide(v);
+        document.getElementById('feed').appendChild(slide);
+        observer.observe(slide);
+    });
+}
+
+// === 3. PLAYER LOGIC ===
+function createSlide(data) {
+    const slide = document.createElement('div');
+    slide.className = 'video-slide';
+    slide.dataset.videoData = JSON.stringify(data);
+    
+    slide.innerHTML = `
+        <video class="video-blur-bg" loop muted playsinline src="${data.videoUrl}"></video>
+        <div class="video-wrapper">
+            <video class="video-player" loop playsinline poster="${data.cover || ''}" src="${data.videoUrl}"></video>
+            <div class="video-spinner"><i class="fas fa-spinner fa-spin"></i></div>
+            <div class="video-progress-container"><div class="video-progress-fill"></div></div>
+        </div>`;
+        
+    const vid = slide.querySelector('.video-player');
+    const bg = slide.querySelector('.video-blur-bg');
+    const fill = slide.querySelector('.video-progress-fill');
+    const progressCont = slide.querySelector('.video-progress-container');
+    const spinner = slide.querySelector('.video-spinner');
+
+    let loadTimer;
+
+    const toggleErrorUI = (isError) => {
+        if (isError) {
+            progressCont.classList.add('error-state');
+            spinner.style.display = 'block';
+        } else {
+            progressCont.classList.remove('error-state');
+            spinner.style.display = 'none';
+        }
     };
 
-    // 2. АВТОРИЗАЦИЯ (с проверкой на локальный режим)
-    async function authenticate() {
-        const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-        if (isLocal) {
-            console.warn("ЛОКАЛЬНЫЙ РЕЖИМ: Авторизация пропущена.");
-            state.token = 'local-dev-token';
-            return state.token;
-        }
-        if (state.token) return state.token;
-        const initData = tg.initData || '';
-        if (!initData) {
-             safeShowAlert('Ошибка: initData отсутствует. Откройте приложение через Telegram.');
-             return null;
-        }
-        try {
-            const res = await fetch('/api/auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData })
-            });
-            if (!res.ok) throw new Error('Auth failed: ' + res.status);
-            const { token } = await res.json();
-            state.token = token;
-            return token;
-        } catch (e) {
-            console.error(e);
-            safeShowAlert('Ошибка авторизации. Попробуйте перезапустить.');
-            return null;
-        }
-    }
+    vid.addEventListener('waiting', () => {
+        if (!slide.classList.contains('active-slide')) return;
+        loadTimer = setTimeout(() => toggleErrorUI(true), LOAD_TIMEOUT);
+    });
 
-    // 3. API ЗАПРОСЫ
-    const TEST_VIDEOS = [
-        { id: 'local1', authorId: 'test1', authorName: 'LocalDev', desc: 'Тестовое видео #1', subscribed: 'false', cover: 'https://via.placeholder.com/400x600.png?text=Cover1', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm' },
-        { id: 'local2', authorId: 'test2', authorName: 'TestUser', desc: 'Тестовое видео #2', subscribed: 'true', cover: 'https://via.placeholder.com/400x600.png?text=Cover2', url: 'https://www.w3schools.com/html/mov_bbb.mp4' }
-    ];
+    vid.addEventListener('playing', () => {
+        clearTimeout(loadTimer);
+        toggleErrorUI(false);
+    });
 
-    async function fetchVideos(page) {
-        if (state.token === 'local-dev-token') {
-            return new Promise(resolve => setTimeout(() => resolve(page === 0 ? TEST_VIDEOS : []), 500));
+    vid.addEventListener('timeupdate', () => { 
+        if(vid.duration && slide.classList.contains('active-slide')) {
+            fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`;
         }
-        const endpoint = state.activeFeed === 'foryou' ? '/api/get_feed' : '/api/get_subs';
-        const res = await fetch(`${endpoint}?page=${page}`, {
-            headers: { 'Authorization': `Bearer ${state.token}` }
+    });
+
+    vid.addEventListener('error', () => {
+        if (slide.classList.contains('active-slide')) {
+            vid.load(); vid.play();
+        }
+    });
+
+    slide.addEventListener('click', () => {
+        if (vid.paused) { vid.play(); bg.play(); } 
+        else { vid.pause(); bg.pause(); }
+    });
+    
+    return slide;
+}
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        const slide = entry.target;
+        const vid = slide.querySelector('.video-player');
+        const bg = slide.querySelector('.video-blur-bg');
+        if (entry.isIntersecting) {
+            document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
+            slide.classList.add('active-slide');
+            const data = JSON.parse(slide.dataset.videoData);
+            document.getElementById('ui-author').innerText = `@${data.author}`;
+            document.getElementById('ui-desc').innerText = data.desc || '';
+            vid.muted = globalMuted || !hasInteracted;
+            vid.play().then(() => bg.play()).catch(() => { vid.muted = true; vid.play(); });
+            if (!slide.nextElementSibling) addVideosToDom(BATCH_SIZE);
+        } else {
+            vid.pause(); bg.pause(); vid.muted = true;
+        }
+    });
+}, { threshold: 0.7 });
+
+// === 4. BUTTONS ===
+document.getElementById('ui-vol-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    globalMuted = !globalMuted;
+    localStorage.setItem('niko_muted', globalMuted);
+    document.querySelector('#ui-vol-btn i').className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    const activeVid = document.querySelector('.active-slide .video-player');
+    if (activeVid) { activeVid.muted = globalMuted; activeVid.volume = globalMuted ? 0 : 1; }
+});
+
+document.getElementById('sug-send').addEventListener('click', async () => {
+    const btn = document.getElementById('sug-send');
+    const url = document.getElementById('sug-url').value.trim();
+    if (!url) return showNotify('Вставь ссылку!');
+    btn.disabled = true;
+    try {
+        const res = await fetch(`${API_BASE}/api/suggest`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                url, author: document.getElementById('sug-author').value,
+                desc: document.getElementById('sug-desc').value,
+                user: tg?.initDataUnsafe?.user || { id: 0 }
+            })
         });
-        if (!res.ok) throw new Error(`API Error: ${res.status}`);
-        return res.json();
-    }
+        if (res.ok) { showNotify('Отправлено!'); document.getElementById('suggest-form').style.display = 'none'; }
+    } catch (e) { showNotify('Ошибка сети'); }
+    btn.disabled = false;
+});
 
-    async function toggleSubscription(authorId) {
-        if (state.token === 'local-dev-token') {
-            console.log(`LOCAL: Toggling subscription for ${authorId}`);
-            const currentSubStatus = subscribeBtn.className.includes('fa-check');
-            updateSubscribeButton(!currentSubStatus);
-            return;
-        }
-        subscribeBtn.style.pointerEvents = 'none';
-        try {
-            const res = await fetch('/api/subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
-                body: JSON.stringify({ authorId })
-            });
-            const { subscribed } = await res.json();
-            updateSubscribeButton(subscribed);
-        } catch (e) {
-            console.error('Subscription error:', e);
-        } finally {
-            subscribeBtn.style.pointerEvents = 'auto';
-        }
-    }
-
-    // 4. ЛОГИКА ЛЕНТЫ
-    async function loadMoreVideos() {
-        if (state.isLoading || !state.hasMore) return;
-        state.isLoading = true; showLoader(true);
-        try {
-            const newVideos = await fetchVideos(state.currentPage);
-            if (newVideos.length === 0) {
-                state.hasMore = false;
-                if(state.currentPage > 0) showEndOfFeed();
-                return;
-            }
-            newVideos.forEach(data => container.appendChild(createCard(data)));
-            updateLoadingTrigger();
-            state.currentPage++;
-        } catch (e) { console.error(e.message) }
-        finally { state.isLoading = false; showLoader(false) }
-    }
-
-    function createCard(data) {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.dataset.videoId = data.id || 'unknown';
-        card.dataset.authorId = data.authorId || 'unknown';
-        card.dataset.authorName = data.authorName || 'Anon';
-        card.dataset.desc = data.desc || '...';
-        card.dataset.subscribed = data.subscribed;
-        card.dataset.videoUrl = data.url || '';
-        const coverUrl = data.cover ? `url(${data.cover})` : 'none';
-        card.innerHTML = `<div class="blurred-bg" style="background-image: ${coverUrl};"></div><video loop playsinline muted poster="" preload="metadata"><source src="${card.dataset.videoUrl}" type="video/mp4"></video>`;
-        card.querySelector('video').addEventListener('click', (e) => {
-            const vid = e.target;
-            if (vid.paused) vid.play(); else vid.pause();
+document.getElementById('ui-share-btn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const active = document.querySelector('.active-slide');
+    if (!active) return;
+    const v = JSON.parse(active.dataset.videoData);
+    try {
+        await fetch(`${API_BASE}/api/share`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ ...v, user: tg?.initDataUnsafe?.user })
         });
-        videoObserver.observe(card);
-        return card;
-    }
+        showNotify('Видео отправлено в бот!');
+    } catch(e) { showNotify('Ошибка'); }
+});
 
-    // 5. ЛОГИКА UI
-    let uiUpdateTimeout;
-    function updateUIMeta(card) {
-        clearTimeout(uiUpdateTimeout);
-        uiAuthor.style.opacity = '0'; uiDesc.style.opacity = '0';
-        uiUpdateTimeout = setTimeout(() => {
-            uiAuthor.innerText = card.dataset.authorName;
-            uiDesc.innerText = card.dataset.desc;
-            updateSubscribeButton(card.dataset.subscribed === 'true');
-            uiAuthor.style.opacity = '1'; uiDesc.style.opacity = '1';
-        }, 150);
-    }
-    
-    function updateSubscribeButton(isSubscribed) {
-        subscribeBtn.className = isSubscribed ? 'fa-solid fa-check' : 'fa-solid fa-plus';
-    }
+document.getElementById('audio-unlock-overlay').addEventListener('click', () => {
+    hasInteracted = true;
+    document.getElementById('audio-unlock-overlay').remove();
+    const v = document.querySelector('.active-slide .video-player');
+    if (v) { v.muted = globalMuted; v.play(); }
+});
 
-    function handleSoundToggle(e) {
-        e.stopPropagation(); state.isMuted = !state.isMuted;
-        const currentCard = document.querySelector('.video-card.is-active');
-        if (currentCard) currentCard.querySelector('video').muted = state.isMuted;
-        document.querySelectorAll('#sound-btn i').forEach(i => i.className = state.isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high');
-    }
-
-    function switchFeed(feedType) {
-        if (feedType === state.activeFeed || state.isLoading) return;
-        state.activeFeed = feedType; state.currentPage = 0; state.hasMore = true;
-        document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.feed === feedType));
-        container.innerHTML = ""; lazyLoadObserver.disconnect();
-        updateUIMeta({dataset: {authorName: '', desc: ''}});
-        loadMoreVideos();
-    }
-    
-    // 6. OBSERVERS
-    const videoObserver = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            const card = entry.target; card.classList.remove('is-active');
-            if (entry.isIntersecting) {
-                card.classList.add('is-active');
-                if (state.currentVideo !== card) {
-                    state.currentVideo = card;
-                    updateUIMeta(card);
-                }
-                const vid = card.querySelector('video');
-                vid.muted = state.isMuted; vid.currentTime = 0; vid.play().catch(()=>{});
-            } else {
-                card.querySelector('video').pause();
-            }
-        });
-    }, { threshold: 0.6 });
-
-    const loadingTrigger = document.createElement('div');
-    const lazyLoadObserver = new IntersectionObserver(e => { if (e[0].isIntersecting && !state.isLoading) loadMoreVideos() }, { rootMargin: '200px' });
-    function updateLoadingTrigger() { loadingTrigger.className = 'loading-trigger'; container.appendChild(loadingTrigger); lazyLoadObserver.disconnect(); lazyLoadObserver.observe(loadingTrigger) }
-    
-    function showLoader(s){let l=document.getElementById('batch-loader');if(s&&!l){l=document.createElement('div');l.id='batch-loader';l.className='loading-state';l.innerHTML='<span class="blink">Загрузка...</span>';container.appendChild(l)}else if(!s&&l)l.remove()}
-    function showEndOfFeed(){const e=document.createElement('div');e.className='end-of-feed';e.innerText='// Конец ленты //';e.style.opacity='0.5';container.appendChild(e)}
-
-    // 7. ЗАПУСК И СЛУШАТЕЛИ
-    async function initApp() {
-        const token = await authenticate();
-        if (!token) return;
-        setupEventListeners();
-        state.isMuted = false;
-        document.querySelector('#sound-btn i').className = 'fa-solid fa-volume-high';
-        startOverlay.style.opacity = '0';
-        setTimeout(() => startOverlay.style.display = 'none', 300);
-        loadMoreVideos();
-    }
-
-    function setupEventListeners() {
-        document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', () => switchFeed(t.dataset.feed)));
-        document.getElementById('sound-btn').addEventListener('click', handleSoundToggle);
-        document.querySelector('.subscribe-btn').addEventListener('click', () => { if (state.currentVideo) toggleSubscription(state.currentVideo.dataset.authorId); });
-        document.getElementById('share-btn').addEventListener('click', () => { const c = document.querySelector('.video-card.is-active'); if (c) safeShowAlert(`Sharing: ${c.dataset.videoUrl}`) });
-        document.getElementById('suggest-btn').addEventListener('click', () => safeShowAlert('Предложить (в разработке).'));
-    }
-    
-    function safeShowAlert(m) { try { tg.showAlert(m) } catch (e) { alert(m) } }
-
-    startOverlay.addEventListener('click', initApp, { once: true });
+window.addEventListener('load', () => {
+    document.querySelector('#ui-vol-btn i').className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    fetchVideos();
 });

@@ -1,29 +1,35 @@
-import { kv } from '@vercel/kv';
-import { jwt } from 'jsonwebtoken';
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key';
-
 export default async function handler(req, res) {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+  // CORS (разрешаем запросы с GitHub Pages)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
-    try {
-        const { userId } = jwt.verify(token, JWT_SECRET);
-        const { authorId } = req.body;
+  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-        const isSubscribed = await kv.sismember(`user:${userId}:subscriptions`, authorId);
+  const { userId, author, action } = req.body;
+  
+  // Автоматические переменные от Upstash
+  const URL = process.env.KV_REST_API_URL;
+  const TOKEN = process.env.KV_REST_API_TOKEN;
 
-        if (isSubscribed) {
-            // Отписка
-            await kv.srem(`user:${userId}:subscriptions`, authorId);
-            await kv.srem(`user:${authorId}:subscribers`, userId);
-            res.status(200).json({ subscribed: false });
-        } else {
-            // Подписка
-            await kv.sadd(`user:${userId}:subscriptions`, authorId);
-            await kv.sadd(`user:${authorId}:subscribers`, userId);
-            res.status(200).json({ subscribed: true });
-        }
-    } catch (e) {
-        res.status(401).json({ error: 'Invalid token' });
-    }
+  if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
+
+  try {
+    const key = `subs:${userId}`;
+    const command = action === 'add' ? 'sadd' : 'srem'; // sadd = добавить, srem = удалить
+
+    // Шлем запрос в базу
+    const dbRes = await fetch(`${URL}/${command}/${key}/${author}`, {
+      headers: { Authorization: `Bearer ${TOKEN}` }
+    });
+    
+    const data = await dbRes.json();
+    if (data.error) throw new Error(data.error);
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'DB Error' });
+  }
 }

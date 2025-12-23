@@ -1,22 +1,32 @@
-import { kv } from '@vercel/kv';
-// Тут должна быть логика твоей ленты "Для вас"
-
 export default async function handler(req, res) {
-    // Пока просто отдаем все видео подряд
-    const page = parseInt(req.query.page || '0');
-    const limit = 5;
-    const start = page * limit;
-    const end = start + limit - 1;
-
-    const videoIds = await kv.zrange('feed:global', start, end, { rev: true });
-    if (videoIds.length === 0) return res.status(200).json([]);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
     
-    const pipeline = kv.pipeline();
-    videoIds.forEach(id => pipeline.hgetall(`video:${id}`));
-    const videos = await pipeline.exec();
-    
-    // Добавим информацию о подписке (пока заглушка)
-    const processedVideos = videos.map(v => ({...v, subscribed: false}));
+    const DB_URL = process.env.KV_REST_API_URL;
+    const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
-    res.status(200).json(processedVideos);
+    try {
+        const response = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        });
+        const data = await response.json();
+
+        // Превращаем строки из Redis в объекты и переворачиваем (новые сверху)
+        const videos = (data.result || [])
+            .map(str => JSON.parse(str))
+            .reverse();
+
+        // Получаем статус техработ (если есть)
+        const maintRes = await fetch(`${DB_URL}/get/maintenance_mode`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        });
+        const maintData = await maintRes.json();
+
+        res.status(200).json({
+            videos: videos,
+            maintenance: maintData.result === 'true'
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 }
