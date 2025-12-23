@@ -76,7 +76,6 @@ function setupObserver() {
         entries.forEach(entry => {
             const video = entry.target.querySelector('video');
             if (entry.isIntersecting) {
-                triggerGlitch(); // Глитч при входе в поле зрения
                 entry.target.classList.add('active-slide');
                 updateUI(entry.target);
                 
