@@ -43,13 +43,13 @@ body {
     font-size: 0.85rem;
 }
 
-/* Подложка под активный таб с отступами 5% */
 .top-nav::before {
     content: '';
     position: absolute;
     top: 5%;
     bottom: 5%;
-    width: 50%;
+    left: calc(2px + 2.5%); /* отступы 5% от ширины таба */
+    width: calc(50% - 4px - 5%);
     border-radius: 14px;
     background: linear-gradient(135deg, #ffffff, #f5e2a6);
     opacity: 0.95;
@@ -57,7 +57,6 @@ body {
     transition: transform 0.25s ease;
 }
 
-/* положение подложки: слева (Для вас) / справа (Подписки) */
 .top-nav[data-active="foryou"]::before {
     transform: translateX(0%);
 }
@@ -65,7 +64,6 @@ body {
     transform: translateX(100%);
 }
 
-/* Сами табы */
 .nav-tab {
     flex: 1;
     padding: 5px 10px;
@@ -83,7 +81,7 @@ body {
 }
 
 /* ==================================
-    ЛЕНТА И ВИДЕО
+    ЛЕНТА И ВИДЕО (ИСПРАВЛЕНО)
    ================================== */
 #feed-container {
     height: 100vh;
@@ -107,49 +105,30 @@ body {
     align-items: center;
 }
 
-/* Заблюренный фон */
-.video-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-position: center;
-    background-size: cover;
-    filter: blur(18px);
-    transform: scale(1.2);
-    opacity: 0.4;
-    z-index: 0;
-}
-
-/* Ограничение размера видео по центру, со скруглением */
-.video-card video {
-    position: relative;
-    z-index: 1;
-    width: min(100%, 420px);
-    height: min(100vh, 740px);
-    max-height: calc(100dvh - 150px);
+/* Возвращаем видео на весь экран */
+video {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
-    border-radius: 18px;
-    overflow: hidden;
-    background: #000;
+    z-index: 1;
 }
 
 /* ==================================
-    UI (КОМПАКТНЫЙ, СЛЕВА ТЕКСТ)
+    UI (КОМПАКТНЫЙ, ТЕКСТ СЛЕВА)
    ================================== */
 .video-ui {
     position: absolute;
     bottom: calc(15px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: 100%;
+    width: calc(100% - 20px);
     max-width: 420px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    z-index: 2;
+    z-index: 2; /* UI всегда поверх видео */
 }
 
-/* Базовое стекло */
 .glass-panel {
     background-color: var(--glass-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -157,11 +136,10 @@ body {
     box-shadow: 0 4px 18px rgba(0,0,0,0.25);
 }
 
-/* Авторство – ниже и уже, текст слева */
 .video-info-panel {
     width: 70%;
     max-width: 260px;
-    padding: 7px 12px;
+    padding: 8px 14px;
     border-radius: 16px;
     display: flex;
     align-items: center;
@@ -169,6 +147,7 @@ body {
 }
 
 .author-info {
+    text-align: left; /* Текст слева */
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -192,11 +171,10 @@ body {
     padding: 3px;
 }
 
-/* Панель управления – ещё меньше и прозрачнее, шире авторства */
 .actions-panel {
     width: 80%;
     max-width: 300px;
-    margin-top: 2px;
+    margin: 2px auto 0;
     padding: 7px 14px;
     border-radius: 16px;
     display: flex;
@@ -218,10 +196,6 @@ body {
 .action-btn:active {
     transform: scale(0.9);
     opacity: 1;
-}
-
-.action-divider {
-    display: none;
 }
 
 /* ==================================
