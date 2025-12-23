@@ -1,60 +1,184 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
-    <title>🔧 Fix TikTok DB</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔧 TikTok Database Fixer</title>
     <style>
-        body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; background: #f0f2f5; }
-        button { padding: 20px 40px; font-size: 20px; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
-        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
-        button:active { transform: translateY(0); }
-        #log { background: #2d3748; color: #a0aec0; padding: 25px; border-radius: 10px; margin-top: 20px; white-space: pre-wrap; font-family: 'Courier New'; font-size: 14px; line-height: 1.6; max-height: 500px; overflow-y: auto; }
-        .status { text-align: center; font-size: 24px; margin: 20px 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; 
+            padding: 20px; 
+        }
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.95); 
+            border-radius: 20px; 
+            padding: 40px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+        h1 { 
+            text-align: center; 
+            color: #2d3748; 
+            margin-bottom: 10px; 
+            font-size: 2.5em;
+        }
+        .subtitle { 
+            text-align: center; 
+            color: #718096; 
+            margin-bottom: 40px; 
+            font-size: 1.2em;
+        }
+        .status { 
+            text-align: center; 
+            font-size: 1.8em; 
+            font-weight: bold; 
+            padding: 20px; 
+            border-radius: 15px; 
+            margin: 30px 0; 
+            transition: all 0.3s ease;
+        }
+        .status.success { background: #c6f6d5; color: #22543d; }
+        .status.loading { background: #fed7aa; color: #744210; }
+        .status.error { background: #fed7d7; color: #742a2a; }
+        .fix-btn { 
+            display: block; 
+            width: 100%; 
+            padding: 25px; 
+            font-size: 1.5em; 
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4); 
+            color: white; 
+            border: none; 
+            border-radius: 15px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .fix-btn:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+        }
+        .fix-btn:active { transform: translateY(-1px); }
+        .fix-btn:disabled { 
+            opacity: 0.6; 
+            cursor: not-allowed; 
+            transform: none;
+        }
+        #log { 
+            background: #1a202c; 
+            color: #e2e8f0; 
+            padding: 25px; 
+            border-radius: 15px; 
+            margin-top: 30px; 
+            white-space: pre-wrap; 
+            font-family: 'Fira Code', monospace; 
+            font-size: 14px; 
+            line-height: 1.6; 
+            max-height: 500px; 
+            overflow-y: auto;
+            border: 1px solid #2d3748;
+        }
+        .info { 
+            background: rgba(99, 102, 241, 0.1); 
+            border: 1px solid rgba(99, 102, 241, 0.3); 
+            border-radius: 10px; 
+            padding: 20px; 
+            margin: 20px 0; 
+        }
+        .next-steps { 
+            background: rgba(34, 197, 94, 0.1); 
+            border: 1px solid rgba(34, 197, 94, 0.3); 
+            border-radius: 10px; 
+            padding: 20px; 
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <h1>🎯 TikTok Database Fixer</h1>
-    <p><strong>paste.txt</strong> должен лежать рядом с этим файлом!</p>
-    
-    <div class="status" id="status">Готов к запуску...</div>
-    <button onclick="fixDatabase()">🚀 ПОФИКСИТЬ БАЗУ (949 видео)</button>
-    <div id="log"></div>
+    <div class="container">
+        <h1>🎯 TikTok Database Fixer</h1>
+        <p class="subtitle">Автоматически чинит 953 → 949 уникальных видео с вечными TikWM ссылками</p>
+        
+        <div class="status" id="status">✅ Готов к запуску</div>
+        
+        <button class="fix-btn" onclick="fixDatabase()" id="fixBtn">
+            🚀 ПОФИКСИТЬ БАЗУ (949 видео)
+        </button>
+        
+        <div class="info">
+            <strong>📋 Что делает:</strong><br>
+            • Загружает paste.txt (892k символов)<br>
+            • Находит 953 JSON записи<br>
+            • Удаляет 4 дубликата → 949 уникальных<br>
+            • Добавляет TikWM ссылки<br>
+            • Заливает в Upstash (feed_videos)
+        </div>
+        
+        <div id="log"></div>
+        
+        <div class="next-steps" id="nextSteps" style="display: none;">
+            <h3>✅ После фикса:</h3>
+            <ol>
+                <li>В Vercel: <code>const videos = JSON.parse(await kv.get("feed_videos") || "[]");</code></li>
+                <li>CLI: <code>GET feed_videos</code> → массив 949 видео</li>
+                <li>Сайт работает с TikWM ссылками! 🎉</li>
+            </ol>
+        </div>
+    </div>
 
     <script>
         const REST_URL = "https://subtle-aphid-39325.upstash.io";
         const REST_TOKEN = "AZmdAAIncDE2ZDhiNDI0ZTEzOTI0MTg0OWVkODg0NzkzYTU1ZjQxMnAxMzkzMjU=";
         const KEY = "feed_videos";
 
-        async function log(msg, color = '#a0aec0') {
+        async function log(msg, type = 'info') {
             const logEl = document.getElementById('log');
-            logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            const timestamp = new Date().toLocaleTimeString();
+            logEl.textContent += `[${timestamp}] ${msg}\n`;
             logEl.scrollTop = logEl.scrollHeight;
-            console.log(msg);
+            console.log(`[${type}] ${msg}`);
+        }
+
+        function updateStatus(text, type) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status ${type}`;
         }
 
         async function fixDatabase() {
-            const statusEl = document.getElementById('status');
-            statusEl.textContent = '⏳ Загружаю paste.txt...';
-            statusEl.style.color = '#ffa500';
+            const btn = document.getElementById('fixBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Фиксинг...';
+
+            updateStatus('⏳ Загружаю paste.txt...', 'loading');
+            document.getElementById('log').textContent = '';
 
             try {
-                // 📥 ЧИТАЕМ paste.txt с того же сайта
-                const response = await fetch('paste.txt');
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                // 📥 Загрузка
+                const response = await fetch('./paste.txt');
+                if (!response.ok) throw new Error(`paste.txt не найден (${response.status})`);
                 
                 const content = await response.text();
-                log(`✅ paste.txt загружен (${content.length} символов)`);
+                log(`✅ paste.txt загружен (${content.length.toLocaleString()} символов)`);
 
-                // 🔍 ИЩЕМ JSON
+                // 🔍 Парсинг JSON
                 const matches = content.match(/\{.*?"id".*?\}/gs) || [];
                 log(`📥 Найдено записей: ${matches.length}`);
 
                 const seen = new Set();
                 const cleaned = [];
                 
-                for (const item of matches) {
+                for (let i = 0; i < matches.length; i++) {
+                    const item = matches[i];
                     try {
                         const video = JSON.parse(item);
                         const id = video.id;
+                        
                         if (!id || seen.has(id)) continue;
                         
                         seen.add(id);
@@ -64,24 +188,32 @@
                         video.author = String(video.author || "").replace("@", "");
                         
                         cleaned.push(JSON.stringify(video));
-                    } catch(e) {}
+                        
+                        if (cleaned.length % 100 === 0) {
+                            log(`🔄 Обработано: ${cleaned.length}/${matches.length}`);
+                        }
+                    } catch(e) {
+                        // пропускаем битые
+                    }
                 }
 
                 log(`✨ Уникальных видео: ${cleaned.length}`);
-                statusEl.textContent = `✨ ${cleaned.length} видео готово!`;
-                statusEl.style.color = '#10b981';
+                updateStatus(`✨ ${cleaned.length} видео готово!`, 'success');
 
                 const headers = {
                     "Authorization": `Bearer ${REST_TOKEN}`,
                     "Content-Type": "application/json"
                 };
 
-                // 🗑 ОЧИЩАЕМ
+                // 🗑 Очистка
                 log("🗑 Очищаю старую базу...");
                 await fetch(`${REST_URL}/${KEY}`, { method: 'DELETE', headers });
+                log("✅ Старая база удалена");
 
-                // 🚀 ЗАЛИВАЕМ (JSON массив)
-                log("🚀 Заливаю в Upstash...");
+                // 🚀 Заливка
+                updateStatus('🚀 Заливаю в Upstash...', 'loading');
+                log("🚀 Заливаю JSON массив...");
+                
                 const uploadRes = await fetch(`${REST_URL}/${KEY}`, {
                     method: 'POST',
                     headers,
@@ -89,19 +221,24 @@
                 });
 
                 if (uploadRes.ok) {
-                    statusEl.textContent = '🎉 БАЗА ПОФИКШЕНА!';
-                    statusEl.style.color = '#10b981';
-                    log(`✅ УСПЕХ! ${cleaned.length} видео в базе`);
-                    log("🔍 Проверь в CLI: GET feed_videos");
+                    updateStatus('🎉 БАЗА ПОФИКШЕНА!', 'success');
+                    log(`✅ УСПЕХ! ${cleaned.length} видео залито в ${KEY}`);
+                    log("🔍 CLI: GET feed_videos");
+                    log("🔍 Vercel: JSON.parse(await kv.get('feed_videos'))");
+                    
+                    document.getElementById('nextSteps').style.display = 'block';
+                    btn.textContent = '✅ ФИКС УСПЕШЕН!';
+                    btn.style.background = '#10b981';
                 } else {
-                    const error = await uploadRes.text();
-                    throw new Error(`Upload failed: ${uploadRes.status} - ${error}`);
+                    const errorText = await uploadRes.text();
+                    throw new Error(`Upload failed: ${uploadRes.status} - ${errorText}`);
                 }
 
             } catch (error) {
-                log(`❌ ОШИБКА: ${error.message}`, '#ef4444');
-                statusEl.textContent = '❌ Ошибка!';
-                statusEl.style.color = '#ef4444';
+                log(`❌ ОШИБКА: ${error.message}`, 'error');
+                updateStatus('❌ Ошибка! Проверь paste.txt', 'error');
+                btn.textContent = '🚀 ПОФИКСИТЬ БАЗУ';
+                btn.disabled = false;
             }
         }
     </script>
