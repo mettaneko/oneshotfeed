@@ -9,8 +9,8 @@ export default async function handler(req, res) {
 
 		// === КОНФИГУРАЦИЯ ===
 		const adminIds = (process.env.ADMIN_ID || '').split(',');
-		const isAdmin = (id) => adminIds.includes(String(id)); // Убедимся, что сравниваем строки
-		const webAppUrl = 'https://feed.mettaneko.ru'; // URL твоего веб-приложения
+		const isAdmin = (id) => adminIds.includes(String(id));
+		const webAppUrl = 'https://feed.mettaneko.ru';
 
 		const DB_URL = process.env.KV_REST_API_URL;
 		const DB_TOKEN = process.env.KV_REST_API_TOKEN;
@@ -57,7 +57,6 @@ export default async function handler(req, res) {
 		const text = msg.text || msg.caption || '';
 		const user = msg.from || { id: chatId, username: 'Channel' };
 
-		// Сохраняем юзера в базу
 		if (DB_URL && DB_TOKEN && chatId > 0) {
 			try {
 				await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -68,7 +67,6 @@ export default async function handler(req, res) {
             }
 		}
 
-		// === КОМАНДА /START ===
 		if (text === '/start') {
 			await sendMessage(token, chatId,
 				"👋 Привет! Добро пожаловать в Niko Feed.\nСмотри, предлагай видео или просто читай обновления!", {
@@ -80,13 +78,11 @@ export default async function handler(req, res) {
 			);
 		}
 
-		// === АДМИНСКИЕ КОМАНДЫ ===
 		else if (isAdmin(chatId)) {
             
-            // --- /MAINTENANCE (Вкл/выкл режима тех. работ) ---
             const maintenanceMatch = /\/maintenance (on|off)/.exec(text);
             if (maintenanceMatch) {
-                const status = maintenanceMatch[1]; // 'on' или 'off'
+                const status = maintenanceMatch[1];
     
                 try {
                     const response = await fetch(`${webAppUrl}/api/maintenance`, {
@@ -95,22 +91,21 @@ export default async function handler(req, res) {
                         body: JSON.stringify({ adminId: user.id, status: status })
                     });
             
+                    // --- ИСПРАВЛЕНО: Детальная обработка ошибки ---
                     if (response.ok) {
                         const newStatusText = status === 'on' ? '🟢 ВКЛЮЧЕН' : '🔴 ВЫКЛЮЧЕН';
                         await sendMessage(token, chatId, `✅ Режим технических работ успешно ${newStatusText}.`);
                     } else {
-                        // Попытаемся получить текст ошибки от API для отладки
-                        const errorData = await response.json();
-                        console.error('API Error:', errorData);
-                        throw new Error(errorData.error || 'API request failed');
+                        const errorData = await response.json().catch(() => ({ error: "Non-JSON error response" }));
+                        throw new Error(`API Error (HTTP ${response.status}): ${errorData.error || 'Unknown error'}`);
                     }
                 } catch (error) {
                     console.error('Failed to set maintenance mode:', error);
-                    await sendMessage(token, chatId, '❌ Произошла ошибка при изменении статуса.');
+                    // Отправляем админу точную причину
+                    await sendMessage(token, chatId, `❌ Ошибка: ${error.message}`);
                 }
             }
 
-			// --- /ADD (Добавление видео) ---
 			else if (text.startsWith('/add')) {
 				const parts = text.split(/\s+/);
 				let tikTokUrl = parts.find(p => p.includes('http'));
@@ -169,7 +164,6 @@ export default async function handler(req, res) {
 				}
 			}
 
-			// --- /CLEAR ---
 			else if (text === '/clear') {
 				await fetch(`${DB_URL}/del/feed_videos`, {
 					headers: { Authorization: `Bearer ${DB_TOKEN}` }
@@ -177,7 +171,6 @@ export default async function handler(req, res) {
 				await sendMessage(token, chatId, "🗑 База очищена!", null, 'HTML');
 			}
 
-			// --- /BROADCAST ---
 			else if (text.startsWith('/broadcast')) {
 				const bText = text.replace('/broadcast', '').trim();
 				if (!bText) return sendMessage(token, chatId, "Текст?");
@@ -200,7 +193,6 @@ export default async function handler(req, res) {
 			}
 		}
 
-		// === НЕ АДМИНЫ (Предложка) ===
 		else if (!isAdmin(chatId) && chatId > 0) {
 			if (text.startsWith('/add') || text.startsWith('/clear')) {
 				return res.status(200).json({ ok: true });
