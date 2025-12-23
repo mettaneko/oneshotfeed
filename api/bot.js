@@ -9,7 +9,7 @@ export default async function handler(req, res) {
 
 		// === КОНФИГУРАЦИЯ ===
 		const adminIds = (process.env.ADMIN_ID || '').split(',');
-		const isAdmin = (id) => adminIds.includes(id.toString());
+		const isAdmin = (id) => adminIds.includes(String(id)); // Убедимся, что сравниваем строки
 		const webAppUrl = 'https://feed.mettaneko.ru'; // URL твоего веб-приложения
 
 		const DB_URL = process.env.KV_REST_API_URL;
@@ -99,7 +99,10 @@ export default async function handler(req, res) {
                         const newStatusText = status === 'on' ? '🟢 ВКЛЮЧЕН' : '🔴 ВЫКЛЮЧЕН';
                         await sendMessage(token, chatId, `✅ Режим технических работ успешно ${newStatusText}.`);
                     } else {
-                        throw new Error('API request failed');
+                        // Попытаемся получить текст ошибки от API для отладки
+                        const errorData = await response.json();
+                        console.error('API Error:', errorData);
+                        throw new Error(errorData.error || 'API request failed');
                     }
                 } catch (error) {
                     console.error('Failed to set maintenance mode:', error);

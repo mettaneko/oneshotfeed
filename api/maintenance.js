@@ -21,16 +21,19 @@ export default async function handler(req, res) {
     // POST-запрос: Изменяет статус (только для админа)
     if (req.method === 'POST') {
         const { adminId, status } = req.body;
-        const
-         expectedAdminId = process.env.ADMIN_ID;
+        
+        // --- ИСПРАВЛЕНО: Обработка списка админов ---
+        const adminIdList = (process.env.ADMIN_ID || '').split(',');
 
-        if (!expectedAdminId) {
-            return res.status(500).json({ error: 'Admin ID not configured' });
+        if (!adminIdList.length || !adminIdList[0]) {
+            return res.status(500).json({ error: 'Admin ID not configured in environment variables' });
         }
 
-        if (String(adminId) !== expectedAdminId) {
+        // Проверяем, есть ли ID отправителя в списке разрешенных админов
+        if (!adminIdList.includes(String(adminId))) {
             return res.status(403).json({ error: 'Forbidden' });
         }
+        // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
         if (status !== 'on' && status !== 'off') {
             return res.status(400).json({ error: 'Invalid status. Use "on" or "off".' });
