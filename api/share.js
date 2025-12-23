@@ -1,51 +1,107 @@
+import crypto from 'crypto';
+
+// Функция для валидации данных, полученных от Telegram Web App
+function validateTelegramAuth(initData, botToken) {
+    if (!initData) {
+        return null;
+    }
+    try {
+        const params = new URLSearchParams(initData);
+        const hash = params.get('hash');
+        params.delete('hash');
+        params.sort(); // Ключи должны быть отсортированы
+
+        let dataCheckString = '';
+        for (const [key, value] of params.entries()) {
+            dataCheckString += `${key}=${value}\n`;
+        }
+        dataCheckString = dataCheckString.slice(0, -1);
+
+        const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+        const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+        
+        // Если хэши совпадают, данные подлинные
+        if (computedHash === hash) {
+            const user = JSON.parse(params.get('user'));
+            return user;
+        }
+    } catch (e) {
+        console.error('Auth validation error:', e);
+    }
+    return null;
+}
+
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // 1. Настройка CORS для Vercel
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Разрешаем запросы с любого домена
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
-
-  const { videoUrl, author, desc, user } = req.body;
-  const token = process.env.BOT_TOKEN;
-
-  if (!videoUrl || !user?.id) return res.status(400).json({ error: 'Data missing' });
-
-  try {
-    // ТВОЯ ФИШКА: Формирование подписи
-    const caption = `📥 Скачано из @OneShotFeedBot!\n👤 Автор: ${author}\n` + 
-                    (desc ? `📝 Платформа Автора: ${desc}` : '');
-
-    // ТВОЯ ФИШКА: Попытка отправить именно как видео файл
-    const telegramRes = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: user.id,
-        video: videoUrl,
-        caption: caption,
-        parse_mode: 'HTML',
-        supports_streaming: true
-      })
-    });
-
-    const telegramData = await telegramRes.json();
-
-    // ТВОЯ ФИШКА: Фоллбэк, если видео не пролезает
-    if (!telegramData.ok) {
-      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: user.id,
-          text: `⚠️ Не удалось загрузить видео напрямую.\n\n🔗 Ссылка: ${videoUrl}\n👤 Автор: ${author}`,
-          parse_mode: 'HTML'
-        })
-      });
+    // Ответ на предварительный OPTIONS-запрос от браузера
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    // Принимаем только POST-запросы
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    res.status(200).json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Share error' });
-  }
+    // 2. Валидация пользователя
+    const initData = req.headers['x-telegram-auth'];
+    const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
+
+    if (!user) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid Telegram data' });
+    }
+
+    // 3. Логика отправки видео
+    const { videoUrl, author, desc } = req.body;
+    const botToken = process.env.BOT_TOKEN;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'videoUrl is required' });
+    }
+
+    // Формируем подпись к видео
+    const caption = 
+      `📥 Скачано из <b>@OneShotFeedBot</b>\n` +
+      `👤 Автор: <b>@${author || 'unknown'}</b>\n` + 
+      (desc ? `📝 ${desc}` : '');
+
+    // Формируем кнопки под видео
+    const keyboard = {
+        inline_keyboard: [[
+            { text: "🔗 Ссылка на файл", url: videoUrl },
+            { text: "👤 Профиль автора", url: `https://www.tiktok.com/@${author}` }
+        ]]
+    };
+
+    try {
+        // Отправляем видео пользователю, который нажал кнопку
+        const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendVideo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: user.id, // ID пользователя, который сделал запрос
+                video: videoUrl,
+                caption: caption,
+                parse_mode: 'HTML',
+                reply_markup: keyboard
+            })
+        });
+
+        const telegramData = await telegramRes.json();
+
+        if (!telegramData.ok) {
+            // Если у Telegram не получилось отправить видео (например, файл слишком большой)
+            console.error('Telegram API Error:', telegramData.description);
+            return res.status(500).json({ error: 'Failed to send video via Telegram' });
+        }
+
+        res.status(200).json({ ok: true, message: 'Video sent successfully' });
+
+    } catch (e) {
+        console.error('Internal Server Error:', e);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 }

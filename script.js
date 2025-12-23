@@ -1,193 +1,248 @@
-// === KONFIG ===
-const API_BASE = ''; 
-const BATCH_SIZE = 5; 
-const LOAD_TIMEOUT = 5000; 
+// === ГЛОБАЛЬНЫЕ НАСТРОЙКИ ===
+const API_BASE = ''; // Пустая строка для Vercel. Все пути будут относительными.
 
-// === 0. TELEGRAM WEB APP ===
-const tg = window.Telegram?.WebApp || null;
-const isVersionAtLeast = (ver) => tg && tg.isVersionAtLeast(ver);
-if (tg) { tg.expand(); tg.ready(); }
+let currentPage = 1;
+let currentFeed = 'foryou'; // 'foryou' или 'following'
+let isLoading = false;
+let noMoreVideos = false;
+const feedContainer = document.querySelector('.tiktok-feed');
+const observerOptions = { root: null, rootMargin: '0px', threshold: 0.6 };
 
-// === 1. GLOBAL VARS ===
-let subscribedAuthors = [];
-let hasInteracted = false;
-let globalMuted = localStorage.getItem('niko_muted') === 'true';
+// Данные авторизации из Telegram (будут пустыми, если открыто не в Telegram)
+const tgInitData = window.Telegram?.WebApp?.initData || '';
 
-let allVideosCache = []; 
-let queue = [];          
-let currentTab = 'foryou';
-
-const showNotify = (msg) => (isVersionAtLeast('6.2') ? tg.showAlert(msg) : alert(msg));
-
-// === 2. FETCH & QUEUE ===
-async function fetchVideos(isUpdate = false) {
+// === 0. ПРОВЕРКА СТАТУСА (ТЕХ. РАБОТЫ) ===
+async function checkMaintenance() {
     try {
-        const res = await fetch(`${API_BASE}/api/get_feed`);
+        const res = await fetch('/api/status'); // Относительный путь
         const data = await res.json();
-        if (data.videos) {
-            const currentIds = new Set(allVideosCache.map(v => v.id));
-            const fresh = data.videos.filter(v => v && !currentIds.has(v.id));
-            if (fresh.length > 0) {
-                allVideosCache = [...fresh, ...allVideosCache];
-                if (!isUpdate) prepareQueue(currentTab);
-            }
+        if (data.maintenance) {
+            window.location.href = 'maintenance.html';
+            return true; 
         }
-    } catch (e) { console.error("Load error:", e); }
+    } catch (e) {
+        console.error('Ошибка проверки статуса:', e);
+    }
+    return false;
 }
 
-function prepareQueue(type) {
-    let source = (type === 'foryou') 
-        ? [...allVideosCache] 
-        : allVideosCache.filter(v => subscribedAuthors.includes(v.author));
-    queue = source.sort(() => Math.random() - 0.5);
-    document.getElementById('feed').innerHTML = '';
-    addVideosToDom(BATCH_SIZE);
-}
+// === 1. ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ===
+document.addEventListener('DOMContentLoaded', async () => {
+    const isClosed = await checkMaintenance();
+    if (isClosed) return;
 
-function addVideosToDom(count) {
-    const chunk = queue.splice(0, count);
-    chunk.forEach(v => {
-        const slide = createSlide(v);
-        document.getElementById('feed').appendChild(slide);
-        observer.observe(slide);
-    });
-}
-
-// === 3. PLAYER LOGIC ===
-function createSlide(data) {
-    const slide = document.createElement('div');
-    slide.className = 'video-slide';
-    slide.dataset.videoData = JSON.stringify(data);
+    await loadFeed(true); // Загружаем первую страницу
     
-    slide.innerHTML = `
-        <video class="video-blur-bg" loop muted playsinline src="${data.videoUrl}"></video>
-        <div class="video-wrapper">
-            <video class="video-player" loop playsinline poster="${data.cover || ''}" src="${data.videoUrl}"></video>
-            <div class="video-spinner"><i class="fas fa-spinner fa-spin"></i></div>
-            <div class="video-progress-container"><div class="video-progress-fill"></div></div>
-        </div>`;
+    feedContainer.addEventListener('scroll', handleScroll);
+    document.getElementById('audio-unlock-overlay')?.addEventListener('click', unlockAudio);
+    initTabs();
+});
+
+// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) ===
+async function loadFeed(isNewFeed = false) {
+    if (isLoading || (noMoreVideos && !isNewFeed)) return;
+    isLoading = true;
+
+    if (isNewFeed) {
+        feedContainer.innerHTML = '';
+        currentPage = 1;
+        noMoreVideos = false;
+    }
+
+    try {
+        console.log(`📡 Загружаю '${currentFeed}', страница ${currentPage}...`);
         
-    const vid = slide.querySelector('.video-player');
-    const bg = slide.querySelector('.video-blur-bg');
-    const fill = slide.querySelector('.video-progress-fill');
-    const progressCont = slide.querySelector('.video-progress-container');
-    const spinner = slide.querySelector('.video-spinner');
+        const url = currentFeed === 'foryou'
+            ? `/api/get_feed?page=${currentPage}`
+            : `/api/get_subs?page=${currentPage}`;
+        
+        const res = await fetch(url, {
+            headers: { 'X-Telegram-Auth': tgInitData }
+        });
 
-    let loadTimer;
+        if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
+        
+        const newVideos = await res.json();
 
-    const toggleErrorUI = (isError) => {
-        if (isError) {
-            progressCont.classList.add('error-state');
-            spinner.style.display = 'block';
-        } else {
-            progressCont.classList.remove('error-state');
-            spinner.style.display = 'none';
+        if (!newVideos || newVideos.length === 0) {
+            noMoreVideos = true;
+            if (currentPage === 1) showEmptyMessage(currentFeed);
+            return;
         }
-    };
 
-    vid.addEventListener('waiting', () => {
-        if (!slide.classList.contains('active-slide')) return;
-        loadTimer = setTimeout(() => toggleErrorUI(true), LOAD_TIMEOUT);
-    });
+        renderVideos(newVideos);
+        currentPage++;
 
-    vid.addEventListener('playing', () => {
-        clearTimeout(loadTimer);
-        toggleErrorUI(false);
-    });
-
-    vid.addEventListener('timeupdate', () => { 
-        if(vid.duration && slide.classList.contains('active-slide')) {
-            fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`;
-        }
-    });
-
-    vid.addEventListener('error', () => {
-        if (slide.classList.contains('active-slide')) {
-            vid.load(); vid.play();
-        }
-    });
-
-    slide.addEventListener('click', () => {
-        if (vid.paused) { vid.play(); bg.play(); } 
-        else { vid.pause(); bg.pause(); }
-    });
-    
-    return slide;
+    } catch (e) {
+        console.error("Ошибка загрузки:", e);
+        if (currentPage === 1) showErrorMessage();
+    } finally {
+        isLoading = false;
+    }
 }
+
+// === 3. РЕНДЕРИНГ ВИДЕО ===
+function renderVideos(videos) {
+    videos.forEach(video => {
+        if (!video.videoUrl) return;
+
+        const slide = document.createElement('div');
+        slide.className = 'video-slide';
+        
+        // Экранируем кавычки, чтобы не сломать onclick
+        const safeDesc = video.desc ? video.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
+        const safeAuthor = video.author ? video.author.replace(/'/g, "\\'") : 'unknown';
+
+        slide.innerHTML = `
+            <div class="video-blur-bg" style="background-image: url('${video.cover || ''}')"></div>
+            <div class="video-wrapper">
+                <video class="video-player" src="${video.videoUrl}" loop playsinline webkit-playsinline poster="${video.cover || ''}" preload="metadata"></video>
+                <div class="video-progress-container"><div class="video-progress-fill"></div></div>
+                <div class="pause-overlay" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; z-index:5; justify-content:center; align-items:center;">
+                   <i class="fas fa-play" style="font-size: 3rem; color: rgba(255,255,255,0.5);"></i>
+                </div>
+            </div>
+            <div class="liquid-controls-container">
+                <div class="video-info-capsule">
+                    <div class="author-row">
+                        <h3 class="author-name">@${safeAuthor}</h3>
+                        <button class="subscribe-btn" onclick="toggleSubscribe(this, '${safeAuthor}')">
+                            <i class="fas fa-plus"></i><i class="fas fa-check"></i>
+                        </button>
+                    </div>
+                    ${video.desc ? `<p class="video-desc">${video.desc}</p>` : ''}
+                </div>
+                <div class="glass-deck">
+                     <button class="control-btn btn-share" onclick="shareVideo('${video.videoUrl}', '${safeAuthor}', '${safeDesc}')"><i class="fas fa-share"></i></button>
+                     <button class="control-btn" onclick="window.open('https://t.me/OneShotFeedBot', '_blank')"><i class="fab fa-telegram-plane"></i></button>
+                     <button class="control-btn" onclick="toggleMuteAll(this)"><i class="fas fa-volume-up"></i></button>
+                </div>
+            </div>
+        `;
+
+        const videoEl = slide.querySelector('video');
+        const wrapper = slide.querySelector('.video-wrapper');
+        const pauseOverlay = slide.querySelector('.pause-overlay');
+
+        wrapper.addEventListener('click', () => {
+            if (videoEl.paused) { videoEl.play(); pauseOverlay.style.display = 'none'; } 
+            else { videoEl.pause(); pauseOverlay.style.display = 'flex'; }
+        });
+
+        setupProgressBar(slide, videoEl);
+        observer.observe(slide);
+        feedContainer.appendChild(slide);
+    });
+}
+
+// === 4. ЛОГИКА ИНТЕРФЕЙСА (Глобальные функции для onclick) ===
+
+window.toggleSubscribe = async function(btn, author) {
+    if (!tgInitData) return alert('Действие доступно только в Telegram!');
+    btn.classList.toggle('subscribed');
+    try {
+        await fetch('/api/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Telegram-Auth': tgInitData },
+            body: JSON.stringify({ author, subscribe: btn.classList.contains('subscribed') })
+        });
+    } catch (e) { console.error('Ошибка подписки:', e); }
+};
+
+window.sendSuggestion = async function() {
+    if (!tgInitData) return alert('Действие доступно только в Telegram!');
+    const link = document.getElementById('suggestLink').value;
+    const comment = document.getElementById('suggestComment').value;
+    if (!link) return alert('Введите ссылку!');
+    
+    try {
+        const res = await fetch('/api/suggest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Telegram-Auth': tgInitData },
+            body: JSON.stringify({ link, comment })
+        });
+        alert(res.ok ? 'Отправлено, спасибо!' : 'Ошибка отправки.');
+        if (res.ok) window.toggleSuggestForm();
+    } catch (e) { console.error('Ошибка предложки:', e); }
+};
+
+window.toggleSuggestForm = function() {
+    const form = document.getElementById('suggestForm');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+};
+
+window.shareVideo = async function(url, author, desc) {
+    if (navigator.share) {
+        try { await navigator.share({ title: `Video by @${author}`, text: desc, url }); } catch (err) {}
+    } else {
+        navigator.clipboard.writeText(url).then(() => alert('Ссылка скопирована!'));
+    }
+};
+
+window.toggleMuteAll = function(btn) {
+    const isMuted = document.querySelector('video')?.muted;
+    document.querySelectorAll('video').forEach(v => v.muted = !isMuted);
+    const icon = btn.querySelector('i');
+    icon.className = isMuted ? 'fas fa-volume-up' : 'fas fa-volume-mute';
+};
+
+// === 5. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-        const slide = entry.target;
-        const vid = slide.querySelector('.video-player');
-        const bg = slide.querySelector('.video-blur-bg');
+        const video = entry.target.querySelector('video');
+        if (!video) return;
         if (entry.isIntersecting) {
-            document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
-            slide.classList.add('active-slide');
-            const data = JSON.parse(slide.dataset.videoData);
-            document.getElementById('ui-author').innerText = `@${data.author}`;
-            document.getElementById('ui-desc').innerText = data.desc || '';
-            vid.muted = globalMuted || !hasInteracted;
-            vid.play().then(() => bg.play()).catch(() => { vid.muted = true; vid.play(); });
-            if (!slide.nextElementSibling) addVideosToDom(BATCH_SIZE);
+            video.currentTime = 0;
+            video.play().catch(() => {});
         } else {
-            vid.pause(); bg.pause(); vid.muted = true;
+            video.pause();
         }
     });
-}, { threshold: 0.7 });
+}, observerOptions);
 
-// === 4. BUTTONS ===
-document.getElementById('ui-vol-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    globalMuted = !globalMuted;
-    localStorage.setItem('niko_muted', globalMuted);
-    document.querySelector('#ui-vol-btn i').className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
-    const activeVid = document.querySelector('.active-slide .video-player');
-    if (activeVid) { activeVid.muted = globalMuted; activeVid.volume = globalMuted ? 0 : 1; }
-});
+function setupProgressBar(slide, video) {
+    const fill = slide.querySelector('.video-progress-fill');
+    video.addEventListener('timeupdate', () => {
+        fill.style.height = `${(video.currentTime / video.duration) * 100}%`;
+    });
+}
 
-document.getElementById('sug-send').addEventListener('click', async () => {
-    const btn = document.getElementById('sug-send');
-    const url = document.getElementById('sug-url').value.trim();
-    if (!url) return showNotify('Вставь ссылку!');
-    btn.disabled = true;
-    try {
-        const res = await fetch(`${API_BASE}/api/suggest`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                url, author: document.getElementById('sug-author').value,
-                desc: document.getElementById('sug-desc').value,
-                user: tg?.initDataUnsafe?.user || { id: 0 }
-            })
+function handleScroll() {
+    if (feedContainer.scrollTop + feedContainer.clientHeight >= feedContainer.scrollHeight - 800) {
+        loadFeed();
+    }
+}
+
+function initTabs() {
+    const tabs = document.querySelectorAll('.nav-tab');
+    const indicator = document.querySelector('.nav-indicator');
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            if (tab.classList.contains('active')) return;
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            currentFeed = tab.dataset.tab;
+            loadFeed(true);
+
+            indicator.style.left = currentFeed === 'foryou' ? '4px' : 'calc(50% - 4px)';
         });
-        if (res.ok) { showNotify('Отправлено!'); document.getElementById('suggest-form').style.display = 'none'; }
-    } catch (e) { showNotify('Ошибка сети'); }
-    btn.disabled = false;
-});
+    });
+}
 
-document.getElementById('ui-share-btn').addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const active = document.querySelector('.active-slide');
-    if (!active) return;
-    const v = JSON.parse(active.dataset.videoData);
-    try {
-        await fetch(`${API_BASE}/api/share`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ ...v, user: tg?.initDataUnsafe?.user })
-        });
-        showNotify('Видео отправлено в бот!');
-    } catch(e) { showNotify('Ошибка'); }
-});
+function unlockAudio() {
+    document.getElementById('audio-unlock-overlay')?.classList.add('hidden');
+    const v = document.querySelector('video');
+    if (v) { v.muted = false; v.play(); }
+}
 
-document.getElementById('audio-unlock-overlay').addEventListener('click', () => {
-    hasInteracted = true;
-    document.getElementById('audio-unlock-overlay').remove();
-    const v = document.querySelector('.active-slide .video-player');
-    if (v) { v.muted = globalMuted; v.play(); }
-});
+function showEmptyMessage(feedType) {
+    const text = feedType === 'foryou' ? 'В этой ленте пока нет видео.' : 'Вы еще ни на кого не подписаны.';
+    feedContainer.innerHTML = `<p style="color:white; text-align:center; margin-top:50vh; font-family: sans-serif;">${text}</p>`;
+}
 
-window.addEventListener('load', () => {
-    document.querySelector('#ui-vol-btn i').className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
-    fetchVideos();
-});
+function showErrorMessage() {
+    feedContainer.innerHTML = `<p style="color:white; text-align:center; margin-top:50vh; font-family: sans-serif;">❌ Ошибка загрузки ленты. Попробуйте позже.</p>`;
+}

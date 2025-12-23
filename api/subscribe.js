@@ -1,42 +1,67 @@
-import { kv } from '@vercel/kv';
+import crypto from 'crypto';
+
+// Функция для валидации данных от Telegram
+function validateTelegramAuth(initData, botToken) {
+    if (!initData) return null;
+    try {
+        const params = new URLSearchParams(initData);
+        const hash = params.get('hash');
+        params.delete('hash');
+        params.sort();
+
+        let dataCheckString = '';
+        for (const [key, value] of params.entries()) {
+            dataCheckString += `${key}=${value}\n`;
+        }
+        dataCheckString = dataCheckString.slice(0, -1);
+
+        const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+        const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
+        
+        if (computedHash === hash) {
+            const user = JSON.parse(params.get('user'));
+            return user;
+        }
+    } catch (e) {
+        console.error('Auth validation error:', e);
+    }
+    return null;
+}
 
 export default async function handler(req, res) {
-  // Разрешаем CORS
-  res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, user-id');
+    // Разрешаем CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).end();
+    
+    // 1. ВАЛИДАЦИЯ ЮЗЕРА
+    const initData = req.headers['x-telegram-auth'];
+    const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  // Получаем ID пользователя и автора
-  const userId = req.headers['user-id'] || req.query.userId;
-  const { author } = req.body || {};
-
-  if (!userId || !author) {
-    return res.status(400).json({ error: 'Нужен userId и author' });
-  }
-
-  const key = `user:${userId}:subs`;
-
-  try {
-    // Проверяем, подписан ли уже
-    const isSubscribed = await kv.sismember(key, author);
-
-    if (isSubscribed) {
-      // Если подписан — отписываемся
-      await kv.srem(key, author);
-      return res.status(200).json({ status: 'unsubscribed', author });
-    } else {
-      // Если не подписан — подписываемся
-      await kv.sadd(key, author);
-      return res.status(200).json({ status: 'subscribed', author });
+    if (!user) {
+        return res.status(401).json({ error: 'Unauthorized' });
     }
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ error: 'Ошибка базы данных' });
-  }
+
+    // 2. ЛОГИКА ПОДПИСКИ
+    const { author, subscribe } = req.body;
+    if (!author) return res.status(400).json({ error: 'Author is missing' });
+
+    const DB_URL = process.env.KV_REST_API_URL;
+    const DB_TOKEN = process.env.KV_REST_API_TOKEN;
+
+    try {
+        const command = subscribe ? 'SADD' : 'SREM';
+        const dbKey = `user_subs:${user.id}`; // Ключ: user_subs:123456
+
+        await fetch(`${DB_URL}/${command}/${dbKey}/${encodeURIComponent(author)}`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        });
+
+        res.status(200).json({ ok: true });
+    } catch (e) {
+        console.error('Subscribe DB Error:', e);
+        res.status(500).json({ error: 'DB Error' });
+    }
 }
