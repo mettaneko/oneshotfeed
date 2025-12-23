@@ -1,53 +1,52 @@
 /* ==================================
-    ОСНОВА
+    ОСНОВА (СТИЛЬ ONESHOT)
    ================================== */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 :root {
     --text-color: rgb(226, 226, 226);
     --background-color: rgb(20, 20, 25);
-    --accent-color: #fddb6d;
-    --glass-bg: rgba(26, 26, 33, 0.7); /* Сделал чуть более прозрачным */
-    --font-sans: 'Manrope', sans-serif;
+    --accent-color: #fcfc30; /* Яркий желтый из OneShot */
+    --glass-bg: rgba(18, 18, 22, 0.75); /* Более темное и плотное стекло */
+    --font-pixel: 'VT323', monospace;
 }
 
 body {
     background-color: var(--background-color);
     color: var(--text-color);
-    font-family: var(--font-sans);
+    font-family: var(--font-pixel); /* Применяем пиксельный шрифт везде */
     margin: 0;
     overflow: hidden;
+    text-transform: uppercase; /* Все тексты в верхнем регистре для стиля */
 }
 
 /* ==================================
-    ВЕРХНЯЯ НАВИГАЦИЯ (Центрирована)
+    ВЕРХНЯЯ НАВИГАЦИЯ (Компактная)
    ================================== */
 .top-nav {
     position: fixed;
     top: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 100%;
-    max-width: 250px; /* Ограничение ширины */
+    width: auto; /* Ширина по контенту */
     display: flex;
     justify-content: center;
-    gap: 5px;
-    padding: 5px;
+    gap: 0;
+    padding: 4px;
     margin-top: calc(15px + env(safe-area-inset-top));
     background-color: var(--glass-bg);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(14px);
-    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
     z-index: 20;
-    font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 1.1rem; /* Чуть крупнее для пиксельного шрифта */
 }
 
 .nav-tab {
-    padding: 6px 16px;
+    padding: 4px 14px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.6);
-    border-radius: 15px;
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: 12px;
     transition: all 0.2s;
 }
 
@@ -59,25 +58,22 @@ body {
 /* ==================================
     ЛЕНТА
    ================================== */
-#feed-container {
+#feed-container, .video-card {
     height: 100vh;
     height: 100dvh;
+    width: 100%;
+}
+#feed-container {
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
-    scroll-behavior: smooth;
     scrollbar-width: none;
 }
 #feed-container::-webkit-scrollbar { display: none; }
-
 .video-card {
     position: relative;
-    width: 100%;
-    height: 100vh;
-    height: 100dvh;
     scroll-snap-align: start;
     background: #000;
 }
-
 video {
     width: 100%;
     height: 100%;
@@ -85,17 +81,17 @@ video {
 }
 
 /* ==================================
-    UI (КОМПАКТНЫЙ И ЦЕНТРИРОВАННЫЙ)
+    UI (МИНИМАЛИСТИЧНЫЙ ДИЗАЙН)
    ================================== */
 .video-ui {
     position: absolute;
     bottom: calc(15px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 20px); /* Отступы по бокам */
-    max-width: 420px; /* ГЛАВНОЕ: Ограничиваем ширину для ПК */
+    width: auto; /* Ширина по контенту */
     display: flex;
     flex-direction: column;
+    align-items: center; /* Центрируем панели */
     gap: 8px;
     z-index: 10;
 }
@@ -103,58 +99,54 @@ video {
 .glass-panel {
     background-color: var(--glass-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(14px);
-    border-radius: 18px; /* Чуть меньше */
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-    padding: 10px 15px; /* Уменьшил паддинги */
+    backdrop-filter: blur(12px);
+    border-radius: 14px; /* Более скругленные */
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    padding: 8px 15px; /* Уменьшаем высоту */
+    width: fit-content; /* Ширина по содержимому */
 }
 
-/* Панель с инфо (уменьшена) */
+/* Панель с автором (центр, меньше) */
 .video-info-panel {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 15px;
+}
+.author-info {
+    text-align: center; /* Текст по центру */
 }
 .author-info .author {
-    font-weight: 600; /* Чуть тоньше */
-    font-size: 0.9rem; /* Меньше */
+    font-size: 1.1rem;
+    letter-spacing: 1px;
 }
 .author-info .desc {
-    font-size: 0.75rem; /* Меньше */
-    font-weight: 500;
+    font-size: 0.8rem;
     opacity: 0.6;
+    margin-top: -4px; /* Приближаем к автору */
 }
-
 .subscribe-btn {
-    font-size: 1.2rem; /* Меньше */
+    font-size: 1.1rem;
     color: rgba(255,255,255,0.7);
     cursor: pointer;
-    padding: 5px;
 }
 
-/* Панель с кнопками (уменьшена) */
+/* Панель с кнопками (минимализм) */
 .actions-panel {
     display: flex;
-    justify-content: space-around;
+    justify-content: center;
     align-items: center;
+    gap: 25px; /* Расстояние между кнопками */
 }
 .action-btn {
     color: #fff;
     cursor: pointer;
-    font-size: 1.2rem; /* Меньше */
-    flex-grow: 1;
-    text-align: center;
-    padding: 5px;
+    font-size: 1.2rem;
     transition: transform 0.2s;
 }
 .action-btn:active {
     transform: scale(0.9);
 }
-
-.action-divider {
-    /* Убрали, чтобы не занимать место */
-    display: none;
-}
+.action-divider { display: none; }
 
 /* ==================================
     СЛУЖЕБНЫЕ СТИЛИ
@@ -165,9 +157,9 @@ video {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 1.2rem;
-    font-weight: 600;
+    font-size: 1.5rem;
     color: var(--accent-color);
+    text-transform: uppercase;
 }
 .loading-state.small { height: 80px; font-size: 1rem; }
 .blink { animation: blink 1.2s infinite; }
