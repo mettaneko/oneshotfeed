@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="default">
+<html lang="ru" data-theme="default">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,8 +21,8 @@
         </div>
     </div>
 
-    <!-- НАВИГАЦИЯ -->
-    <div class="feed-navigation">
+    <!-- НАВИГАЦИЯ (ИЗМЕНЕНО: добавлен id) -->
+    <div class="feed-navigation" id="top-nav-bar">
         <div class="nav-indicator" id="nav-indicator"></div>
         <button class="nav-tab active" id="tab-foryou">Для вас</button>
         <button class="nav-tab" id="tab-following">Подписки</button>
@@ -44,7 +44,7 @@
             <p class="video-desc" id="ui-desc">...</p>
         </div>
 
-        <!-- ЫКнопки -->
+        <!-- Кнопки -->
         <div class="glass-deck">
             <div class="volume-control-wrapper">
                 <button class="control-btn btn-volume" id="ui-vol-btn"><i class="fas fa-volume-up"></i></button>
@@ -75,12 +75,12 @@
     </div>
 
     <!-- ПЛАШКА "ОТКЛЮЧИТЬ ПЕРЕНАПРАВЛЕНИЕ" (скрыта по умолчанию) -->
-<div id="disable-redirect-banner" class="disable-banner">
-    <div class="disable-content">
-        <i class="fas fa-info-circle"></i>
-        <span>Открывай через <b>@OneshotFeedBot</b></span>
+    <div id="disable-redirect-banner" class="disable-banner">
+        <div class="disable-content">
+            <i class="fas fa-info-circle"></i>
+            <span>Открывай через <b>@OneshotFeedBot</b></span>
+        </div>
     </div>
-</div>
 
     <script src="script.js"></script>
 

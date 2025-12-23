@@ -5,7 +5,6 @@
     const API_BASE = 'https://feed.mettaneko.ru';
     const SESSION_DURATION = 5 * 60 * 1000;
     const ACCESS_TOKEN_KEY = 'maintenance_access_pass';
-
     const checkStatusAndRedirect = async () => {
         try {
             const response = await fetch(`${API_BASE}/api/maintenance`);
@@ -29,8 +28,6 @@
     await checkStatusAndRedirect();
     setInterval(checkStatusAndRedirect, 10000);
 })();
-// --- КОНЕЦ БЛОКА УПРАВЛЕНИЯ ---
-
 
 // === KONFIG ===
 const API_BASE = 'https://feed.mettaneko.ru';
@@ -50,21 +47,21 @@ function showCustomNotification(message, options = {}) {
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-    
-    // ЗАМЕНИ НА ССЫЛКУ НА АВАТАРКУ БОТА
     const avatarUrl = '/assets/avatar.jpg';
 
-    toast.innerHTML = `
-        <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
-        <span class="toast-message">${message}</span>
-    `;
+    toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
+    
+    const navBar = document.getElementById('top-nav-bar');
+    if (navBar) navBar.classList.add('hidden-by-toast');
 
     document.body.appendChild(toast);
     setTimeout(() => toast.classList.add('show'), 10);
     if (showConfetti && !isError) triggerConfetti();
+
     setTimeout(() => {
         toast.classList.remove('show');
+        if (navBar) navBar.classList.remove('hidden-by-toast');
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3500);
 }
@@ -77,46 +74,41 @@ function triggerConfetti() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // --- ИЗМЕНЕНО: Больше конфетти и резче разлет ---
     const confettiCount = 150;
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
 
     for (let i = 0; i < confettiCount; i++) {
         confetti.push({
-            x: Math.random() * canvas.width, // Начинают с разных позиций по горизонтали
-            y: canvas.height,
-            r: Math.random() * 6 + 2,
+            x: Math.random() * canvas.width, y: canvas.height, r: Math.random() * 6 + 3,
             color: colors[Math.floor(Math.random() * colors.length)],
-            tilt: Math.floor(Math.random() * 10) - 10,
-            tiltAngle: 0,
-            tiltAngleIncrement: Math.random() * 0.08 + 0.06,
-            angle: Math.random() * Math.PI - (Math.PI / 4), // Угол разлета вверх
-            speed: Math.random() * 8 + 6 // Увеличена начальная скорость
+            tilt: Math.floor(Math.random() * 20) - 10, tiltAngle: 0,
+            tiltAngleIncrement: Math.random() * 0.1 + 0.08,
+            angle: Math.random() * Math.PI - (Math.PI / 4),
+            speed: Math.random() * 12 + 8
         });
     }
 
     let frame = 0;
-    const gravity = 0.25; // Увеличили гравитацию для более резкого падения
+    const gravity = 0.4;
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         for (let i = 0; i < confetti.length; i++) {
             const c = confetti[i];
             ctx.beginPath();
-            ctx.lineWidth = c.r / 2;
+            ctx.lineWidth = c.r;
             ctx.strokeStyle = c.color;
             ctx.moveTo(c.x + c.tilt, c.y);
-            ctx.lineTo(c.x, c.y + c.tilt + c.r / 2);
+            ctx.lineTo(c.x, c.y + c.tilt + c.r);
             ctx.stroke();
-
             c.tiltAngle += c.tiltAngleIncrement;
             c.y -= c.speed;
-            c.x += Math.sin(c.angle) * c.speed / 2; // Более сильное горизонтальное смещение
+            c.x += Math.sin(c.angle) * c.speed / 2;
             c.speed -= gravity;
-            c.tilt = Math.sin(c.tiltAngle) * 15;
+            c.tilt = Math.sin(c.tiltAngle) * 20;
         }
-        if (frame < 120) {
+        if (frame < 120 && confetti.some(c => c.y < canvas.height && c.y > -20)) {
            requestAnimationFrame(draw);
            frame++;
         } else {
@@ -129,53 +121,51 @@ function triggerConfetti() {
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
+        /* Стили для кнопок навигации */
+        .feed-navigation { gap: 20px; }
+        .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
+
+        /* --- ИЗМЕНЕНО: Анимация навигации теперь 1-в-1 как у уведомления --- */
+        #top-nav-bar {
+            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+            z-index: 100; /* Убедимся, что навигация выше конфетти */
+        }
+        #top-nav-bar.hidden-by-toast {
+            transform: translateY(-150%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* --- ИЗМЕНЕНО: z-index для UI, чтобы он был НАД конфетти --- */
+        .liquid-controls-container {
+            z-index: 100;
+        }
+
+        /* Стили уведомлений */
         .custom-toast-notification {
-            position: fixed;
-            top: 15px;
-            left: 50%;
-            min-width: 280px; /* Минимальная ширина */
+            position: fixed; top: 15px; left: 50%; min-width: 320px;
             transform: translateX(-50%) translateY(-150%);
             background-color: rgba(30, 30, 35, 0.85);
-            backdrop-filter: blur(10px);
-            color: #fff;
-            /* --- ИЗМЕНЕНО: Уведомление шире, но ниже --- */
-            padding: 8px 25px 8px 15px; /* top/bottom: 8px, left/right: 25px/15px */
-            border-radius: 16px;
-            font-family: "Manrope", sans-serif;
-            font-size: 0.9rem;
-            z-index: 10000;
-            opacity: 0;
+            backdrop-filter: blur(10px); color: #fff;
+            padding: 8px 25px 8px 15px; border-radius: 16px;
+            font-family: "Manrope", sans-serif; font-size: 0.9rem;
+            z-index: 10000; opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            gap: 12px;
+            display: flex; align-items: center; gap: 12px;
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        .custom-toast-notification.show {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-        .custom-toast-notification.error {
-            background-color: rgba(217, 83, 79, 0.85);
-            border-color: rgba(255, 255, 255, 0.2);
-        }
-        .toast-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-        }
-        .toast-message {
-            font-weight: 500;
-        }
+        .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 255, 255, 0.2); }
+        .toast-avatar { width: 32px; height: 32px; border-radius: 8px; }
+        .toast-message { font-weight: 500; }
+        
+        /* --- ИЗМЕНЕНО: z-index для конфетти --- */
         .confetti-canvas {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            position: fixed; bottom: 0; left: 0;
+            width: 100%; height: 100%;
             pointer-events: none;
-            z-index: 9999;
+            z-index: 50; /* Выше видео, но НИЖЕ основного UI и навигации */
         }
     `;
     document.head.appendChild(style);
@@ -215,9 +205,7 @@ let audioCtx;
 const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
 const redirectBanner = document.getElementById('disable-redirect-banner');
 
-if (!isTelegram && redirectBanner) {
-    redirectBanner.classList.add('show');
-}
+if (!isTelegram && redirectBanner) redirectBanner.classList.add('show');
 if (redirectBanner) {
     const disableBtn = document.getElementById('disable-redirect-btn');
     if (disableBtn) {
@@ -483,7 +471,6 @@ if (uiShareBtn) {
         e.stopPropagation();
         const data = getActiveSlideData();
         if (!data) return;
-
         if (!tg?.initDataUnsafe?.user) {
             navigator.clipboard.writeText(data.videoUrl).then(() => {
                 showCustomNotification('Ссылка на видео скопирована!', { showConfetti: true });
@@ -492,17 +479,11 @@ if (uiShareBtn) {
             });
             return;
         }
-
         try {
             const res = await fetch(`${API_BASE}/api/share`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    videoUrl: data.videoUrl,
-                    author: data.author,
-                    desc: data.desc,
-                    user: tg.initDataUnsafe.user
-                })
+                body: JSON.stringify({ videoUrl: data.videoUrl, author: data.author, desc: data.desc, user: tg.initDataUnsafe.user })
             });
             if (res.ok) {
                 showCustomNotification('Видео отправлено в личные сообщения!', { showConfetti: true });

@@ -702,3 +702,14 @@ input[type=range].volume-range::-webkit-slider-thumb {
     transition: all 0.2s;
 }
 .disable-btn:hover { background: rgba(0,0,0,0.3); transform: scale(1.05); }
+
+/* Стили для навигации */
+.top-nav .tabs {
+    gap: 20px; /* Увеличим расстояние между кнопками */
+}
+
+.top-nav .tabs button {
+    padding: 10px 15px; /* Делаем кнопки шире */
+    height: auto;       /* Убираем фиксированную высоту */
+    white-space: nowrap; /* Гарантируем, что текст будет в одну строку */
+}
