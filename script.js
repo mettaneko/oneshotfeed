@@ -6,22 +6,19 @@ const ADMIN_CODE_KEY = 'admin_bypass_token';
 const SESSION_DURATION = 5 * 60 * 1000; 
 
 // === 0. TELEGRAM WEB APP ===
-const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+const tg = window.Telegram?.WebApp || null;
 const isTelegramUser = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
 
 if (!isTelegramUser) {
-    const redirectBanner = document.getElementById('disable-redirect-banner');
-    if (redirectBanner) redirectBanner.classList.add('show');
+    document.getElementById('disable-redirect-banner')?.classList.add('show');
 }
 if (tg) { tg.expand(); tg.ready(); }
-
-const AudioContext = window.AudioContext || window.webkitAudioContext;
-let audioCtx;
 
 // === 1. GLOBAL VARS ===
 let subscribedAuthors = [];
 let hasInteracted = false;
-let globalVolume = parseFloat(localStorage.getItem('niko_volume') || '1.0');
+let globalMuted = localStorage.getItem('niko_muted') === 'true'; // Сохраняем состояние звука
+let globalVolume = 1.0;
 
 let allVideosCache = []; 
 let queue = [];          
@@ -36,9 +33,7 @@ const indicator = document.getElementById('nav-indicator');
 const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
-const uiVolBtn = document.getElementById('ui-vol-btn');
-const uiVolCont = document.getElementById('ui-vol-cont');
-const uiVolRange = document.getElementById('ui-vol-range');
+const uiVolBtn = document.getElementById('ui-vol-btn'); // Кнопка звука
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
 const suggestForm = document.getElementById('suggest-form');
@@ -53,60 +48,42 @@ function isTokenValid() {
     if (!token) return false;
     try {
         const payload = JSON.parse(atob(token));
-        if (Date.now() - payload.ts < SESSION_DURATION) return true;
-    } catch (e) {}
-    localStorage.removeItem(ADMIN_CODE_KEY);
-    return false;
+        return (Date.now() - payload.ts < SESSION_DURATION);
+    } catch (e) { return false; }
 }
 
-// === 3. ЗАГРУЗКА ДАННЫХ ===
+// === 3. ЗАГРУЗКА ВИДЕО ===
 async function fetchVideos(isUpdate = false) {
     try {
         const res = await fetch(`${API_BASE}/api/get_feed`);
-        if (!res.ok) return;
         const data = await res.json();
 
-        // Проверка техработ
-        if (data.maintenance === true && !isTokenValid()) {
+        if (data.maintenance && !isTokenValid()) {
             if (!window.location.pathname.includes('maintenance.html')) {
                 window.location.href = 'maintenance.html';
             }
             return;
         }
 
-        // Обработка списка видео из Redis
-        let newVideos = data.videos || [];
+        if (data.videos) {
+            const currentIds = new Set(allVideosCache.map(v => v.id));
+            const fresh = data.videos.filter(v => v && !currentIds.has(v.id));
 
-        if (newVideos.length === 0) return;
-
-        // Обновляем кеш
-        const currentIds = new Set(allVideosCache.map(v => v.id));
-        const freshContent = newVideos.filter(v => v && !currentIds.has(v.id));
-
-        if (freshContent.length > 0) {
-            allVideosCache = [...freshContent, ...allVideosCache];
-            // Если это фоновое обновление - просто добавляем в начало, если нет - чистим и рендерим
-            if (!isUpdate) {
-                prepareQueue(currentTab);
+            if (fresh.length > 0) {
+                allVideosCache = [...fresh, ...allVideosCache];
+                if (!isUpdate) prepareQueue(currentTab);
             }
         }
-    } catch (e) {
-        console.error('Ошибка API:', e);
-    }
+    } catch (e) { console.error("Ошибка загрузки:", e); }
 }
 
-// === 4. ЛЕНТА И ОЧЕРЕДЬ ===
+// === 4. ОЧЕРЕДЬ И РЕНДЕР ===
 function prepareQueue(type) {
-    let source = [];
-    if (type === 'foryou') source = [...allVideosCache];
-    else source = allVideosCache.filter(v => subscribedAuthors.includes(v.author));
+    let source = (type === 'foryou') 
+        ? [...allVideosCache] 
+        : allVideosCache.filter(v => subscribedAuthors.includes(v.author));
     
-    if (source.length === 0 && type === 'following') {
-        feedContainer.innerHTML = '<div style="padding:20px;text-align:center;">Вы еще ни на кого не подписаны</div>';
-        return;
-    }
-
-    queue = shuffle(source);
+    queue = source.sort(() => Math.random() - 0.5);
     feedContainer.innerHTML = '';
     addVideosToDom(BATCH_SIZE);
 }
@@ -120,57 +97,35 @@ function addVideosToDom(count) {
     });
 }
 
-// === 5. СОЗДАНИЕ СЛАЙДА ===
 function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
     slide.dataset.jsonData = JSON.stringify(data);
     
-    const poster = data.cover ? `poster="${data.cover}"` : '';
-
     slide.innerHTML = `
         <video class="video-blur-bg" loop muted playsinline src="${data.videoUrl}"></video>
         <div class="video-wrapper">
-            <video class="video-player" ${poster} loop playsinline src="${data.videoUrl}"></video>
+            <video class="video-player" loop playsinline poster="${data.cover || ''}" src="${data.videoUrl}"></video>
             <div class="video-progress-container"><div class="video-progress-fill"></div></div>
-            <div class="video-status-msg" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:white; background:rgba(0,0,0,0.6); padding:10px 20px; border-radius:12px; z-index:5;">Восстанавливаем...</div>
         </div>`;
         
     const vid = slide.querySelector('.video-player');
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
-    const bar = slide.querySelector('.video-progress-container');
 
-    vid.dataset.userPaused = "false";
-
-    // Обработка клика (Пауза/Плей)
-    vid.parentElement.addEventListener('click', () => {
-        if (vid.paused) {
-            vid.dataset.userPaused = "false";
-            vid.play(); bg.play();
-        } else {
-            vid.dataset.userPaused = "true";
-            vid.pause(); bg.pause();
-        }
-    });
-
-    // Прогресс-бар
     vid.addEventListener('timeupdate', () => { 
         if(vid.duration) fill.style.height=`${(vid.currentTime/vid.duration)*100}%`;
     });
 
-    // Перемотка кликом по полоске
-    bar.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const rect = bar.getBoundingClientRect();
-        const pct = 1 - (e.clientY - rect.top) / rect.height;
-        vid.currentTime = pct * vid.duration;
+    slide.addEventListener('click', () => {
+        if (vid.paused) { vid.play(); bg.play(); } 
+        else { vid.pause(); bg.pause(); }
     });
     
     return slide;
 }
 
-// === 6. Intersection Observer (Автоплей) ===
+// === 5. АВТОПЛЕЙ И UI ===
 const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const slide = entry.target;
@@ -178,97 +133,151 @@ const observer = new IntersectionObserver((entries) => {
         const bg = slide.querySelector('.video-blur-bg');
         
         if (entry.isIntersecting) {
-            document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
-            
             const data = JSON.parse(slide.dataset.jsonData);
             updateGlobalUI(data);
 
             vid.currentTime = 0;
-            vid.volume = globalVolume;
-            vid.muted = !hasInteracted || (globalVolume === 0);
+            updateVolumeForVideo(vid);
             
             vid.play().then(() => bg.play()).catch(() => {
-                vid.muted = true;
-                vid.play();
+                vid.muted = true; vid.play();
             });
 
-            // Подгрузка при скролле
             if (!slide.nextElementSibling) addVideosToDom(BATCH_SIZE);
         } else {
-            vid.pause();
-            bg.pause();
+            vid.pause(); bg.pause();
+            slide.classList.remove('active-slide');
         }
     });
 }, { threshold: 0.6 });
 
-// === 7. UI & Взаимодействие ===
 function updateGlobalUI(data) {
-    uiAuthor.innerText = data.author || '@unknown';
+    uiAuthor.innerText = `@${data.author}`;
     uiDesc.innerText = data.desc || '';
     currentActiveAuthor = data.author;
-    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
+    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(data.author));
 }
 
-function unlockAudioContext() {
-    hasInteracted = true;
-    const overlay = document.getElementById('audio-unlock-overlay');
-    if (overlay) overlay.remove();
+function updateVolumeForVideo(vid) {
+    if (!hasInteracted || globalMuted) {
+        vid.muted = true;
+    } else {
+        vid.muted = false;
+        vid.volume = 1.0;
+    }
+}
+
+// === 6. ОБРАБОТЧИКИ КНОПОК ===
+
+// ЗВУК (ВКЛ/ВЫКЛ)
+uiVolBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    globalMuted = !globalMuted;
+    localStorage.setItem('niko_muted', globalMuted);
+    
+    const icon = uiVolBtn.querySelector('i');
+    icon.className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+
     const activeVid = document.querySelector('.active-slide .video-player');
-    if (activeVid) { activeVid.muted = false; activeVid.volume = globalVolume; }
-}
-
-function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
-
-// Обработчики событий
-document.getElementById('audio-unlock-overlay')?.addEventListener('click', unlockAudioContext);
-
-tabForYou.addEventListener('click', () => {
-    currentTab = 'foryou';
-    tabForYou.classList.add('active'); tabFollowing.classList.remove('active');
-    prepareQueue('foryou');
+    if (activeVid) updateVolumeForVideo(activeVid);
 });
 
-tabFollowing.addEventListener('click', () => {
-    currentTab = 'following';
-    tabFollowing.classList.add('active'); tabForYou.classList.remove('active');
-    prepareQueue('following');
+// ПРЕДЛОЖКА (ОТКРЫТЬ/ЗАКРЫТЬ)
+uiSuggestBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex';
 });
 
-uiVolRange.addEventListener('input', (e) => {
-    globalVolume = parseFloat(e.target.value);
-    localStorage.setItem('niko_volume', globalVolume);
-    const v = document.querySelector('.active-slide .video-player');
-    if (v) v.volume = globalVolume;
+// ПРЕДЛОЖКА (ОТПРАВИТЬ)
+sugBtn.addEventListener('click', async () => {
+    const url = sugUrl.value.trim();
+    if (!url) { tg?.showAlert('Вставь ссылку!'); return; }
+    
+    sugBtn.innerText = '...';
+    sugBtn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE}/api/suggest`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                url, 
+                author: sugAuthor.value, 
+                desc: sugDesc.value, 
+                user: tg?.initDataUnsafe?.user
+            })
+        });
+        if (res.ok) {
+            tg?.showPopup({ message: 'Видео отправлено!' });
+            suggestForm.style.display = 'none';
+            sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
+        } else {
+            tg?.showAlert('Ошибка (возможно, спам-фильтр)');
+        }
+    } catch (e) { tg?.showAlert('Ошибка сети'); }
+    sugBtn.innerText = 'Отправить';
+    sugBtn.disabled = false;
 });
 
-// Кнопка Share
-uiShareBtn.addEventListener('click', async () => {
+// SHARE
+uiShareBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
     const activeSlide = document.querySelector('.active-slide');
     if (!activeSlide) return;
     const v = JSON.parse(activeSlide.dataset.jsonData);
     
-    if (!tg?.initDataUnsafe?.user) {
-        navigator.clipboard.writeText(v.videoUrl);
-        alert('Ссылка скопирована!');
-        return;
-    }
-
     try {
         await fetch(`${API_BASE}/api/share`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ ...v, user: tg.initDataUnsafe.user })
+            body: JSON.stringify({ ...v, user: tg?.initDataUnsafe?.user })
         });
-        tg.showPopup({title: 'Готово', message: 'Видео отправлено в бот'});
-    } catch(e) { tg.showAlert('Ошибка'); }
+        tg?.showPopup({ message: 'Видео отправлено в бот!' });
+    } catch(e) { tg?.showAlert('Ошибка'); }
 });
 
-// Инициализация
-window.addEventListener('load', async () => {
-    if (uiVolRange) uiVolRange.value = globalVolume;
-    await fetchVideos();
-    // Синхронизация подписок (упрощенно)
-    const localSubs = localStorage.getItem('subscribedAuthors');
-    if (localSubs) subscribedAuthors = JSON.parse(localSubs);
+// ПОДПИСКА
+uiSubBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!currentActiveAuthor) return;
+    const idx = subscribedAuthors.indexOf(currentActiveAuthor);
+    if (idx > -1) subscribedAuthors.splice(idx, 1);
+    else subscribedAuthors.push(currentActiveAuthor);
+    
+    localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
+    uiSubBtn.classList.toggle('subscribed');
+});
+
+// ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК
+tabForYou.addEventListener('click', () => {
+    currentTab = 'foryou';
+    tabForYou.classList.add('active'); tabFollowing.classList.remove('active');
+    indicator.style.transform = `translateX(${tabForYou.offsetLeft}px)`;
+    prepareQueue('foryou');
+});
+tabFollowing.addEventListener('click', () => {
+    currentTab = 'following';
+    tabFollowing.classList.add('active'); tabForYou.classList.remove('active');
+    indicator.style.transform = `translateX(${tabFollowing.offsetLeft}px)`;
+    prepareQueue('following');
+});
+
+// СТАРТ
+document.getElementById('audio-unlock-overlay').addEventListener('click', () => {
+    hasInteracted = true;
+    document.getElementById('audio-unlock-overlay').remove();
+    const v = document.querySelector('.active-slide .video-player');
+    if (v) updateVolumeForVideo(v);
+});
+
+window.addEventListener('load', () => {
+    const saved = localStorage.getItem('subscribedAuthors');
+    if (saved) subscribedAuthors = JSON.parse(saved);
+    
+    // Устанавливаем иконку звука при загрузке
+    const icon = uiVolBtn.querySelector('i');
+    if (icon) icon.className = globalMuted ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+
+    fetchVideos();
 });
