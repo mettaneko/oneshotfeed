@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🔧 Fix TikTok DB</title>
+    <style>
+        body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; background: #f0f2f5; }
+        button { padding: 20px 40px; font-size: 20px; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+        button:active { transform: translateY(0); }
+        #log { background: #2d3748; color: #a0aec0; padding: 25px; border-radius: 10px; margin-top: 20px; white-space: pre-wrap; font-family: 'Courier New'; font-size: 14px; line-height: 1.6; max-height: 500px; overflow-y: auto; }
+        .status { text-align: center; font-size: 24px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🎯 TikTok Database Fixer</h1>
+    <p><strong>paste.txt</strong> должен лежать рядом с этим файлом!</p>
+    
+    <div class="status" id="status">Готов к запуску...</div>
+    <button onclick="fixDatabase()">🚀 ПОФИКСИТЬ БАЗУ (949 видео)</button>
+    <div id="log"></div>
+
+    <script>
+        const REST_URL = "https://subtle-aphid-39325.upstash.io";
+        const REST_TOKEN = "AZmdAAIncDE2ZDhiNDI0ZTEzOTI0MTg0OWVkODg0NzkzYTU1ZjQxMnAxMzkzMjU=";
+        const KEY = "feed_videos";
+
+        async function log(msg, color = '#a0aec0') {
+            const logEl = document.getElementById('log');
+            logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(msg);
+        }
+
+        async function fixDatabase() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = '⏳ Загружаю paste.txt...';
+            statusEl.style.color = '#ffa500';
+
+            try {
+                // 📥 ЧИТАЕМ paste.txt с того же сайта
+                const response = await fetch('paste.txt');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const content = await response.text();
+                log(`✅ paste.txt загружен (${content.length} символов)`);
+
+                // 🔍 ИЩЕМ JSON
+                const matches = content.match(/\{.*?"id".*?\}/gs) || [];
+                log(`📥 Найдено записей: ${matches.length}`);
+
+                const seen = new Set();
+                const cleaned = [];
+                
+                for (const item of matches) {
+                    try {
+                        const video = JSON.parse(item);
+                        const id = video.id;
+                        if (!id || seen.has(id)) continue;
+                        
+                        seen.add(id);
+                        video.videoUrl = `https://www.tikwm.com/video/media/play/${id}.mp4`;
+                        video.cover = `https://www.tikwm.com/video/cover/${id}.jpg`;
+                        video.desc = "on tiktok";
+                        video.author = String(video.author || "").replace("@", "");
+                        
+                        cleaned.push(JSON.stringify(video));
+                    } catch(e) {}
+                }
+
+                log(`✨ Уникальных видео: ${cleaned.length}`);
+                statusEl.textContent = `✨ ${cleaned.length} видео готово!`;
+                statusEl.style.color = '#10b981';
+
+                const headers = {
+                    "Authorization": `Bearer ${REST_TOKEN}`,
+                    "Content-Type": "application/json"
+                };
+
+                // 🗑 ОЧИЩАЕМ
+                log("🗑 Очищаю старую базу...");
+                await fetch(`${REST_URL}/${KEY}`, { method: 'DELETE', headers });
+
+                // 🚀 ЗАЛИВАЕМ (JSON массив)
+                log("🚀 Заливаю в Upstash...");
+                const uploadRes = await fetch(`${REST_URL}/${KEY}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(cleaned)
+                });
+
+                if (uploadRes.ok) {
+                    statusEl.textContent = '🎉 БАЗА ПОФИКШЕНА!';
+                    statusEl.style.color = '#10b981';
+                    log(`✅ УСПЕХ! ${cleaned.length} видео в базе`);
+                    log("🔍 Проверь в CLI: GET feed_videos");
+                } else {
+                    const error = await uploadRes.text();
+                    throw new Error(`Upload failed: ${uploadRes.status} - ${error}`);
+                }
+
+            } catch (error) {
+                log(`❌ ОШИБКА: ${error.message}`, '#ef4444');
+                statusEl.textContent = '❌ Ошибка!';
+                statusEl.style.color = '#ef4444';
+            }
+        }
+    </script>
+</body>
+</html>
