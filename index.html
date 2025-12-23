@@ -3,36 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>OneShot Feed</title>
+    <title>World Machine Feed</title>
     <link rel="stylesheet" href="css/main.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
 
     <div id="audio-unlock-overlay" class="overlay-screen">
-        <div class="glitch-text">[ СИСТЕМА ГОТОВА ]</div>
-        <p style="margin-top: 10px; opacity: 0.6; font-size: 0.8rem;">Нажмите, чтобы загрузить Мировую Машину</p>
+        <div class="maintenance-card" style="border: 1px solid var(--accent-color); padding: 40px; background: rgba(169, 149, 255, 0.03); text-align: center;">
+            <div class="system-status">[ СИСТЕМА ГОТОВА ]</div>
+            <p style="font-family: var(--font-mono); font-size: 0.8rem; opacity: 0.7;">Нажмите для синхронизации с Мировой Машиной</p>
+        </div>
     </div>
 
-    <nav class="feed-navigation">
+    <div class="tiktok-feed" id="feed">
+        </div>
+
+    <div class="feed-navigation">
         <button class="nav-tab active" id="tab-foryou">ДЛЯ ВАС</button>
         <button class="nav-tab" id="tab-following">ПОДПИСКИ</button>
-    </nav>
+    </div>
 
-    <div class="tiktok-feed" id="feed"></div>
-
-    <div class="liquid-controls-container" id="global-ui">
+    <div class="liquid-controls-container">
         <div class="video-info-capsule">
-            <h3 class="author-name" id="ui-author">@loading...</h3>
-            <p class="video-desc" id="ui-desc">Инициализация фрагментов реальности...</p>
+            <div class="author-name" id="ui-author">@loading...</div>
+            <div class="video-desc" id="ui-desc">Инициализация фрагмента...</div>
         </div>
 
         <div class="glass-deck">
-            <button class="control-btn" id="ui-vol-btn"><i class="fas fa-volume-up"></i></button>
-            <div class="divider"></div>
+            <button class="control-btn" id="ui-vol-btn"><i class="fas fa-volume-mute"></i></button>
             <button class="control-btn" id="ui-share-btn"><i class="fas fa-paper-plane"></i></button>
-            <div class="divider"></div>
-            <button class="control-btn" id="ui-suggest-btn"><i class="fas fa-plus-circle"></i></button>
+            <button class="control-btn" id="ui-suggest-btn"><i class="fas fa-plus"></i></button>
         </div>
     </div>
 
