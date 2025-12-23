@@ -52,7 +52,7 @@ function showCustomNotification(message, options = {}) {
     toast.className = 'custom-toast-notification';
     
     // ЗАМЕНИ НА ССЫЛКУ НА АВАТАРКУ БОТА
-    const avatarUrl = 'https://i.imgur.com/Affcsi4.png';
+    const avatarUrl = '/assets/avatar.jpg';
 
     toast.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
