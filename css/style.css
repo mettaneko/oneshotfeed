@@ -7,7 +7,7 @@
     --text-color: rgb(226, 226, 226);
     --background-color: rgb(20, 20, 25);
     --accent-color: #fddb6d;
-    --accent-color-dim: rgba(253, 219, 109, 0.4);
+    --glass-bg: rgba(26, 26, 33, 0.6);
     --font-sans: 'Manrope', sans-serif;
 }
 
@@ -25,39 +25,34 @@ body {
 .top-nav {
     position: fixed;
     top: 0;
-    left: 0;
-    width: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: fit-content;
     display: flex;
     justify-content: center;
-    gap: 20px;
-    padding-top: calc(10px + env(safe-area-inset-top));
-    background: linear-gradient(180deg, rgba(20, 20, 25, 0.8) 0%, transparent 100%);
+    gap: 5px;
+    padding: 5px;
+    margin-top: calc(10px + env(safe-area-inset-top));
+    background-color: var(--glass-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
     z-index: 20;
-    font-weight: 700;
-    font-size: 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .nav-tab {
-    padding: 10px;
+    padding: 6px 16px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.5);
-    position: relative;
-    transition: color 0.2s;
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 15px;
+    transition: all 0.2s;
 }
 
 .nav-tab.active {
-    color: #fff;
-}
-
-.nav-tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: 5px;
-    left: 10px;
-    right: 10px;
-    height: 3px;
-    background-color: var(--accent-color);
-    border-radius: 2px;
+    color: #000;
+    background-color: #fff;
 }
 
 /* ==================================
@@ -80,85 +75,84 @@ body {
     height: 100dvh;
     scroll-snap-align: start;
     background: #000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
 }
 
 video {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    display: block;
 }
 
 /* ==================================
-    UI ПОВЕРХ ВИДЕО
+    UI (ДИЗАЙН КАК НА СКРИНШОТЕ)
    ================================== */
 .video-ui {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 30px);
     display: flex;
-    align-items: flex-end;
-    padding: 20px;
-    box-sizing: border-box;
+    flex-direction: column;
+    gap: 10px;
     z-index: 10;
-    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.8) 100%);
-    padding-bottom: calc(20px + env(safe-area-inset-bottom));
 }
 
-.video-info {
-    flex-grow: 1;
-    max-width: calc(100% - 70px); /* Место под кнопки */
+.glass-panel {
+    background-color: var(--glass-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    padding: 12px 18px;
 }
 
-.author {
-    font-weight: 700;
-    font-size: 1.1rem;
-    text-shadow: 0 1px 4px rgba(0,0,0,.5);
-}
-
-.desc {
-    margin-top: 5px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    opacity: 0.9;
-    line-height: 1.4;
-    text-shadow: 0 1px 4px rgba(0,0,0,.3);
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-/* БОКОВЫЕ КНОПКИ */
-.action-sidebar {
+/* Панель с инфо */
+.video-info-panel {
     display: flex;
-    flex-direction: column;
-    gap: 25px;
-}
-
-.action-btn {
-    display: flex;
-    flex-direction: column;
+    justify-content: space-between;
     align-items: center;
+}
+.author-info .author {
+    font-weight: 700;
+    font-size: 1rem;
+}
+.author-info .desc {
+    font-size: 0.8rem;
+    font-weight: 500;
+    opacity: 0.6;
+}
+
+.subscribe-btn {
+    font-size: 1.4rem;
+    color: rgba(255,255,255,0.6);
     cursor: pointer;
-    font-size: 1.8rem;
+    padding: 5px;
+}
+
+/* Панель с кнопками */
+.actions-panel {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+}
+.action-btn {
     color: #fff;
-    text-shadow: 0 1px 4px rgba(0,0,0,.5);
+    cursor: pointer;
+    font-size: 1.4rem;
+    flex-grow: 1;
+    text-align: center;
+    padding: 5px;
     transition: transform 0.2s;
 }
-
 .action-btn:active {
     transform: scale(0.9);
 }
 
-.action-btn span {
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-top: 5px;
+.action-divider {
+    width: 1px;
+    height: 20px;
+    background-color: rgba(255,255,255,0.2);
 }
 
 /* ==================================
@@ -177,12 +171,3 @@ video {
 .loading-state.small { height: 80px; font-size: 1rem; }
 .blink { animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: 0.3; } }
-
-/* ==================================
-    АДАПТИВ
-   ================================== */
-@media (max-width: 400px) {
-    .author { font-size: 1rem; }
-    .desc { font-size: 0.85rem; }
-    .action-btn { font-size: 1.6rem; }
-}
