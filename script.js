@@ -10,33 +10,24 @@
         try {
             const response = await fetch(`${API_BASE}/api/maintenance`);
             if (!response.ok) return;
-
             const data = await response.json();
-
             if (data.maintenance) {
                 let hasValidPass = false;
                 const token = localStorage.getItem(ACCESS_TOKEN_KEY);
-
                 if (token) {
                     try {
                         const payload = JSON.parse(atob(token));
-                        if (Date.now() <= (payload.ts + SESSION_DURATION)) {
-                            hasValidPass = true;
-                        }
-                    } catch (e) { /* Игнорируем невалидный токен */ }
+                        if (Date.now() <= (payload.ts + SESSION_DURATION)) hasValidPass = true;
+                    } catch (e) { /* Игнор */ }
                 }
-                
                 if (!hasValidPass && window.location.pathname !== '/maintenance.html') {
                     window.location.replace('/maintenance.html');
                 }
             }
-        } catch (e) {
-            console.error("Maintenance check failed.", e);
-        }
+        } catch (e) { console.error("Maintenance check failed.", e); }
     };
-
     await checkStatusAndRedirect();
-    setInterval(checkStatusAndRedirect, 10000); 
+    setInterval(checkStatusAndRedirect, 10000);
 })();
 // --- КОНЕЦ БЛОКА УПРАВЛЕНИЯ ---
 
@@ -53,19 +44,13 @@ if (tg) {
 
 // === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
 
-/**
- * Показывает кастомное уведомление вверху экрана.
- * @param {string} message - Текст сообщения.
- * @param {object} options - Опции: isError (boolean) и showConfetti (boolean).
- */
 function showCustomNotification(message, options = {}) {
     const { isError = false, showConfetti = false } = options;
-
     if (document.querySelector('.custom-toast-notification')) return;
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-
+    
     // ЗАМЕНИ НА ССЫЛКУ НА АВАТАРКУ БОТА
     const avatarUrl = 'https://i.imgur.com/Affcsi4.png';
 
@@ -73,66 +58,49 @@ function showCustomNotification(message, options = {}) {
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <span class="toast-message">${message}</span>
     `;
-
-    if (isError) {
-        toast.classList.add('error');
-    }
+    if (isError) toast.classList.add('error');
 
     document.body.appendChild(toast);
-
-    // Показываем уведомление
     setTimeout(() => toast.classList.add('show'), 10);
-
-    // Запускаем конфетти, если нужно
-    if (showConfetti && !isError) {
-        triggerConfetti();
-    }
-
-    // Скрываем и удаляем уведомление
+    if (showConfetti && !isError) triggerConfetti();
     setTimeout(() => {
         toast.classList.remove('show');
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3500);
 }
 
-
-/**
- * Создает эффект конфетти внизу экрана.
- */
 function triggerConfetti() {
     const canvas = document.createElement('canvas');
     canvas.className = 'confetti-canvas';
     document.body.appendChild(canvas);
-
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const confettiCount = 100;
+    // --- ИЗМЕНЕНО: Больше конфетти и резче разлет ---
+    const confettiCount = 150;
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
 
     for (let i = 0; i < confettiCount; i++) {
         confetti.push({
-            x: canvas.width / 2,
-            y: canvas.height, // Начинаем снизу
-            r: Math.random() * 5 + 2, // Размер
-            d: Math.random() * confettiCount, // Плотность/дальность
+            x: Math.random() * canvas.width, // Начинают с разных позиций по горизонтали
+            y: canvas.height,
+            r: Math.random() * 6 + 2,
             color: colors[Math.floor(Math.random() * colors.length)],
             tilt: Math.floor(Math.random() * 10) - 10,
             tiltAngle: 0,
-            tiltAngleIncrement: Math.random() * 0.07 + 0.05,
-            angle: Math.random() * Math.PI * 2, // Случайный угол разлета
-            speed: Math.random() * 6 + 4 // Скорость
+            tiltAngleIncrement: Math.random() * 0.08 + 0.06,
+            angle: Math.random() * Math.PI - (Math.PI / 4), // Угол разлета вверх
+            speed: Math.random() * 8 + 6 // Увеличена начальная скорость
         });
     }
 
     let frame = 0;
-    const gravity = 0.2;
+    const gravity = 0.25; // Увеличили гравитацию для более резкого падения
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
         for (let i = 0; i < confetti.length; i++) {
             const c = confetti[i];
             ctx.beginPath();
@@ -142,14 +110,12 @@ function triggerConfetti() {
             ctx.lineTo(c.x, c.y + c.tilt + c.r / 2);
             ctx.stroke();
 
-            // Обновляем позицию
             c.tiltAngle += c.tiltAngleIncrement;
-            c.y -= c.speed; // Движение вверх
-            c.speed -= gravity; // Гравитация тянет вниз
+            c.y -= c.speed;
+            c.x += Math.sin(c.angle) * c.speed / 2; // Более сильное горизонтальное смещение
+            c.speed -= gravity;
             c.tilt = Math.sin(c.tiltAngle) * 15;
-            c.x += Math.sin(frame / 10 + i) * 2; // Легкое боковое смещение
         }
-        
         if (frame < 120) {
            requestAnimationFrame(draw);
            frame++;
@@ -160,9 +126,6 @@ function triggerConfetti() {
     draw();
 }
 
-/**
- * Внедряет все необходимые стили для уведомлений и конфетти.
- */
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -170,11 +133,13 @@ function injectNewStyles() {
             position: fixed;
             top: 15px;
             left: 50%;
+            min-width: 280px; /* Минимальная ширина */
             transform: translateX(-50%) translateY(-150%);
             background-color: rgba(30, 30, 35, 0.85);
             backdrop-filter: blur(10px);
             color: #fff;
-            padding: 10px 20px 10px 15px;
+            /* --- ИЗМЕНЕНО: Уведомление шире, но ниже --- */
+            padding: 8px 25px 8px 15px; /* top/bottom: 8px, left/right: 25px/15px */
             border-radius: 16px;
             font-family: "Manrope", sans-serif;
             font-size: 0.9rem;
