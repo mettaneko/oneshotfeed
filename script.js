@@ -1,5 +1,36 @@
+(function() {
+    const SESSION_DURATION = 5 * 60 * 1000; // 5 минут
+    const ACCESS_TOKEN_KEY = 'maintenance_access_pass'; // Тот же ключ, что и в maintenance.html
+
+    // --- ПРОВЕРКА ДОСТУПА В РЕЖИМЕ ОБСЛУЖИВАНИЯ ---
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (!token) {
+        window.location.replace('/maintenance.html');
+        return; // Останавливаем выполнение остального скрипта
+    }
+
+    try {
+        const payload = JSON.parse(atob(token)); // Декодируем base64 токен
+        const { ts } = payload; // Извлекаем временную метку
+        const now = Date.now();
+
+        if (now > (ts + SESSION_DURATION)) {
+            // Пропуск истёк
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            window.location.replace('/maintenance.html');
+            return;
+        }
+        // Если пропуск валиден, ничего не делаем, скрипт продолжает работу
+    } catch (e) {
+        // Ошибка парсинга или некорректный формат токена
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        window.location.replace('/maintenance.html');
+        return;
+    }
+})();
+
 // === KONFIG ===
-const API_BASE = 'https://feed.mettaneko.ru';
+const API_BASE = 'https://feed.mettaneko.ru'; // <-- БЕЗ СЛЭША
 
 // === 0. TELEGRAM WEB APP ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
@@ -53,7 +84,6 @@ const redirectBanner = document.getElementById('disable-redirect-banner');
 
 if (!isTelegram && redirectBanner) {
     redirectBanner.classList.add('show');
-    // window.location.href = 'https://t.me/oneshotfeedbot'; // Раскомментируй для редиректа
 }
 
 if (redirectBanner) {
@@ -100,16 +130,14 @@ async function loadVideosOnce() {
 }
 
 async function reloadVideosAndFeed() {
-    // Эта функция ищет НОВЫЕ видео, которых еще нет в allVideos
     const oldVideos = allVideos.slice();
-    await loadVideosOnce(); // обновляет allVideos
+    await loadVideosOnce(); 
 
     const oldIds = new Set(oldVideos.map(v => v.id));
     const newOnes = allVideos.filter(v => !oldIds.has(v.id));
 
     if (newOnes.length === 0) return;
 
-    // Добавляем новые видео в конец ленты
     newOnes.forEach(v => {
         const slide = createSlide(v);
         feedContainer.appendChild(slide);
@@ -147,7 +175,6 @@ function unlockAudioContext(e) {
     if (!audioCtx) audioCtx = new AudioContext();
     if (audioCtx.state === 'suspended') audioCtx.resume();
 
-    // Пустой звук для разблокировки iOS
     const buffer = audioCtx.createBuffer(1, 1, 22050);
     const source = audioCtx.createBufferSource();
     source.buffer = buffer;
@@ -161,7 +188,6 @@ function unlockAudioContext(e) {
     }
     hasInteracted = true;
 
-    // Включаем звук на текущем слайде
     const activeSlide = document.querySelector('.video-slide.active-slide');
     if (activeSlide) {
         const vid = activeSlide.querySelector('.video-player');
@@ -197,7 +223,6 @@ function switchToForYou() {
     tabForYou.classList.add('active');
     tabFollowing.classList.remove('active');
     updateInd(tabForYou);
-    // Рендерим ПЕРВЫЕ 5, а не все сразу
     renderFeed(shuffle([...allVideos]).slice(0, 5));
 }
 
@@ -209,7 +234,6 @@ tabFollowing.addEventListener('click', () => {
     tabFollowing.classList.add('active');
     tabForYou.classList.remove('active');
     updateInd(tabFollowing);
-    // Рендерим ПЕРВЫЕ 5 из подписок
     const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author));
     renderFeed(filtered.slice(0, 5));
 });
@@ -242,7 +266,6 @@ uiSubBtn.addEventListener('click', async (e) => {
     if (currentTab === 'following') {
         if (subscribedAuthors.length === 0) switchToForYou();
         else {
-            // Перерисовываем ленту подписок
             const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author));
             renderFeed(filtered.slice(0, 5));
         }
@@ -279,7 +302,6 @@ function getActiveSlideData() {
 
 // === 7. УПРАВЛЕНИЕ ПАМЯТЬЮ И ЗАГРУЗКОЙ ВИДЕО ===
 
-// Загружает видео в элемент (устанавливает src)
 function loadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
@@ -296,7 +318,6 @@ function loadVideo(slide) {
     }
 }
 
-// Выгружает видео (очищает src), чтобы освободить WebMediaPlayer
 function unloadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
@@ -304,8 +325,8 @@ function unloadVideo(slide) {
 
     if (vid && vid.getAttribute('src')) {
         vid.pause();
-        vid.removeAttribute('src'); // Удаляем источник
-        vid.load(); // Сбрасываем буфер
+        vid.removeAttribute('src'); 
+        vid.load();
     }
     if (bg && bg.getAttribute('src')) {
         bg.pause();
@@ -314,7 +335,6 @@ function unloadVideo(slide) {
     }
 }
 
-// Оставляет загруженными только активный слайд и ближайших соседей (радиус 2)
 function manageVideoMemory(activeSlide) {
     const allSlides = Array.from(document.querySelectorAll('.video-slide'));
     const activeIndex = allSlides.indexOf(activeSlide);
@@ -322,7 +342,6 @@ function manageVideoMemory(activeSlide) {
     if (activeIndex === -1) return;
 
     allSlides.forEach((slide, index) => {
-        // Загружаем только в радиусе 2 слайдов (текущий, 2 назад, 2 вперед)
         if (Math.abs(index - activeIndex) <= 2) {
             loadVideo(slide);
         } else {
@@ -336,10 +355,8 @@ function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
     slide.dataset.jsonData = JSON.stringify(data);
-    // Сохраняем URL в data-атрибут, но НЕ в src
     slide.dataset.videoUrl = data.videoUrl;
 
-    // Вставляем HTML БЕЗ src в video тегах для ленивой загрузки
     slide.innerHTML = `
         <video class="video-blur-bg" loop muted playsinline></video>
         <div class="video-wrapper">
@@ -354,7 +371,6 @@ function createSlide(data) {
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
 
-    // Клик - пауза/плей
     vid.addEventListener('click', () => {
         if (vid.paused) {
             vid.play().catch(e => console.log('Click play error', e));
@@ -365,7 +381,6 @@ function createSlide(data) {
         }
     });
 
-    // Прогресс бар
     vid.addEventListener('timeupdate', () => {
         if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`;
     });
@@ -397,16 +412,13 @@ const observer = new IntersectionObserver((entries) => {
         if (!vid || !bg) return;
 
         if (entry.isIntersecting) {
-            // Слайд появился на экране
             document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
 
             try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) { }
 
-            // 1. Управляем памятью (грузим этот и соседей, выгружаем дальние)
             manageVideoMemory(slide);
 
-            // 2. Настраиваем звук
             if (hasInteracted) {
                 vid.volume = globalVolume;
                 vid.muted = (globalVolume === 0);
@@ -414,8 +426,6 @@ const observer = new IntersectionObserver((entries) => {
                 vid.muted = true;
             }
 
-            // 3. Запускаем воспроизведение (с задержкой, чтобы src успел встать)
-            // requestAnimationFrame помогает дать браузеру тик на обновление DOM
             requestAnimationFrame(() => {
                 if (vid.paused) {
                     const playPromise = vid.play();
@@ -425,9 +435,6 @@ const observer = new IntersectionObserver((entries) => {
                                 bg.play().catch(() => {});
                             })
                             .catch(error => {
-                                // Если автоплей заблокирован или видео не загрузилось
-                                console.log("Autoplay prevented or not ready:", error);
-                                // Пробуем запустить в муте
                                 vid.muted = true;
                                 vid.play().catch(e => console.log('Muted play also failed', e));
                                 bg.play().catch(() => {});
@@ -437,7 +444,6 @@ const observer = new IntersectionObserver((entries) => {
             });
 
         } else {
-            // Слайд ушел с экрана
             vid.pause();
             bg.pause();
         }
@@ -453,17 +459,13 @@ function renderFeed(videos, append = false) {
     });
 }
 
-// Бесконечный скролл с защитой от спама и дублей
 let isFetching = false;
 feedContainer.addEventListener('scroll', () => {
-    // Если осталось меньше 300px до низа
     if (feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight) < 300) {
         if (isFetching) return;
         isFetching = true;
 
-        // Эмуляция задержки (debounce) и подгрузки
         setTimeout(() => {
-            // Берем 5 случайных видео из общего пула (или следующих, если есть пагинация)
             let nextBatch = [];
             if (currentTab === 'foryou') {
                 nextBatch = shuffle([...allVideos]).slice(0, 5);
@@ -485,7 +487,6 @@ uiVolBtn.addEventListener('click', (e) => {
     uiVolCont.classList.toggle('active');
 });
 
-// --- ОБНОВЛЕНИЕ ГРОМКОСТИ ---
 uiVolRange.addEventListener('input', (e) => {
     e.stopPropagation();
     globalVolume = parseFloat(e.target.value);
@@ -574,14 +575,12 @@ if (uiShareBtn) {
 
 // === INIT ===
 window.addEventListener('load', async () => {
-    // Ставим ползунок
     if (uiVolRange) uiVolRange.value = globalVolume;
 
-    await loadVideosOnce(); // <--- ТУТ ГРУЗЯТСЯ И JSON, И БД
+    await loadVideosOnce(); 
     await syncSubs();
     updateInd(tabForYou);
     
-    // ВАЖНО: Рендерим только первые 5, чтобы не вешать браузер
     renderFeed(shuffle([...allVideos]).slice(0, 5));
 });
 

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Технические работы</title>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --text-color: rgb(226, 226, 226);
+            --background-color: rgb(20, 20, 25);
+            --accent-color: rgb(169, 149, 255);
+            --font-sans: "Manrope", sans-serif;
+        }
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: var(--font-sans);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        h1 { font-size: 1.5rem; margin-bottom: 10px; font-weight: 800; color: #ffcc00; }
+        .status { font-family: 'Courier New', Courier, monospace; color: #ff4141; font-weight: bold; margin: 10px 0; font-size: 1rem; }
+        p { color: rgba(255,255,255,0.6); font-size: 0.9rem; max-width: 320px; line-height: 1.5; margin-bottom: 30px; }
+        
+        /* Developer Section */
+        .dev-section {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .auth-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+        }
+        
+        .code-input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 12px;
+            color: white;
+            font-family: monospace;
+            font-size: 1.5rem;
+            letter-spacing: 10px;
+            text-align: center;
+            width: 180px;
+            outline: none;
+            transition: 0.3s;
+        }
+        .code-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 15px rgba(169, 149, 255, 0.2);
+        }
+        .code-input::placeholder {
+            font-size: 1.2rem; letter-spacing: 8px; opacity: 0.2;
+        }
+        .code-input:disabled {
+            opacity: 0.5; cursor: not-allowed;
+        }
+        
+        .error-msg { 
+            color: #ff6961; 
+            font-size: 0.8rem; 
+            height: 1.2em; 
+            opacity: 0; 
+            transition: opacity 0.3s;
+            font-weight: 600;
+        }
+        .error-msg.show { opacity: 1; }
+
+        .spinner-mini {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top: 2px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            position: absolute;
+            right: -30px;
+            top: 15px;
+            display: none;
+        }
+        @keyframes spin { 0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);} }
+
+    </style>
+</head>
+<body>
+    <h1>[ ВНИМАНИЕ ]</h1>
+    <div class="status">WORLD_MACHINE_STATUS: FRAGMENTED</div>
+    <p>Мы пересобираем фрагменты реальности и собираем базу данных. Пожалуйста, подождите. Мир скоро вернется в строй.</p>
+
+    <div class="dev-section">
+        <div class="auth-container">
+            <input type="tel" id="totp-input" class="code-input" maxlength="6" placeholder="______" autocomplete="off" inputmode="numeric">
+            <div class="spinner-mini" id="loading-spinner"></div>
+            <div id="error-text" class="error-msg">Неверный код</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://feed.mettaneko.ru'; // <-- БЕЗ СЛЭША НА КОНЦЕ
+        const SESSION_DURATION = 5 * 60 * 1000; // 5 минут
+        const ACCESS_TOKEN_KEY = 'maintenance_access_pass'; // Ключ для хранения в localStorage
+
+        // 1. ПРОВЕРКА СУЩЕСТВУЮЩЕГО "ПРОПУСКА"
+        function isAccessPassValid() {
+            const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+            if (!token) return false;
+            try {
+                // Декодируем base64 токен, чтобы проверить временную метку
+                const payload = JSON.parse(atob(token));
+                // Если с момента выдачи прошло меньше 5 минут, токен валиден
+                if (Date.now() - payload.ts < SESSION_DURATION) {
+                    return true;
+                }
+            } catch (e) { /* Ошибка парсинга или декодирования */ }
+            
+            localStorage.removeItem(ACCESS_TOKEN_KEY); // Удаляем просроченный или невалидный токен
+            return false;
+        }
+
+        // Если пропуск уже есть и он валиден, сразу перенаправляем на главную
+        if (isAccessPassValid()) {
+            window.location.href = '/';
+        }
+
+        // 2. ЛОГИКА ВВОДА КОДА
+        const input = document.getElementById('totp-input');
+        const err = document.getElementById('error-text');
+        const spinner = document.getElementById('loading-spinner');
+
+        input.addEventListener('input', async () => {
+            const val = input.value.trim();
+            
+            if (val.length === 6) {
+                input.disabled = true;
+                spinner.style.display = 'block';
+                err.classList.remove('show');
+
+                try {
+                    const res = await fetch(`${API_BASE}/api/verify_totp`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: val }) // Отправляем как { "code": "123456" }
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        // Сохраняем полученный base64 токен
+                        localStorage.setItem(ACCESS_TOKEN_KEY, data.token);
+                        
+                        // Визуальный фидбэк успеха
+                        input.style.borderColor = '#4cd964';
+                        input.style.color = '#4cd964';
+                        
+                        setTimeout(() => window.location.href = '/', 500); // Редирект на главную
+                    } else {
+                        throw new Error('Invalid code');
+                    }
+                } catch (e) {
+                    spinner.style.display = 'none';
+                    input.disabled = false;
+                    input.focus();
+                    
+                    err.textContent = 'Неверный код';
+                    err.classList.add('show');
+                    input.style.borderColor = '#ff6961'; 
+                    
+                    // Сброс поля ввода через 1.5 секунды
+                    setTimeout(() => {
+                        input.value = '';
+                        input.style.borderColor = '';
+                        input.style.color = 'white';
+                        err.classList.remove('show');
+                    }, 1500);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
