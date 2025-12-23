@@ -7,8 +7,7 @@
     --text-color: rgb(226, 226, 226);
     --background-color: rgb(20, 20, 25);
     --accent-color: #fddb6d;
-    --glass-bg: rgba(26, 26, 33, 0.65);
-    --glass-bg-soft: rgba(26, 26, 33, 0.5);
+    --glass-bg: rgba(26, 26, 33, 0.7);
     --font-sans: 'Manrope', sans-serif;
 }
 
@@ -21,7 +20,7 @@ body {
 }
 
 /* ==================================
-    ВЕРХНЯЯ НАВИГАЦИЯ С АНИМАЦИЕЙ
+    ВЕРХНЯЯ НАВИГАЦИЯ (УЖЕ)
    ================================== */
 .top-nav {
     position: fixed;
@@ -29,7 +28,10 @@ body {
     left: 50%;
     transform: translateX(-50%);
     width: 100%;
-    max-width: 210px;
+    max-width: 210px; /* было 250px → уже */
+    display: flex;
+    justify-content: center;
+    gap: 4px;
     padding: 4px;
     margin-top: calc(15px + env(safe-area-inset-top));
     background-color: var(--glass-bg);
@@ -37,51 +39,25 @@ body {
     backdrop-filter: blur(14px);
     border-radius: 18px;
     z-index: 20;
-    display: flex;
-    position: relative;
     font-weight: 600;
     font-size: 0.85rem;
 }
 
-.top-nav::before {
-    content: '';
-    position: absolute;
-    top: 5%;
-    bottom: 5%;
-    left: calc(2px + 2.5%); /* отступы 5% от ширины таба */
-    width: calc(50% - 4px - 5%);
-    border-radius: 14px;
-    background: linear-gradient(135deg, #ffffff, #f5e2a6);
-    opacity: 0.95;
-    z-index: -1;
-    transition: transform 0.25s ease;
-}
-
-.top-nav[data-active="foryou"]::before {
-    transform: translateX(0%);
-}
-.top-nav[data-active="subscriptions"]::before {
-    transform: translateX(100%);
-}
-
 .nav-tab {
-    flex: 1;
-    padding: 5px 10px;
+    padding: 5px 12px; /* чуть менее широкие */
     cursor: pointer;
-    border-radius: 14px;
-    text-align: center;
     color: rgba(255, 255, 255, 0.6);
-    position: relative;
-    z-index: 1;
-    transition: color 0.2s;
+    border-radius: 14px;
+    transition: all 0.2s;
 }
 
 .nav-tab.active {
     color: #000;
+    background-color: #fff;
 }
 
 /* ==================================
-    ЛЕНТА И ВИДЕО (ИСПРАВЛЕНО)
+    ЛЕНТА
    ================================== */
 #feed-container {
     height: 100vh;
@@ -100,35 +76,31 @@ body {
     height: 100dvh;
     scroll-snap-align: start;
     background: #000;
-    display: flex;
-    justify-content: center;
-    align-items: center;
 }
 
-/* Возвращаем видео на весь экран */
 video {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    z-index: 1;
 }
 
 /* ==================================
-    UI (КОМПАКТНЫЙ, ТЕКСТ СЛЕВА)
+    UI (КОМПАКТНЫЙ, ЦЕНТРИРОВАННЫЙ)
    ================================== */
 .video-ui {
     position: absolute;
     bottom: calc(15px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: calc(100% - 20px);
+    width: 100%;
     max-width: 420px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    z-index: 2; /* UI всегда поверх видео */
+    gap: 6px; /* меньше расстояние */
+    z-index: 10;
 }
 
+/* БАЗОВОЕ "СТЕКЛО" */
 .glass-panel {
     background-color: var(--glass-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -136,21 +108,21 @@ video {
     box-shadow: 0 4px 18px rgba(0,0,0,0.25);
 }
 
+/* ===== БЛОК АВТОРСТВА (Уже и ниже) ===== */
 .video-info-panel {
-    width: 70%;
+    width: 70%;                 /* уже */
     max-width: 260px;
-    padding: 8px 14px;
-    border-radius: 16px;
+    margin: 0 auto;             /* по центру */
+    padding: 8px 14px;          /* ниже по высоте */
+    border-radius: 16px;        /* компактнее */
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
 }
 
 .author-info {
-    text-align: left; /* Текст слева */
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    width: 100%;
+    text-align: center;         /* текст по середине */
 }
 
 .author-info .author {
@@ -165,37 +137,44 @@ video {
 }
 
 .subscribe-btn {
-    font-size: 0.95rem;
-    color: rgba(255,255,255,0.85);
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    color: rgba(255,255,255,0.8);
     cursor: pointer;
-    padding: 3px;
+    padding: 4px;
 }
 
+/* ===== БЛОК УПРАВЛЕНИЯ (Чуть шире и пониже) ===== */
 .actions-panel {
-    width: 80%;
+    width: 80%;                 /* шире, чем авторство */
     max-width: 300px;
-    margin: 2px auto 0;
-    padding: 7px 14px;
-    border-radius: 16px;
+    margin: 0 auto;
+    padding: 10px 18px;         /* пониже и чуть толще */
+    border-radius: 18px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: var(--glass-bg-soft);
 }
 
 .action-btn {
     color: #fff;
     cursor: pointer;
-    font-size: 1.05rem;
+    font-size: 1.15rem;         /* компактные иконки */
     flex: 1;
     text-align: center;
-    transition: transform 0.15s, opacity 0.15s;
-    opacity: 0.85;
+    transition: transform 0.2s;
 }
 
 .action-btn:active {
     transform: scale(0.9);
-    opacity: 1;
+}
+
+/* Разделители сейчас скрыты, при желании можно включить */
+.action-divider {
+    display: none;
 }
 
 /* ==================================
