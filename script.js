@@ -1,28 +1,41 @@
-(function() {
-    const SESSION_DURATION = 5 * 60 * 1000; // 5 минут
-    const ACCESS_TOKEN_KEY = 'maintenance_access_pass'; // Тот же ключ, что и в maintenance.html
+(async function() {
+    const API_BASE = 'https://feed.mettaneko.ru'; // Убедись, что API_BASE совпадает
+    const SESSION_DURATION = 5 * 60 * 1000;
+    const ACCESS_TOKEN_KEY = 'maintenance_access_pass';
 
-    // --- ПРОВЕРКА ДОСТУПА В РЕЖИМЕ ОБСЛУЖИВАНИЯ ---
+    try {
+        // 1. Проверяем, включен ли вообще режим тех. работ
+        const statusResponse = await fetch(`${API_BASE}/api/maintenance`);
+        const data = await statusResponse.json();
+
+        if (!data.maintenance) {
+            // Режим выключен, пускаем всех.
+            return;
+        }
+
+    } catch (e) {
+        // Если не удалось получить статус, на всякий случай считаем, что режим включен.
+        console.error("Could not fetch maintenance status, assuming it's on.", e);
+    }
+    
+    // 2. Если мы здесь, значит режим тех. работ ВКЛЮЧЕН. Проверяем пропуск.
     const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (!token) {
         window.location.replace('/maintenance.html');
-        return; // Останавливаем выполнение остального скрипта
+        return;
     }
 
     try {
-        const payload = JSON.parse(atob(token)); // Декодируем base64 токен
-        const { ts } = payload; // Извлекаем временную метку
+        const payload = JSON.parse(atob(token));
+        const { ts } = payload;
         const now = Date.now();
 
         if (now > (ts + SESSION_DURATION)) {
-            // Пропуск истёк
             localStorage.removeItem(ACCESS_TOKEN_KEY);
             window.location.replace('/maintenance.html');
             return;
         }
-        // Если пропуск валиден, ничего не делаем, скрипт продолжает работу
     } catch (e) {
-        // Ошибка парсинга или некорректный формат токена
         localStorage.removeItem(ACCESS_TOKEN_KEY);
         window.location.replace('/maintenance.html');
         return;
