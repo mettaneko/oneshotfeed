@@ -125,20 +125,23 @@ function injectNewStyles() {
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
 
-        /* --- ИЗМЕНЕНО: Анимация навигации теперь 1-в-1 как у уведомления --- */
         #top-nav-bar {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
-            z-index: 100; /* Убедимся, что навигация выше конфетти */
+            z-index: 100;
         }
         #top-nav-bar.hidden-by-toast {
-            transform: translateY(-150%);
+            transform: translateX(-50%) translateY(-150%);
             opacity: 0;
             pointer-events: none;
         }
 
-        /* --- ИЗМЕНЕНО: z-index для UI, чтобы он был НАД конфетти --- */
-        .liquid-controls-container {
-            z-index: 100;
+        .liquid-controls-container { z-index: 100; }
+
+        /* --- ИСПРАВЛЕНО: z-index для формы предложки --- */
+        .suggest-form {
+            z-index: 1001; /* Выше чем .liquid-controls-container (100) */
         }
 
         /* Стили уведомлений */
@@ -160,12 +163,11 @@ function injectNewStyles() {
         .toast-avatar { width: 32px; height: 32px; border-radius: 8px; }
         .toast-message { font-weight: 500; }
         
-        /* --- ИЗМЕНЕНО: z-index для конфетти --- */
         .confetti-canvas {
             position: fixed; bottom: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
-            z-index: 50; /* Выше видео, но НИЖЕ основного UI и навигации */
+            z-index: 50;
         }
     `;
     document.head.appendChild(style);
