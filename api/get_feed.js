@@ -1,60 +1,58 @@
+// api/get_feed.js
 export default async function handler(req, res) {
-    // 1. ЖЕСТКИЕ CORS ЗАГОЛОВКИ (Чтобы браузер не ругался)
+    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
-    
-    // Ответ на префлайт запрос
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    res.setHeader('Access-Control-Allow-Headers', '*');
 
-    // 2. ПОДКЛЮЧЕНИЕ К БАЗЕ ЧЕРЕЗ FETCH (Самый надежный способ)
+    if (req.method === 'OPTIONS') return res.status(200).end();
+
+    // 1. ПРОВЕРКА ПЕРЕМЕННЫХ
     const DB_URL = process.env.KV_REST_API_URL;
     const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
     if (!DB_URL || !DB_TOKEN) {
-        console.error("❌ KV_REST_API_URL or TOKEN is missing!");
-        return res.status(500).json({ error: 'Database config missing' });
+        console.error("Missing ENV variables");
+        return res.status(500).json({ 
+            error: 'Configuration Error', 
+            details: 'KV_REST_API_URL or KV_REST_API_TOKEN is missing in Vercel Environment Variables.' 
+        });
     }
 
     try {
+        // 2. ЗАПРОС К БАЗЕ
+        // Используем fetch, но оборачиваем в try/catch для деталей
         const page = parseInt(req.query.page) || 1;
-        const limit = 10;
-        const start = (page - 1) * limit;
-        const end = start + limit - 1;
+        const start = (page - 1) * 10;
+        const end = start + 9;
 
-        // Запрос к Upstash REST API
-        const response = await fetch(`${DB_URL}/lrange/feed_videos/${start}/${end}`, {
-            headers: {
-                Authorization: `Bearer ${DB_TOKEN}`
-            }
+        const upstreamRes = await fetch(`${DB_URL}/lrange/feed_videos/${start}/${end}`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
         });
 
-        if (!response.ok) {
-            throw new Error(`Upstash API Error: ${response.statusText}`);
+        if (!upstreamRes.ok) {
+            const text = await upstreamRes.text();
+            throw new Error(`Upstash Error ${upstreamRes.status}: ${text}`);
         }
 
-        const data = await response.json();
+        const data = await upstreamRes.json();
         
-        // В Upstash данные лежат в поле result
-        const videoStrings = data.result;
-
-        if (!videoStrings || videoStrings.length === 0) {
-            return res.status(200).json([]);
+        // 3. ОБРАБОТКА ДАННЫХ
+        if (!data.result) {
+            return res.status(200).json([]); // Пустой результат, если ключа нет
         }
 
-        // Парсим JSON-строки
-        const videos = videoStrings.map(item => {
-            try { return typeof item === 'string' ? JSON.parse(item) : item; } 
-            catch (e) { return null; }
+        const videos = data.result.map(str => {
+            try { return JSON.parse(str); } catch (e) { return null; }
         }).filter(Boolean);
 
         res.status(200).json(videos);
 
     } catch (e) {
-        console.error('SERVER ERROR:', e);
-        // Возвращаем JSON с ошибкой, чтобы фронт не гадал
-        res.status(500).json({ error: e.message });
+        console.error("Crash Details:", e);
+        res.status(500).json({ 
+            error: 'Server Crash', 
+            message: e.message 
+        });
     }
 }
