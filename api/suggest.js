@@ -1,71 +1,71 @@
-import crypto from 'crypto';
-
-// Функция валидации (та же, что и в subscribe.js)
-function validateTelegramAuth(initData, botToken) {
-    if (!initData) return null;
-    try {
-        const params = new URLSearchParams(initData);
-        const hash = params.get('hash');
-        params.delete('hash');
-        params.sort();
-        let dataCheckString = '';
-        for (const [key, value] of params.entries()) { dataCheckString += `${key}=${value}\n`; }
-        dataCheckString = dataCheckString.slice(0, -1);
-        const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
-        const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
-        if (computedHash === hash) return JSON.parse(params.get('user'));
-    } catch (e) {
-        console.error('Auth validation error:', e);
-    }
-    return null;
-}
-
 export default async function handler(req, res) {
-    // CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).end();
+  // === CORS (РАЗРЕШАЕМ ЗАПРОСЫ) ===
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // 1. ВАЛИДАЦИЯ
-    const initData = req.headers['x-telegram-auth'];
-    const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
+  // Если браузер "спрашивает" разрешение (Preflight request)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-    if (!user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST' });
 
-    // 2. ЛОГИКА ПРЕДЛОЖКИ
-    const { link, comment } = req.body;
-    if (!link) return res.status(400).json({ error: 'Link is missing' });
+  const { url, author, desc, user } = req.body;
+  const token = process.env.BOT_TOKEN;
+  const adminId = process.env.ADMIN_ID;
+  
+  const DB_URL = process.env.KV_REST_API_URL;
+  const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
-    const adminIds = (process.env.ADMIN_ID || '').split(',');
-    const botToken = process.env.BOT_TOKEN;
+  if (!url) return res.status(400).json({ error: 'No URL' });
 
-    const text = 
-      `📬 *Новая предложка!*\n\n` +
-      `От: [${user.first_name || 'User'} ${user.last_name || ''}](tg://user?id=${user.id})\n` +
-      `Ссылка: \`${link}\`\n` +
-      `Комментарий: _${comment || 'нет'}_`;
+  try {
+    // === 1. ЗАЩИТА ОТ СПАМА (REDIS) ===
+    if (user && user.id && DB_URL) {
+      const userId = user.id;
+      // Проверяем блокировку
+      const checkRes = await fetch(`${DB_URL}/get/spam_sug:${userId}`, {
+        headers: { Authorization: `Bearer ${DB_TOKEN}` }
+      });
+      const checkData = await checkRes.json();
       
-    try {
-        // Отправляем сообщение всем админам
-        const promises = adminIds.map(adminId => 
-            fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chat_id: adminId,
-                    text: text,
-                    parse_mode: 'Markdown'
-                })
-            })
-        );
-        await Promise.all(promises);
-        res.status(200).json({ ok: true });
-    } catch (e) {
-        console.error('Suggest Send Error:', e);
-        res.status(500).json({ error: 'TG Send Error' });
+      if (checkData.result) {
+        return res.status(429).json({ error: 'Too many requests' }); 
+      }
+
+      // Ставим блокировку на 60 секунд
+      await fetch(`${DB_URL}/setex/spam_sug:${userId}/60/1`, {
+        headers: { Authorization: `Bearer ${DB_TOKEN}` }
+      });
     }
+
+    // === 2. ОТПРАВКА АДМИНУ ===
+    const sender = user ? (user.username ? `@${user.username}` : `ID: ${user.id}`) : 'Аноним';
+    
+    const text = `
+🎥 <b>Новое видео в предложку!</b>
+
+👤 <b>От:</b> ${sender}
+🔗 <b>Ссылка:</b> ${url}
+✍️ <b>Автор видео:</b> ${author || 'Не указан'}
+📝 <b>Описание:</b> ${desc || 'Пусто'}
+    `;
+
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: adminId,
+        text: text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: false
+      })
+    });
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Server Error' });
+  }
 }
