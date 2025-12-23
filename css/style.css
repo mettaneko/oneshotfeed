@@ -1,52 +1,53 @@
 /* ==================================
-    ОСНОВА (СТИЛЬ ONESHOT)
+    ОСНОВА
    ================================== */
-@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
     --text-color: rgb(226, 226, 226);
     --background-color: rgb(20, 20, 25);
-    --accent-color: #fcfc30; /* Яркий желтый из OneShot */
-    --glass-bg: rgba(18, 18, 22, 0.75); /* Более темное и плотное стекло */
-    --font-pixel: 'VT323', monospace;
+    --accent-color: #fddb6d;
+    --glass-bg: rgba(26, 26, 33, 0.7);
+    --font-sans: 'Manrope', sans-serif;
 }
 
 body {
     background-color: var(--background-color);
     color: var(--text-color);
-    font-family: var(--font-pixel); /* Применяем пиксельный шрифт везде */
+    font-family: var(--font-sans);
     margin: 0;
     overflow: hidden;
-    text-transform: uppercase; /* Все тексты в верхнем регистре для стиля */
 }
 
 /* ==================================
-    ВЕРХНЯЯ НАВИГАЦИЯ (Компактная)
+    ВЕРХНЯЯ НАВИГАЦИЯ (УЖЕ)
    ================================== */
 .top-nav {
     position: fixed;
     top: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: auto; /* Ширина по контенту */
+    width: 100%;
+    max-width: 210px; /* было 250px → уже */
     display: flex;
     justify-content: center;
-    gap: 0;
+    gap: 4px;
     padding: 4px;
     margin-top: calc(15px + env(safe-area-inset-top));
     background-color: var(--glass-bg);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(14px);
+    border-radius: 18px;
     z-index: 20;
-    font-size: 1.1rem; /* Чуть крупнее для пиксельного шрифта */
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 
 .nav-tab {
-    padding: 4px 14px;
+    padding: 5px 12px; /* чуть менее широкие */
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.5);
-    border-radius: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: 14px;
     transition: all 0.2s;
 }
 
@@ -58,22 +59,25 @@ body {
 /* ==================================
     ЛЕНТА
    ================================== */
-#feed-container, .video-card {
+#feed-container {
     height: 100vh;
     height: 100dvh;
-    width: 100%;
-}
-#feed-container {
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
     scrollbar-width: none;
 }
 #feed-container::-webkit-scrollbar { display: none; }
+
 .video-card {
     position: relative;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
     scroll-snap-align: start;
     background: #000;
 }
+
 video {
     width: 100%;
     height: 100%;
@@ -81,72 +85,97 @@ video {
 }
 
 /* ==================================
-    UI (МИНИМАЛИСТИЧНЫЙ ДИЗАЙН)
+    UI (КОМПАКТНЫЙ, ЦЕНТРИРОВАННЫЙ)
    ================================== */
 .video-ui {
     position: absolute;
     bottom: calc(15px + env(safe-area-inset-bottom));
     left: 50%;
     transform: translateX(-50%);
-    width: auto; /* Ширина по контенту */
+    width: 100%;
+    max-width: 420px;
     display: flex;
     flex-direction: column;
-    align-items: center; /* Центрируем панели */
-    gap: 8px;
+    gap: 6px; /* меньше расстояние */
     z-index: 10;
 }
 
+/* БАЗОВОЕ "СТЕКЛО" */
 .glass-panel {
     background-color: var(--glass-bg);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(12px);
-    border-radius: 14px; /* Более скругленные */
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    padding: 8px 15px; /* Уменьшаем высоту */
-    width: fit-content; /* Ширина по содержимому */
+    backdrop-filter: blur(14px);
+    box-shadow: 0 4px 18px rgba(0,0,0,0.25);
 }
 
-/* Панель с автором (центр, меньше) */
+/* ===== БЛОК АВТОРСТВА (Уже и ниже) ===== */
 .video-info-panel {
+    width: 70%;                 /* уже */
+    max-width: 260px;
+    margin: 0 auto;             /* по центру */
+    padding: 8px 14px;          /* ниже по высоте */
+    border-radius: 16px;        /* компактнее */
     display: flex;
+    justify-content: space-between;
     align-items: center;
-    gap: 15px;
-}
-.author-info {
-    text-align: center; /* Текст по центру */
-}
-.author-info .author {
-    font-size: 1.1rem;
-    letter-spacing: 1px;
-}
-.author-info .desc {
-    font-size: 0.8rem;
-    opacity: 0.6;
-    margin-top: -4px; /* Приближаем к автору */
-}
-.subscribe-btn {
-    font-size: 1.1rem;
-    color: rgba(255,255,255,0.7);
-    cursor: pointer;
 }
 
-/* Панель с кнопками (минимализм) */
-.actions-panel {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 25px; /* Расстояние между кнопками */
+.author-info {
+    width: 100%;
+    text-align: center;         /* текст по середине */
 }
+
+.author-info .author {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.author-info .desc {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.6;
+}
+
+.subscribe-btn {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1rem;
+    color: rgba(255,255,255,0.8);
+    cursor: pointer;
+    padding: 4px;
+}
+
+/* ===== БЛОК УПРАВЛЕНИЯ (Чуть шире и пониже) ===== */
+.actions-panel {
+    width: 80%;                 /* шире, чем авторство */
+    max-width: 300px;
+    margin: 0 auto;
+    padding: 10px 18px;         /* пониже и чуть толще */
+    border-radius: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
 .action-btn {
     color: #fff;
     cursor: pointer;
-    font-size: 1.2rem;
+    font-size: 1.15rem;         /* компактные иконки */
+    flex: 1;
+    text-align: center;
     transition: transform 0.2s;
 }
+
 .action-btn:active {
     transform: scale(0.9);
 }
-.action-divider { display: none; }
+
+/* Разделители сейчас скрыты, при желании можно включить */
+.action-divider {
+    display: none;
+}
 
 /* ==================================
     СЛУЖЕБНЫЕ СТИЛИ
@@ -157,9 +186,9 @@ video {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 1.5rem;
+    font-size: 1.2rem;
+    font-weight: 600;
     color: var(--accent-color);
-    text-transform: uppercase;
 }
 .loading-state.small { height: 80px; font-size: 1rem; }
 .blink { animation: blink 1.2s infinite; }
