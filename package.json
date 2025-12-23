@@ -1,0 +1,10 @@
+{
+  "name": "oneshot-feed",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "echo 'Build complete'"
+  },
+  "dependencies": {
+    "@vercel/kv": "latest"
+  }
+}

@@ -1,142 +1,244 @@
+// ==========================================
+// 1. ИНИЦИАЛИЗАЦИЯ TELEGRAM WEB APP
+// ==========================================
 const tg = window.Telegram.WebApp;
+
+// Сообщаем, что приложение готово
+tg.ready();
 tg.expand();
-tg.setHeaderColor('#000000');
 
+// Безопасная установка цвета хедера (защита от старых версий)
+try {
+    const version = parseFloat(tg.version);
+    if (version >= 6.1) {
+        tg.setHeaderColor('#0d0d12'); // Цвет фона OneShot
+        tg.setBackgroundColor('#0d0d12');
+    } else {
+        console.log('Telegram API version is too old for header color:', tg.version);
+    }
+} catch (e) {
+    console.error('Error setting TG colors:', e);
+}
+
+// ==========================================
+// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// ==========================================
 const container = document.getElementById('feed-container');
+let currentPage = 0;   // Какую страницу грузим (0, 1, 2...)
+let isLoading = false; // Чтобы не грузить дважды
+let hasMore = true;    // Есть ли еще видео в базе
 
-// Настройки Lazy Loading
-let currentPage = 0;
-let isLoading = false;
-let hasMore = true; // Есть ли еще видео в базе?
-
-// 1. Функция загрузки партии видео
+// ==========================================
+// 3. ОСНОВНАЯ ФУНКЦИЯ ЗАГРУЗКИ (LAZY LOAD)
+// ==========================================
 async function loadMoreVideos() {
+    // Если уже грузим или видео кончились - стоп
     if (isLoading || !hasMore) return;
     
     isLoading = true;
-    showLoader(true); // Показать индикатор загрузки внизу
+    showLoader(true); // Показать индикатор внизу
 
     try {
+        console.log(`📡 Requesting page ${currentPage}...`);
+        
         // Запрос к твоему API
         const res = await fetch(`/api/get_feed?page=${currentPage}`);
+
+        // ПРОВЕРКА 1: Это вообще JSON? (Защита от Vercel Error Page)
+        const contentType = res.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+            // Если пришел HTML (ошибка 500/404), читаем текст ошибки
+            const text = await res.text();
+            console.error("Server returned HTML instead of JSON:", text);
+            throw new Error("SERVER_ERROR: Database connection failed");
+        }
+
+        // ПРОВЕРКА 2: Статус ответа
+        if (!res.ok) {
+            throw new Error(`HTTP ERROR: ${res.status}`);
+        }
+
         const newVideos = await res.json();
 
-        if (newVideos.length === 0) {
-            hasMore = false; // Видео кончились
+        // Если пришел пустой массив - значит видео кончились
+        if (!newVideos || newVideos.length === 0) {
+            console.log("🏁 End of feed reached");
+            hasMore = false;
             showLoader(false);
+            // Можно добавить сообщение "Конец связи"
+            const endMsg = document.createElement('div');
+            endMsg.className = 'loading-state small';
+            endMsg.innerText = '// END_OF_MEMORY_DUMP //';
+            endMsg.style.opacity = '0.5';
+            container.appendChild(endMsg);
             return;
         }
 
-        // Добавляем видео в ленту
+        // Рендерим видео
         newVideos.forEach(videoData => {
             const card = createCard(videoData);
             container.appendChild(card);
-            
-            // Сразу начинаем следить за новым видео (для автоплея)
-            videoObserver.observe(card);
+            videoObserver.observe(card); // Подключаем автоплей
         });
 
-        // Двигаем "триггер загрузки" в самый низ
+        // Перемещаем триггер загрузки в самый низ
         updateLoadingTrigger();
         
-        currentPage++; // Готовимся к следующей странице
+        // Готовимся к следующей странице
+        currentPage++;
 
     } catch (e) {
-        console.error("Ошибка загрузки:", e);
-        // Можно показать тост с ошибкой
+        console.error("Critical Feed Error:", e);
+        showError(e.message);
     } finally {
         isLoading = false;
         showLoader(false);
     }
 }
 
-// 2. Создание карточки (HTML)
+// ==========================================
+// 4. СОЗДАНИЕ HTML КАРТОЧКИ
+// ==========================================
 function createCard(data) {
     const div = document.createElement('div');
     div.className = 'video-card';
-    // data.videoUrl и data.cover - подставь поля, как у тебя в БД
+    
+    // Безопасное получение данных (если каких-то полей нет в БД)
+    const url = data.videoUrl || data.url || ''; 
+    const cover = data.cover || '';
+    const author = data.author || 'UNKNOWN_ENTITY';
+    const desc = data.desc || '...';
+
     div.innerHTML = `
-        <video loop playsinline poster="${data.cover || ''}" preload="metadata">
-            <source src="${data.videoUrl || data.url}" type="video/mp4">
+        <video loop playsinline poster="${cover}" preload="metadata">
+            <source src="${url}" type="video/mp4">
         </video>
         <div class="video-ui">
             <div class="video-info">
-                <div class="author">${data.author || 'Anon'}</div>
-                <div class="desc">${data.desc || ''}</div>
+                <div class="author">${author}</div>
+                <div class="desc">${desc}</div>
             </div>
         </div>
     `;
 
-    // Пауза/Плей по клику
+    // Обработка клика (Пауза / Плей / Звук)
     const vid = div.querySelector('video');
     div.addEventListener('click', () => {
-        if (vid.paused) vid.play();
-        else vid.pause();
+        if (vid.paused) {
+            vid.play();
+        } else {
+            vid.pause();
+        }
     });
 
     return div;
 }
 
-// 3. Автоплей (Intersection Observer)
+// ==========================================
+// 5. ЛОГИКА АВТОПЛЕЯ (Observer)
+// ==========================================
 const videoObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
-        const vid = entry.target.querySelector('video');
+        const card = entry.target;
+        const vid = card.querySelector('video');
         if (!vid) return;
 
         if (entry.isIntersecting) {
+            // Видео появилось на экране (порог 60%)
             vid.currentTime = 0;
-            vid.play().catch(() => {
-                vid.muted = true;
+            // Пытаемся запустить
+            vid.play().catch(err => {
+                console.warn("Autoplay blocked, muting...", err);
+                vid.muted = true; // Если браузер блокирует звук - мьютим
                 vid.play();
             });
         } else {
+            // Видео ушло с экрана
             vid.pause();
         }
     });
 }, { threshold: 0.6 });
 
-// 4. Lazy Load Триггер (Intersection Observer)
-// Следит за невидимым элементом в конце списка. Как только он появляется — грузим еще.
+// ==========================================
+// 6. ЛОГИКА LAZY LOADING (Observer)
+// ==========================================
+// Создаем невидимую линию в конце ленты
 const loadingTrigger = document.createElement('div');
 loadingTrigger.className = 'loading-trigger';
-loadingTrigger.style.height = '10px'; // Невидимый порог
-container.appendChild(loadingTrigger);
+loadingTrigger.style.height = '10px';
+loadingTrigger.style.background = 'transparent';
 
-const lazyLoader = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) {
+const lazyLoadObserver = new IntersectionObserver((entries) => {
+    // Если линия появилась внизу экрана - грузим еще
+    if (entries[0].isIntersecting && hasMore && !isLoading) {
         loadMoreVideos();
     }
 }, { rootMargin: '200px' }); // Начинать грузить за 200px до конца
 
 function updateLoadingTrigger() {
-    // Перемещаем триггер в самый конец контейнера
+    // Перемещаем триггер в конец контейнера
     container.appendChild(loadingTrigger);
-    lazyLoader.disconnect();
-    lazyLoader.observe(loadingTrigger);
+    lazyLoadObserver.disconnect();
+    lazyLoadObserver.observe(loadingTrigger);
 }
 
-// UI: Индикатор загрузки
+// ==========================================
+// 7. UI ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ==========================================
 function showLoader(show) {
+    // Ищем существующий лоадер
     let loader = document.getElementById('batch-loader');
-    if (!loader) {
+    
+    // Если нужно показать, но его нет - создаем
+    if (show && !loader) {
         loader = document.createElement('div');
         loader.id = 'batch-loader';
-        loader.className = 'loading-state small';
-        loader.innerHTML = '<span class="blink">_loading_data</span>';
-        loader.style.cssText = 'height: 50px; font-size: 16px; padding-bottom: 20px;';
-        // Не добавляем в container, он сам рисуется
+        loader.className = 'loading-state';
+        loader.style.height = '60px';
+        loader.style.fontSize = '18px';
+        loader.innerHTML = '<span class="blink">LOADING_DATA...</span>';
+        container.appendChild(loader);
     }
     
-    if (show) container.appendChild(loader);
-    else if (loader.parentNode) loader.remove();
+    // Если нужно скрыть - удаляем
+    if (!show && loader) {
+        loader.remove();
+    }
 }
 
-// Часы
+function showError(msg) {
+    const errDiv = document.createElement('div');
+    errDiv.className = 'loading-state';
+    errDiv.style.color = '#ff4444';
+    errDiv.style.flexDirection = 'column';
+    errDiv.innerHTML = `
+        <div style="font-size: 40px; margin-bottom: 10px;">⚠️</div>
+        <div>SYSTEM FAILURE</div>
+        <div style="font-size: 14px; opacity: 0.7; margin-top: 5px;">${msg}</div>
+        <div style="margin-top: 20px; font-size: 12px; cursor: pointer; text-decoration: underline;" onclick="location.reload()">[REBOOT_SYSTEM]</div>
+    `;
+    // Очищаем контейнер и показываем ошибку
+    container.innerHTML = '';
+    container.appendChild(errDiv);
+}
+
+// ==========================================
+// 8. ЧАСЫ ONESHOT
+// ==========================================
 setInterval(() => {
     const d = new Date();
-    document.getElementById('clock').innerText = 
-        `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    const clockEl = document.getElementById('clock');
+    if (clockEl) {
+        clockEl.innerText = 
+            `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
 }, 1000);
 
-// Старт
+// ==========================================
+// 9. ЗАПУСК
+// ==========================================
+// Удаляем начальную заглушку (если она была в HTML) и грузим первую партию
+const initialLoader = document.querySelector('.loading-state');
+if (initialLoader) initialLoader.remove();
+
 loadMoreVideos();
