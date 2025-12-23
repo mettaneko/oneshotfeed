@@ -1,5 +1,4 @@
 import { createClient } from '@vercel/kv';
-import { v4 as uuidv4 } from 'uuid'; // Хотя здесь не используется, оставим для унификации
 
 const kv = createClient({
   url: process.env.KV_REST_API_URL,
@@ -15,9 +14,12 @@ export default async function handler(req, res) {
 
     try {
         const { exclude = [] } = req.body;
-        // KV возвращает строки, их нужно парсить
         const allVideoStrings = await kv.lrange('feed_videos', 0, -1);
-        const allVideoObjects = allVideoStrings.map(str => JSON.parse(str));
+        
+        // БЕЗОПАСНЫЙ ПАРСИНГ
+        const allVideoObjects = allVideoStrings.map(str => {
+            try { return JSON.parse(str); } catch (e) { return null; }
+        }).filter(Boolean); // Убираем null, если парсинг не удался
 
         const availableVideos = allVideoObjects.filter(video => 
             video && video.id && !exclude.includes(video.id)
@@ -35,6 +37,6 @@ export default async function handler(req, res) {
         res.status(200).json(selectedVideos);
     } catch (e) {
         console.error('Get Feed Error:', e);
-        res.status(500).json([]);
+        res.status(500).json({error: "Server crash in get_feed"});
     }
 }
