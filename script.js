@@ -2,124 +2,86 @@
 // 1. ИНИЦИАЛИЗАЦИЯ TELEGRAM WEB APP
 // ==========================================
 const tg = window.Telegram.WebApp;
-
-// Сообщаем, что приложение готово
 tg.ready();
 tg.expand();
 
-// Безопасная установка цвета хедера (защита от старых версий)
 try {
-    const version = parseFloat(tg.version);
-    if (version >= 6.1) {
-        tg.setHeaderColor('#141419'); // Цвет фона из :root
+    if (parseFloat(tg.version) >= 6.1) {
+        tg.setHeaderColor('#141419');
         tg.setBackgroundColor('#141419');
-    } else {
-        console.log('Telegram API version is too old for header color:', tg.version);
     }
-} catch (e) {
-    console.error('Error setting TG colors:', e);
-}
+} catch (e) { console.error('Error setting TG colors:', e); }
 
 // ==========================================
-// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И СОСТОЯНИЕ
 // ==========================================
 const container = document.getElementById('feed-container');
-let currentPage = 0;   // Какую страницу грузим (0, 1, 2...)
-let isLoading = false; // Чтобы не грузить дважды
-let hasMore = true;    // Есть ли еще видео в базе
+const state = {
+    currentPage: 0,
+    isLoading: false,
+    hasMore: true,
+    isMuted: true,
+    activeFeed: 'foryou' // 'foryou' или 'subscriptions'
+};
 
 // ==========================================
-// 3. ОСНОВНАЯ ФУНКЦИЯ ЗАГРУЗКИ (LAZY LOAD)
+// 3. ОСНОВНАЯ ФУНКЦИЯ ЗАГРУЗКИ
 // ==========================================
 async function loadMoreVideos() {
-    // Если уже грузим или видео кончились - стоп
-    if (isLoading || !hasMore) return;
-    
-    isLoading = true;
-    showLoader(true); // Показать индикатор внизу
+    if (state.isLoading || !state.hasMore) return;
+    state.isLoading = true;
+    showLoader(true);
 
     try {
-        console.log(`📡 Requesting page ${currentPage}...`);
-        
-        // Запрос к твоему API
-        const res = await fetch(`/api/get_feed?page=${currentPage}`);
-
-        // ПРОВЕРКА 1: Это вообще JSON? (Защита от Vercel Error Page)
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            // Если пришел HTML (ошибка 500/404), читаем текст ошибки
-            const text = await res.text();
-            console.error("Server returned HTML instead of JSON:", text);
-            throw new Error("SERVER_ERROR: Database connection failed");
-        }
-
-        // ПРОВЕРКА 2: Статус ответа
-        if (!res.ok) {
-            throw new Error(`HTTP ERROR: ${res.status}`);
-        }
+        // В будущем можно будет добавить &feed=${state.activeFeed}
+        const res = await fetch(`/api/get_feed?page=${state.currentPage}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const newVideos = await res.json();
-
-        // Если пришел пустой массив - значит видео кончились
-        if (!newVideos || newVideos.length === 0) {
-            if (currentPage === 0) {
-                // Если база пуста с самого начала
-                showError("MEMORY_BANKS_EMPTY. NO DATA.");
-            } else {
-                console.log("🏁 End of feed reached");
-                hasMore = false;
-                showLoader(false);
-                // Сообщение "Конец связи"
-                const endMsg = document.createElement('div');
-                endMsg.className = 'loading-state small';
-                endMsg.innerText = '// END_OF_MEMORY_DUMP //';
-                endMsg.style.opacity = '0.5';
-                container.appendChild(endMsg);
-            }
+        
+        if (newVideos.length === 0) {
+            state.hasMore = false;
+            if (state.currentPage === 0) showError("Здесь пока пусто...");
+            else showEndOfFeed();
             return;
         }
         
-        // Удаляем начальную заглушку, если она есть
-        const initialLoader = document.querySelector('.loading-state');
-        if (initialLoader) initialLoader.remove();
+        document.querySelector('.loading-state')?.remove();
 
-        // Рендерим видео
-        newVideos.forEach(videoData => {
-            const card = createCard(videoData);
+        newVideos.forEach(data => {
+            const card = createCard(data);
             container.appendChild(card);
-            videoObserver.observe(card); // Подключаем автоплей
+            videoObserver.observe(card);
         });
 
-        // Перемещаем триггер загрузки в самый низ
         updateLoadingTrigger();
-        
-        // Готовимся к следующей странице
-        currentPage++;
-
+        state.currentPage++;
     } catch (e) {
-        console.error("Critical Feed Error:", e);
+        console.error("Feed Error:", e);
         showError(e.message);
     } finally {
-        isLoading = false;
+        state.isLoading = false;
         showLoader(false);
     }
 }
 
 // ==========================================
-// 4. СОЗДАНИЕ HTML КАРТОЧКИ
+// 4. СОЗДАНИЕ HTML ЭЛЕМЕНТОВ
 // ==========================================
 function createCard(data) {
-    const div = document.createElement('div');
-    div.className = 'video-card';
-    
-    // Безопасное получение данных (если каких-то полей нет в БД)
-    const url = data.videoUrl || data.url || ''; 
+    const card = document.createElement('div');
+    card.className = 'video-card';
+    card.dataset.videoId = data.id || 'unknown';
+    card.dataset.videoUrl = data.videoUrl || data.url || '';
+    card.dataset.author = data.author || 'Anon';
+
+    const url = card.dataset.videoUrl;
     const cover = data.cover || '';
-    const author = data.author || 'UNKNOWN_ENTITY';
+    const author = card.dataset.author;
     const desc = data.desc || '...';
 
-    div.innerHTML = `
-        <video loop playsinline poster="${cover}" preload="metadata">
+    card.innerHTML = `
+        <video loop playsinline muted poster="${cover}" preload="metadata">
             <source src="${url}" type="video/mp4">
         </video>
         <div class="video-ui">
@@ -127,76 +89,135 @@ function createCard(data) {
                 <div class="author">@${author}</div>
                 <div class="desc">${desc}</div>
             </div>
+            <div class="action-sidebar">
+                <div class="action-btn" id="sound-btn">
+                    <i class="fa-solid fa-volume-xmark"></i>
+                </div>
+                <div class="action-btn" id="share-btn">
+                    <i class="fa-solid fa-share"></i>
+                    <span>Поделиться</span>
+                </div>
+                <div class="action-btn" id="suggest-btn">
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Предложить</span>
+                </div>
+            </div>
         </div>
     `;
 
-    // Обработка клика (Пауза / Плей)
-    const vid = div.querySelector('video');
-    div.addEventListener('click', () => {
-        if (vid.paused) {
-            vid.play();
-        } else {
-            vid.pause();
-        }
+    // Слушатели для кнопок на конкретной карточке
+    card.querySelector('#sound-btn').addEventListener('click', handleSoundToggle);
+    card.querySelector('#share-btn').addEventListener('click', handleShare);
+    card.querySelector('#suggest-btn').addEventListener('click', handleSuggest);
+    
+    // Пауза/Плей по клику на само видео
+    const videoElement = card.querySelector('video');
+    videoElement.addEventListener('click', () => {
+        if (videoElement.paused) videoElement.play();
+        else videoElement.pause();
     });
 
-    return div;
+    return card;
 }
 
 // ==========================================
-// 5. ЛОГИКА АВТОПЛЕЯ (Observer)
+// 5. ЛОГИКА КНОПОК И СОБЫТИЙ
+// ==========================================
+function handleSoundToggle(event) {
+    event.stopPropagation(); // Не даем клику уйти на видео
+    state.isMuted = !state.isMuted;
+    
+    const currentCard = document.querySelector('.video-card.is-active');
+    if (currentCard) {
+        currentCard.querySelector('video').muted = state.isMuted;
+    }
+    
+    // Обновляем иконку на ВСЕХ карточках
+    document.querySelectorAll('#sound-btn i').forEach(icon => {
+        icon.className = state.isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
+    });
+}
+
+function handleShare(event) {
+    event.stopPropagation();
+    const card = event.target.closest('.video-card');
+    tg.showPopup({
+        title: 'Поделиться',
+        message: `Вы хотите поделиться видео от автора @${card.dataset.author}?`,
+        buttons: [{ text: 'Да', id: 'share_confirm' }, { type: 'cancel' }]
+    }, (buttonId) => {
+        if (buttonId === 'share_confirm') {
+            tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(card.dataset.videoUrl)}&text=Смотри, что я нашел в OneShot Feed!`);
+        }
+    });
+}
+
+function handleSuggest() {
+    tg.showPopup({
+        title: 'Предложить видео',
+        message: 'Эта функция в разработке. Хотите открыть бота, чтобы отправить видео вручную?',
+        buttons: [{ text: 'Открыть бота', id: 'open_bot' }, { type: 'cancel' }]
+    }, (id) => {
+        if (id === 'open_bot') tg.openTelegramLink('https://t.me/твой_бот');
+    });
+}
+
+function switchFeed(feedType) {
+    if (feedType === state.activeFeed) return;
+    if (state.isLoading) return;
+
+    state.activeFeed = feedType;
+    state.currentPage = 0;
+    state.hasMore = true;
+
+    // Обновляем активный таб
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.feed === feedType);
+    });
+
+    // Очищаем ленту и запускаем загрузку
+    container.innerHTML = '<div class="loading-state"><div class="blink">_</div></div>';
+    lazyLoadObserver.disconnect(); // Отключаем старый наблюдатель
+    loadMoreVideos();
+}
+
+// ==========================================
+// 6. Intersection Observers (Автоплей и Lazy Load)
 // ==========================================
 const videoObserver = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const card = entry.target;
         const vid = card.querySelector('video');
-        if (!vid) return;
+        card.classList.remove('is-active');
 
         if (entry.isIntersecting) {
-            // Видео появилось на экране (порог 60%)
+            card.classList.add('is-active');
+            vid.muted = state.isMuted;
             vid.currentTime = 0;
-            // Пытаемся запустить
-            vid.play().catch(err => {
-                console.warn("Autoplay blocked, muting...", err);
-                vid.muted = true; // Если браузер блокирует звук - мьютим
-                vid.play();
-            });
+            vid.play().catch(e => console.warn("Autoplay was prevented"));
         } else {
-            // Видео ушло с экрана
             vid.pause();
         }
     });
 }, { threshold: 0.6 });
 
-// ==========================================
-// 6. ЛОГИКА LAZY LOADING (Observer)
-// ==========================================
-// Создаем невидимую линию в конце ленты
 const loadingTrigger = document.createElement('div');
 loadingTrigger.className = 'loading-trigger';
-
-const lazyLoadObserver = new IntersectionObserver((entries) => {
-    // Если линия появилась внизу экрана - грузим еще
-    if (entries[0].isIntersecting && hasMore && !isLoading) {
-        loadMoreVideos();
-    }
-}, { rootMargin: '200px' }); // Начинать грузить за 200px до конца
+const lazyLoadObserver = new IntersectionObserver((e) => {
+    if (e[0].isIntersecting) loadMoreVideos();
+}, { rootMargin: '200px' });
 
 function updateLoadingTrigger() {
-    // Перемещаем триггер в конец контейнера
     container.appendChild(loadingTrigger);
     lazyLoadObserver.disconnect();
     lazyLoadObserver.observe(loadingTrigger);
 }
 
 // ==========================================
-// 7. UI ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// 7. UI-ХЕЛПЕРЫ
 // ==========================================
 function showLoader(show) {
-    // Ищем существующий лоадер
     let loader = document.getElementById('batch-loader');
-    
-    // Если нужно показать, но его нет - создаем
     if (show && !loader) {
         loader = document.createElement('div');
         loader.id = 'batch-loader';
@@ -204,29 +225,31 @@ function showLoader(show) {
         loader.innerHTML = '<span class="blink">Loading...</span>';
         container.appendChild(loader);
     }
-    
-    // Если нужно скрыть - удаляем
-    if (!show && loader) {
-        loader.remove();
-    }
+    if (!show && loader) loader.remove();
 }
 
 function showError(msg) {
-    const errDiv = document.createElement('div');
-    errDiv.className = 'loading-state';
-    errDiv.style.color = '#ff4444';
-    errDiv.innerHTML = `
+    container.innerHTML = `
+    <div class="loading-state" style="color: #ff4444;">
         <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
         <div>SYSTEM FAILURE</div>
         <div style="font-size: 1rem; opacity: 0.7; margin-top: 5px;">${msg}</div>
-        <div style="margin-top: 20px; font-size: 0.8rem; cursor: pointer; text-decoration: underline;" onclick="location.reload()">[REBOOT_SYSTEM]</div>
-    `;
-    // Очищаем контейнер и показываем ошибку
-    container.innerHTML = '';
-    container.appendChild(errDiv);
+    </div>`;
+}
+
+function showEndOfFeed() {
+    const endMsg = document.createElement('div');
+    endMsg.className = 'loading-state small';
+    endMsg.innerText = '// END_OF_MEMORY_DUMP //';
+    endMsg.style.opacity = '0.5';
+    container.appendChild(endMsg);
 }
 
 // ==========================================
 // 8. ЗАПУСК
 // ==========================================
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchFeed(tab.dataset.feed));
+});
+
 loadMoreVideos();
