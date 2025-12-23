@@ -51,52 +51,166 @@ if (tg) {
     tg.ready();
 }
 
-// === ФУНКЦИЯ ДЛЯ УВЕДОМЛЕНИЙ НА САЙТЕ ===
-function showCustomNotification(message, isError = false) {
+// === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
+
+/**
+ * Показывает кастомное уведомление вверху экрана.
+ * @param {string} message - Текст сообщения.
+ * @param {object} options - Опции: isError (boolean) и showConfetti (boolean).
+ */
+function showCustomNotification(message, options = {}) {
+    const { isError = false, showConfetti = false } = options;
+
     if (document.querySelector('.custom-toast-notification')) return;
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-    toast.textContent = message;
+
+    // ЗАМЕНИ НА ССЫЛКУ НА АВАТАРКУ БОТА
+    const avatarUrl = 'https://i.imgur.com/Affcsi4.png';
+
+    toast.innerHTML = `
+        <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
+        <span class="toast-message">${message}</span>
+    `;
+
     if (isError) {
-        toast.style.backgroundColor = '#d9534f';
+        toast.classList.add('error');
     }
+
     document.body.appendChild(toast);
 
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 10);
+    // Показываем уведомление
+    setTimeout(() => toast.classList.add('show'), 10);
 
+    // Запускаем конфетти, если нужно
+    if (showConfetti && !isError) {
+        triggerConfetti();
+    }
+
+    // Скрываем и удаляем уведомление
     setTimeout(() => {
         toast.classList.remove('show');
         toast.addEventListener('transitionend', () => toast.remove());
-    }, 3000);
+    }, 3500);
 }
 
-// === СТИЛИ ДЛЯ УВЕДОМЛЕНИЙ ===
-function injectNotificationStyles() {
+
+/**
+ * Создает эффект конфетти внизу экрана.
+ */
+function triggerConfetti() {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'confetti-canvas';
+    document.body.appendChild(canvas);
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const confettiCount = 100;
+    const confetti = [];
+    const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
+
+    for (let i = 0; i < confettiCount; i++) {
+        confetti.push({
+            x: canvas.width / 2,
+            y: canvas.height, // Начинаем снизу
+            r: Math.random() * 5 + 2, // Размер
+            d: Math.random() * confettiCount, // Плотность/дальность
+            color: colors[Math.floor(Math.random() * colors.length)],
+            tilt: Math.floor(Math.random() * 10) - 10,
+            tiltAngle: 0,
+            tiltAngleIncrement: Math.random() * 0.07 + 0.05,
+            angle: Math.random() * Math.PI * 2, // Случайный угол разлета
+            speed: Math.random() * 6 + 4 // Скорость
+        });
+    }
+
+    let frame = 0;
+    const gravity = 0.2;
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < confetti.length; i++) {
+            const c = confetti[i];
+            ctx.beginPath();
+            ctx.lineWidth = c.r / 2;
+            ctx.strokeStyle = c.color;
+            ctx.moveTo(c.x + c.tilt, c.y);
+            ctx.lineTo(c.x, c.y + c.tilt + c.r / 2);
+            ctx.stroke();
+
+            // Обновляем позицию
+            c.tiltAngle += c.tiltAngleIncrement;
+            c.y -= c.speed; // Движение вверх
+            c.speed -= gravity; // Гравитация тянет вниз
+            c.tilt = Math.sin(c.tiltAngle) * 15;
+            c.x += Math.sin(frame / 10 + i) * 2; // Легкое боковое смещение
+        }
+        
+        if (frame < 120) {
+           requestAnimationFrame(draw);
+           frame++;
+        } else {
+           canvas.remove();
+        }
+    }
+    draw();
+}
+
+/**
+ * Внедряет все необходимые стили для уведомлений и конфетти.
+ */
+function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
         .custom-toast-notification {
             position: fixed;
-            bottom: 80px;
+            top: 15px;
             left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background-color: #2c2c2e;
+            transform: translateX(-50%) translateY(-150%);
+            background-color: rgba(30, 30, 35, 0.85);
+            backdrop-filter: blur(10px);
             color: #fff;
-            padding: 12px 20px;
-            border-radius: 25px;
+            padding: 10px 20px 10px 15px;
+            border-radius: 16px;
             font-family: "Manrope", sans-serif;
             font-size: 0.9rem;
             z-index: 10000;
             opacity: 0;
-            transition: transform 0.4s ease, opacity 0.4s ease;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            pointer-events: none;
+            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         .custom-toast-notification.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
+        }
+        .custom-toast-notification.error {
+            background-color: rgba(217, 83, 79, 0.85);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        .toast-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+        }
+        .toast-message {
+            font-weight: 500;
+        }
+        .confetti-canvas {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
         }
     `;
     document.head.appendChild(style);
@@ -111,7 +225,7 @@ let currentTab = 'foryou';
 let currentActiveAuthor = null;
 let allVideos = [];
 
-// DOM Элементы
+// === DOM Элементы ===
 const feedContainer = document.getElementById('feed');
 const tabForYou = document.getElementById('tab-foryou');
 const tabFollowing = document.getElementById('tab-following');
@@ -372,7 +486,7 @@ if (sugBtn) {
         const url = sugUrl.value.trim();
         const author = sugAuthor.value.trim();
         const desc = sugDesc.value.trim();
-        if (!url) { showCustomNotification('Вставьте ссылку!', true); return; }
+        if (!url) { showCustomNotification('Вставьте ссылку!', { isError: true }); return; }
         const originalText = sugBtn.innerText;
         sugBtn.innerText = '...';
         sugBtn.disabled = true;
@@ -381,18 +495,22 @@ if (sugBtn) {
             if (res.ok) {
                 sugBtn.innerText = 'Отправлено!';
                 sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
-                showCustomNotification('Спасибо за предложенное видео!');
+                showCustomNotification('Спасибо за предложенное видео!', { showConfetti: true });
                 setTimeout(() => { suggestForm.style.display = 'none'; sugBtn.innerText = originalText; sugBtn.disabled = false; }, 1000);
             } else if (res.status === 429) {
-                showCustomNotification('Слишком часто! Подождите минуту.', true);
+                showCustomNotification('Слишком часто! Подождите минуту.', { isError: true });
                 sugBtn.innerText = originalText;
                 sugBtn.disabled = false;
             } else {
-                showCustomNotification('Ошибка API.', true);
+                showCustomNotification('Ошибка API.', { isError: true });
                 sugBtn.innerText = originalText;
                 sugBtn.disabled = false;
             }
-        } catch (e) { showCustomNotification('Ошибка сети.', true); sugBtn.innerText = originalText; sugBtn.disabled = false; }
+        } catch (e) {
+            showCustomNotification('Ошибка сети.', { isError: true });
+            sugBtn.innerText = originalText;
+            sugBtn.disabled = false;
+        }
     });
 }
 if (uiShareBtn) {
@@ -403,9 +521,9 @@ if (uiShareBtn) {
 
         if (!tg?.initDataUnsafe?.user) {
             navigator.clipboard.writeText(data.videoUrl).then(() => {
-                showCustomNotification('Ссылка на видео скопирована!');
+                showCustomNotification('Ссылка на видео скопирована!', { showConfetti: true });
             }).catch(() => {
-                showCustomNotification('Не удалось скопировать ссылку.', true);
+                showCustomNotification('Не удалось скопировать ссылку.', { isError: true });
             });
             return;
         }
@@ -422,19 +540,19 @@ if (uiShareBtn) {
                 })
             });
             if (res.ok) {
-                showCustomNotification('Видео отправлено вам в личные сообщения!');
+                showCustomNotification('Видео отправлено в личные сообщения!', { showConfetti: true });
             } else {
-                showCustomNotification('Ошибка отправки.', true);
+                showCustomNotification('Ошибка отправки.', { isError: true });
             }
         } catch (e) {
-            showCustomNotification('Ошибка сети.', true);
+            showCustomNotification('Ошибка сети.', { isError: true });
         }
     });
 }
 
 // === INIT ===
 window.addEventListener('load', async () => {
-    injectNotificationStyles();
+    injectNewStyles();
     if (uiVolRange) uiVolRange.value = globalVolume;
     await loadVideosOnce(); 
     await syncSubs();
