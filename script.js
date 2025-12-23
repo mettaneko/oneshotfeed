@@ -1,5 +1,5 @@
 // === KONFIG ===
-const API_BASE = 'https://niko-feed.vercel.app'; 
+const API_BASE = 'https://feed.mettaneko.ru/'; 
 
 // === 0. TELEGRAM WEB APP ===
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;

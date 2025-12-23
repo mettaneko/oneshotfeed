@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     const adminIds = (process.env.ADMIN_ID || '').split(',');
     const isAdmin = (id) => adminIds.includes(id.toString());
     
-    const webAppUrl = 'https://mettaneko.github.io/oneshotfeed/';
+    const webAppUrl = 'https://feed.mettaneko.ru';
     const DB_URL = process.env.KV_REST_API_URL;
     const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
