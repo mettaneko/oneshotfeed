@@ -1,42 +1,32 @@
 export default async function handler(req, res) {
-  // CORS заголовки (на всякий случай)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  
-  if (req.method === 'OPTIONS') return res.status(200).end();
-
-  const DB_URL = process.env.KV_REST_API_URL;
-  const DB_TOKEN = process.env.KV_REST_API_TOKEN;
-
-  if (!DB_URL) return res.status(500).json({ error: 'No DB config' });
-
-  try {
-    // Параллельный запрос статуса и видео
-    const [maintRes, feedRes] = await Promise.all([
-        fetch(`${DB_URL}/get/maintenance_mode`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } }),
-        fetch(`${DB_URL}/lrange/feed_videos/0/-1`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } })
-    ]);
-
-    const maintData = await maintRes.json();
-    const feedData = await feedRes.json();
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
     
-    // Определяем режим
-    const isMaintenance = maintData.result === 'true';
+    const DB_URL = process.env.KV_REST_API_URL;
+    const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
-    // Парсим видео (новые сверху)
-    const videos = (feedData.result || [])
-      .map(item => { try { return JSON.parse(item); } catch { return null; } })
-      .filter(Boolean)
-      .reverse();
+    try {
+        const response = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        });
+        const data = await response.json();
 
-    // Отдаем всё вместе. Фронтенд сам решит, показывать или нет.
-    res.status(200).json({
-        maintenance: isMaintenance,
-        result: videos
-    });
+        // Превращаем строки из Redis в объекты и переворачиваем (новые сверху)
+        const videos = (data.result || [])
+            .map(str => JSON.parse(str))
+            .reverse();
 
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+        // Получаем статус техработ (если есть)
+        const maintRes = await fetch(`${DB_URL}/get/maintenance_mode`, {
+            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        });
+        const maintData = await maintRes.json();
+
+        res.status(200).json({
+            videos: videos,
+            maintenance: maintData.result === 'true'
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 }
