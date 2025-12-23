@@ -1,6 +1,11 @@
 import { createClient } from '@vercel/kv';
 import crypto from 'crypto';
 
+const kv = createClient({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
+
 function validateTelegramAuth(initData, botToken) {
     if (!initData) return null;
     try {
@@ -14,7 +19,8 @@ function validateTelegramAuth(initData, botToken) {
         const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
         const computedHash = crypto.createHmac('sha256', secretKey).update(dataCheckString).digest('hex');
         if (computedHash === hash) return JSON.parse(params.get('user'));
-    } catch (e) { return null; }
+    } catch (e) { console.error('Auth validation error:', e); return null; }
+    return null;
 }
 
 export default async function handler(req, res) {
@@ -28,11 +34,6 @@ export default async function handler(req, res) {
     const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
-    const kv = createClient({
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-    });
-
     try {
         const { exclude = [] } = req.body;
         const userSubsKey = `subs:${user.id}`;
@@ -40,10 +41,11 @@ export default async function handler(req, res) {
         if (!subscribedAuthors || subscribedAuthors.length === 0) return res.status(200).json([]);
 
         const allVideoStrings = await kv.lrange('feed_videos', 0, -1);
+        const allVideoObjects = allVideoStrings.map(str => JSON.parse(str));
         
-        const availableVideos = allVideoStrings
-            .map(str => { try { return JSON.parse(str); } catch { return null; } })
-            .filter(video => video && video.id && subscribedAuthors.includes(video.author) && !exclude.includes(video.id));
+        const availableVideos = allVideoObjects.filter(video => 
+            video && video.id && subscribedAuthors.includes(video.author) && !exclude.includes(video.id)
+        );
         
         const selectedVideos = [];
         const count = Math.min(10, availableVideos.length);
@@ -55,9 +57,8 @@ export default async function handler(req, res) {
         }
 
         res.status(200).json(selectedVideos);
-
     } catch (e) {
-        console.error(`Get Subs Error:`, e);
+        console.error('Get Subs Error:', e);
         res.status(500).json([]);
     }
 }

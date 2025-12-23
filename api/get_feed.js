@@ -1,4 +1,10 @@
 import { createClient } from '@vercel/kv';
+import { v4 as uuidv4 } from 'uuid'; // Хотя здесь не используется, оставим для унификации
+
+const kv = createClient({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -7,18 +13,15 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    const kv = createClient({
-        url: process.env.KV_REST_API_URL,
-        token: process.env.KV_REST_API_TOKEN,
-    });
-
     try {
         const { exclude = [] } = req.body;
+        // KV возвращает строки, их нужно парсить
         const allVideoStrings = await kv.lrange('feed_videos', 0, -1);
-        
-        const availableVideos = allVideoStrings
-            .map(str => { try { return JSON.parse(str); } catch { return null; } })
-            .filter(video => video && video.id && !exclude.includes(video.id));
+        const allVideoObjects = allVideoStrings.map(str => JSON.parse(str));
+
+        const availableVideos = allVideoObjects.filter(video => 
+            video && video.id && !exclude.includes(video.id)
+        );
 
         const selectedVideos = [];
         const count = Math.min(10, availableVideos.length);
@@ -30,9 +33,8 @@ export default async function handler(req, res) {
         }
         
         res.status(200).json(selectedVideos);
-
     } catch (e) {
-        console.error(`Get Feed Error:`, e);
+        console.error('Get Feed Error:', e);
         res.status(500).json([]);
     }
 }
