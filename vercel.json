@@ -1,23 +1,12 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "/api/**/*.js",
-      "use": "@vercel/node"
+      "source": "/",
+      "destination": "/index.html"
     },
     {
-      "src": "/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/maintenance",
+      "destination": "/maintenance.html"
     }
   ]
 }
