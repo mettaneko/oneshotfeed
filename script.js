@@ -21,9 +21,8 @@ let subscribedAuthors = [];
 let hasInteracted = false;
 let globalVolume = parseFloat(localStorage.getItem('niko_volume') || '1.0');
 
-// ПЛЕЙЛИСТ
-let currentPlaylist = [];
-let currentPlaylistIndex = 0;
+// Бесконечная лента
+let shownVideoIds = new Set();
 let isLoading = false;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
@@ -53,90 +52,65 @@ if (!isTelegramUser && document.getElementById('disable-redirect-btn')) {
     });
 }
 
-// === 2. ЗАГРУЗКА (Раздельная логика) ===
-async function loadPlaylist() {
+// === 2. ЗАГРУЗКА (Бесконечная лента) ===
+async function loadMoreVideos(isNewTab = false) {
     if (isLoading) return;
     isLoading = true;
-    
-    feedContainer.innerHTML = '<p style="color:white;text-align:center;margin-top:40vh;font-family:sans-serif;">🔀 Перемешиваю ленту...</p>';
-    currentPlaylist = [];
-    currentPlaylistIndex = 0;
+
+    if (isNewTab) {
+        shownVideoIds.clear();
+        feedContainer.innerHTML = '<p style="color:white;text-align:center;margin-top:40vh;font-family:sans-serif;">🔍 Ищу видео...</p>';
+    }
 
     try {
         const endpoint = currentTab === 'foryou' ? '/api/get_feed' : '/api/get_subs';
         const url = `${API_BASE}${endpoint}`;
         
-        const res = await fetch(url, { headers: { 'X-Telegram-Auth': tg?.initData || '' } });
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Telegram-Auth': tg?.initData || ''
+            },
+            body: JSON.stringify({ exclude: Array.from(shownVideoIds) })
+        });
         
-        if (res.status === 401) {
-            showLoginMessage();
-            isLoading = false;
-            return;
-        }
+        if (res.status === 401) { showLoginMessage(); isLoading = false; return; }
         if (!res.ok) throw new Error(`Network error ${res.status}`);
 
-        currentPlaylist = await res.json();
+        const newVideos = await res.json();
         
-        if (currentPlaylist.length === 0) {
-            showEmptyMessage(currentTab);
+        if (isNewTab) feedContainer.innerHTML = '';
+        
+        if (newVideos.length === 0) {
+            if (feedContainer.children.length === 0) showEmptyMessage(currentTab);
+            else console.log("✅ Больше нет новых видео.");
             isLoading = false;
             return;
         }
 
-        feedContainer.innerHTML = '';
-        addVideosToDom(BATCH_SIZE);
+        newVideos.forEach(videoData => {
+            if (videoData && videoData.id && !shownVideoIds.has(videoData.id)) {
+                shownVideoIds.add(videoData.id);
+                const slide = createSlide(videoData);
+                feedContainer.appendChild(slide);
+                observer.observe(slide);
+            }
+        });
 
     } catch (e) {
-        console.error("Failed to fetch playlist:", e);
-        showErrorMessage();
+        console.error("Failed to fetch videos:", e);
+        if (isNewTab) showErrorMessage();
     } finally {
         isLoading = false;
     }
 }
 
-function addVideosToDom(count) {
-    if (currentPlaylist.length === 0 && feedContainer.children.length === 0) {
-        showEmptyMessage(currentTab);
-        return;
-    }
-
-    const chunk = currentPlaylist.slice(currentPlaylistIndex, currentPlaylistIndex + count);
-    currentPlaylistIndex += count;
-
-    if (chunk.length === 0 && document.querySelector('.video-slide')) {
-        console.log("✅ Плейлист закончился. Чтобы посмотреть заново, переключите вкладку.");
-        return;
-    }
-
-    chunk.forEach(videoData => {
-        const slide = createSlide(videoData);
-        feedContainer.appendChild(slide);
-        observer.observe(slide);
-    });
-
-    const allSlides = document.querySelectorAll('.video-slide');
-    if (allSlides.length > 15) {
-        for (let i = 0; i < 5; i++) {
-            if (allSlides[i]) {
-                observer.unobserve(allSlides[i]);
-                allSlides[i].remove();
-            }
-        }
-    }
-}
 
 // === 3. ПОДПИСКИ ===
 async function syncSubs() {
     const local = JSON.parse(localStorage.getItem('subscribedAuthors'));
     if (local) subscribedAuthors = local;
-    if (tg?.initDataUnsafe?.user) {
-        try {
-            // Используем старый эндпоинт /api/subscribe для получения подписок, если он это умеет.
-            // Если нет, нужно будет создать /api/get_subs, который просто возвращает список.
-            // В данном коде оставляю как было, предполагая, что эндпоинт для синхронизации существует.
-            // Если нет, этот fetch упадет, но данные останутся из localStorage.
-        } catch (e) {}
-    }
 }
 
 // === 4. СЛАЙДЫ ===
@@ -168,6 +142,7 @@ function createSlide(data) {
     bg.referrerPolicy = "no-referrer";
 
     const setStatusColor = (status) => {
+        if (!bar) return;
         bar.classList.remove('error-state', 'fatal-error');
         if (status === 'error') bar.classList.add('error-state');
         else if (status === 'fatal') bar.classList.add('fatal-error');
@@ -274,16 +249,18 @@ const observer = new IntersectionObserver((entries) => {
             if (hasInteracted) { vid.volume=globalVolume; vid.muted=(globalVolume===0); } else vid.muted=true;
             vid.play().then(()=>bg.play()).catch(()=>{ vid.muted=true; vid.play(); });
             const allSlides = Array.from(document.querySelectorAll('.video-slide'));
-            if (allSlides.length - allSlides.indexOf(slide) < 3) addVideosToDom(BATCH_SIZE);
+            if (allSlides.length - allSlides.indexOf(slide) < 3) {
+                loadMoreVideos(false);
+            }
         } else { slide.classList.remove('active-slide'); vid.pause(); bg.pause(); }
     });
 }, { threshold: 0.6 });
 
 // === 6. UI & LISTENERS ===
-function updateSubBtnState() { if (!currentActiveAuthor) return; uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor)); }
+function updateSubBtnState() { if (!currentActiveAuthor || !uiSubBtn) return; uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor)); }
 function updateGlobalUI(data) { if (uiAuthor) uiAuthor.innerText = data.author ? `@${data.author}` : '@unknown'; if (uiDesc) uiDesc.innerText = data.desc || ''; currentActiveAuthor = data.author; updateSubBtnState(); }
 function unlockAudioContext(e) { if (e) e.stopPropagation(); if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); const overlay = document.getElementById('audio-unlock-overlay'); if (overlay) { overlay.classList.add('hidden'); setTimeout(() => overlay.remove(), 500); } hasInteracted = true; const v = document.querySelector('.active-slide .video-player'); if (v) { v.muted = false; v.volume = globalVolume; } }
-function updateInd(tab) { if (!tab) return; indicator.style.width = `${tab.offsetWidth}px`; indicator.style.transform = `translateX(${tab.offsetLeft}px)`; }
+function updateInd(tab) { if (!tab || !indicator) return; indicator.style.width = `${tab.offsetWidth}px`; indicator.style.transform = `translateX(${tab.offsetLeft}px)`; }
 function showLoginMessage() { feedContainer.innerHTML = '<p style="color:white;text-align:center;margin-top:40vh;font-family:sans-serif;">Эта лента доступна только в Telegram</p>'; }
 function showEmptyMessage(type) { const text = type === 'foryou' ? 'В этой ленте пока нет видео' : 'У вас нет подписок'; feedContainer.innerHTML = `<p style="color:white;text-align:center;margin-top:40vh;font-family:sans-serif;">${text}</p>`; }
 function showErrorMessage() { feedContainer.innerHTML = '<p style="color:white;text-align:center;margin-top:40vh;font-family:sans-serif;">❌ Ошибка загрузки</p>'; }
@@ -291,8 +268,8 @@ function showErrorMessage() { feedContainer.innerHTML = '<p style="color:white;t
 const overlayEl = document.getElementById('audio-unlock-overlay');
 if (overlayEl) overlayEl.addEventListener('click', unlockAudioContext);
 
-tabForYou.addEventListener('click', () => { if (currentTab === 'foryou') return; currentTab = 'foryou'; tabForYou.classList.add('active'); tabFollowing.classList.remove('active'); updateInd(tabForYou); loadPlaylist(); });
-tabFollowing.addEventListener('click', () => { if (currentTab === 'following') return; if (!isTelegramUser && subscribedAuthors.length === 0) { alert('Подписки доступны только в Telegram'); return; } currentTab = 'following'; tabFollowing.classList.add('active'); tabForYou.classList.remove('active'); updateInd(tabFollowing); loadPlaylist(); });
+tabForYou.addEventListener('click', () => { if (currentTab === 'foryou' || isLoading) return; currentTab = 'foryou'; tabForYou.classList.add('active'); tabFollowing.classList.remove('active'); updateInd(tabForYou); loadMoreVideos(true); });
+tabFollowing.addEventListener('click', () => { if (currentTab === 'following' || isLoading) return; if (!isTelegramUser && subscribedAuthors.length === 0) { tg?.showAlert('Подписки доступны только в Telegram') || alert('Подписки доступны только в Telegram'); return; } currentTab = 'following'; tabFollowing.classList.add('active'); tabForYou.classList.remove('active'); updateInd(tabFollowing); loadMoreVideos(true); });
 
 uiSubBtn.addEventListener('click', async (e) => { e.stopPropagation(); if (!currentActiveAuthor) return; const isSub = subscribedAuthors.includes(currentActiveAuthor); const action = isSub ? 'remove' : 'add'; if (action === 'add') subscribedAuthors.push(currentActiveAuthor); else subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor); updateSubBtnState(); localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); if (tg?.initDataUnsafe?.user) fetch(`${API_BASE}/api/subscribe`, { method: 'POST', body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }).catch(()=>{}); });
 uiVolBtn.addEventListener('click', (e) => { e.stopPropagation(); uiVolCont.classList.toggle('active'); });
@@ -306,5 +283,5 @@ window.addEventListener('load', async () => {
     if(uiVolRange) uiVolRange.value = globalVolume;
     await syncSubs(); 
     updateInd(tabForYou);
-    await loadPlaylist();
+    await loadMoreVideos(true);
 });

@@ -17,29 +17,16 @@ function validateTelegramAuth(initData, botToken) {
     } catch (e) { return null; }
 }
 
-function shuffle(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
-
 export default async function handler(req, res) {
-    // === ПРИВАТНЫЙ ЭНДПОИНТ, АВТОРИЗАЦИЯ ОБЯЗАТЕЛЬНА ===
-
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Auth');
     if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-    // 1. Валидация
     const initData = req.headers['x-telegram-auth'];
     const user = validateTelegramAuth(initData, process.env.BOT_TOKEN);
-    if (!user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const kv = createClient({
         url: process.env.KV_REST_API_URL,
@@ -47,24 +34,27 @@ export default async function handler(req, res) {
     });
 
     try {
-        // 2. Получаем подписки пользователя
+        const { exclude = [] } = req.body;
         const userSubsKey = `subs:${user.id}`;
         const subscribedAuthors = await kv.smembers(userSubsKey);
-        if (!subscribedAuthors || subscribedAuthors.length === 0) {
-            return res.status(200).json([]);
+        if (!subscribedAuthors || subscribedAuthors.length === 0) return res.status(200).json([]);
+
+        const allVideoStrings = await kv.lrange('feed_videos', 0, -1);
+        
+        const availableVideos = allVideoStrings
+            .map(str => JSON.parse(str))
+            .filter(video => video && video.id && subscribedAuthors.includes(video.author) && !exclude.includes(video.id));
+        
+        const selectedVideos = [];
+        const count = Math.min(10, availableVideos.length);
+
+        for (let i = 0; i < count; i++) {
+            const randomIndex = Math.floor(Math.random() * availableVideos.length);
+            selectedVideos.push(availableVideos[randomIndex]);
+            availableVideos.splice(randomIndex, 1);
         }
 
-        // 3. Получаем видео и фильтруем
-        const allVideoStrings = await kv.lrange('feed_videos', 0, 499);
-        if (!allVideoStrings) return res.status(200).json([]);
-        
-        const videosToShuffle = allVideoStrings
-            .map(str => JSON.parse(str))
-            .filter(video => subscribedAuthors.includes(video.author));
-
-        // 4. Перемешиваем и отдаем
-        const shuffledPlaylist = shuffle(videosToShuffle);
-        res.status(200).json(shuffledPlaylist);
+        res.status(200).json(selectedVideos);
 
     } catch (e) {
         console.error(`Get Subs Error:`, e);

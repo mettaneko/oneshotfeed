@@ -1,22 +1,11 @@
 import { createClient } from '@vercel/kv';
 
-// Функция для перемешивания массива (Фишера-Йетса)
-function shuffle(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
-
 export default async function handler(req, res) {
-    // === ПУБЛИЧНЫЙ ЭНДПОИНТ, БЕЗ АВТОРИЗАЦИИ ===
-
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
     const kv = createClient({
         url: process.env.KV_REST_API_URL,
@@ -24,19 +13,23 @@ export default async function handler(req, res) {
     });
 
     try {
-        // 1. Получаем последние 500 видео из базы
-        const allVideoStrings = await kv.lrange('feed_videos', 0, 499);
-        if (!allVideoStrings || allVideoStrings.length === 0) {
-            return res.status(200).json([]);
+        const { exclude = [] } = req.body;
+        const allVideoStrings = await kv.lrange('feed_videos', 0, -1); // Берем все
+        
+        const availableVideos = allVideoStrings
+            .map(str => JSON.parse(str))
+            .filter(video => video && video.id && !exclude.includes(video.id));
+
+        const selectedVideos = [];
+        const count = Math.min(10, availableVideos.length);
+
+        for (let i = 0; i < count; i++) {
+            const randomIndex = Math.floor(Math.random() * availableVideos.length);
+            selectedVideos.push(availableVideos[randomIndex]);
+            availableVideos.splice(randomIndex, 1); // Удаляем, чтобы не выбрать снова
         }
         
-        const videosToShuffle = allVideoStrings
-            .map(str => { try { return JSON.parse(str); } catch { return null; } })
-            .filter(Boolean);
-
-        // 2. Перемешиваем и отдаем
-        const shuffledPlaylist = shuffle(videosToShuffle);
-        res.status(200).json(shuffledPlaylist);
+        res.status(200).json(selectedVideos);
 
     } catch (e) {
         console.error(`Get Feed Error:`, e);
