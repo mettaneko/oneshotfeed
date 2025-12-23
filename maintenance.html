@@ -3,88 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>System Maintenance</title>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-
-    <link rel="stylesheet" href="css/main.css">
-<style>
-    /* Локальные фиксы для карточки */
-    .card {
-        background: rgba(169, 149, 255, 0.03);
-        border: 1px solid rgba(169, 149, 255, 0.2);
-        padding: 40px 20px;
-        border-radius: 12px;
-        max-width: 90%; /* Чтобы не уходило за экран на мелких мобилках */
-        width: 350px;
-        box-sizing: border-box; /* Важно, чтобы паддинги не расширяли блок */
-    }
-    input {
-        width: 100%;
-        box-sizing: border-box; /* Код больше не вылезет за границы */
-        background: rgba(255,255,255,0.05);
-        border: 1px solid rgba(255,255,255,0.1);
-        color: var(--accent-color);
-        padding: 12px;
-        font-family: 'JetBrains Mono', monospace;
-        text-align: center;
-        border-radius: 8px;
-        outline: none;
-    }
-</style>
+    <title>World Machine - Sleep</title>
+    <!-- Пиксельный шрифт -->
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #0d0d12;
+            color: #bfa5d6; /* Цвет глаз Нико / фиолетовый оттенок */
+            font-family: 'VT323', monospace;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: breathe 4s infinite ease-in-out;
+            text-shadow: 0 0 20px rgba(252, 252, 48, 0.4);
+        }
+        h1 { font-size: 32px; margin: 0; text-transform: uppercase; letter-spacing: 2px; }
+        .status { margin-top: 10px; color: #6a6a80; font-size: 18px; }
+        
+        @keyframes breathe {
+            0%, 100% { opacity: 0.3; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.05); text-shadow: 0 0 30px #fcfc30; }
+        }
+    </style>
 </head>
 <body>
-
-    <div class="card">
-        <div class="status-code">[ System.status: Maintenance ]</div>
-        <h1>Мировая Машина обновляется</h1>
-        <p>Мы перенастраиваем фрагменты реальности. <br> Скоро лента будет доступна.</p>
-
-        <div class="admin-input-wrapper">
-            <input type="password" id="admin-code" placeholder="Master Code" maxlength="10">
-            <div id="loader" class="loader"></div>
-            <div id="error" class="error-msg">INVALID_ACCESS_KEY</div>
-        </div>
-    </div>
-
+    <div class="icon">💡</div>
+    <h1>System Sleeping</h1>
+    <div class="status">> restoring_protocol...</div>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script>
-        const input = document.getElementById('admin-code');
-        const loader = document.getElementById('loader');
-        const error = document.getElementById('error');
-
-        input.addEventListener('input', async (e) => {
-            const val = e.target.value;
-            
-            // Если введено 6 или более символов (стандарт для TOTP или твоего кода)
-            if (val.length >= 6) {
-                input.disabled = true;
-                loader.style.display = 'block';
-                error.classList.remove('show');
-
-                try {
-                    const res = await fetch('/api/auth', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ code: val })
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        localStorage.setItem('admin_bypass_token', data.token);
-                        input.style.borderColor = '#4cd964';
-                        setTimeout(() => window.location.href = '/', 500);
-                    } else {
-                        throw new Error();
-                    }
-                } catch (e) {
-                    loader.style.display = 'none';
-                    input.disabled = false;
-                    input.value = '';
-                    input.focus();
-                    error.classList.add('show');
-                    setTimeout(() => error.classList.remove('show'), 2000);
-                }
-            }
-        });
+        // Сообщаем телеграму, что мы готовы, и красим шапку в черный
+        if(window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.ready();
+            window.Telegram.WebApp.setHeaderColor('#0d0d12');
+            window.Telegram.WebApp.expand();
+        }
     </script>
 </body>
 </html>

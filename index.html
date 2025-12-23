@@ -2,42 +2,35 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>World Machine Feed</title>
-    <link rel="stylesheet" href="css/main.css">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>OneShot Feed</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+    <!-- Фоновый шум/глитч (опционально) -->
+    <div class="scanlines"></div>
 
-    <div id="audio-unlock-overlay" class="overlay-screen">
-        <div class="maintenance-card" style="border: 1px solid var(--accent-color); padding: 40px; background: rgba(169, 149, 255, 0.03); text-align: center;">
-            <div class="system-status">[ СИСТЕМА ГОТОВА ]</div>
-            <p style="font-family: var(--font-mono); font-size: 0.8rem; opacity: 0.7;">Нажмите для синхронизации с Мировой Машиной</p>
+    <!-- Контейнер ленты -->
+    <div id="feed-container">
+        <!-- Сюда JS добавит видео -->
+        <div class="loading-state">
+            <div class="terminal-text">
+                LOADING_MEMORY_BANKS...<br>
+                <span class="blink">_</span>
+            </div>
         </div>
     </div>
 
-    <div class="tiktok-feed" id="feed">
-        </div>
-
-    <div class="feed-navigation">
-        <button class="nav-tab active" id="tab-foryou">ДЛЯ ВАС</button>
-        <button class="nav-tab" id="tab-following">ПОДПИСКИ</button>
-    </div>
-
-    <div class="liquid-controls-container">
-        <div class="video-info-capsule">
-            <div class="author-name" id="ui-author">@loading...</div>
-            <div class="video-desc" id="ui-desc">Инициализация фрагмента...</div>
-        </div>
-
-        <div class="glass-deck">
-            <button class="control-btn" id="ui-vol-btn"><i class="fas fa-volume-mute"></i></button>
-            <button class="control-btn" id="ui-share-btn"><i class="fas fa-paper-plane"></i></button>
-            <button class="control-btn" id="ui-suggest-btn"><i class="fas fa-plus"></i></button>
+    <!-- UI Overlay (поверх всего) -->
+    <div class="os-overlay">
+        <div class="top-bar">
+            <span>ENTITY: NIKO</span>
+            <span id="clock">00:00</span>
         </div>
     </div>
 
-    <script src="js/script.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

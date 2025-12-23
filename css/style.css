@@ -1,0 +1,113 @@
+:root {
+    --bg-color: #0d0d12;
+    --accent: #fcfc30; /* Желтый фосфор */
+    --text-main: #ffffff;
+    --text-dim: #bfa5d6;
+    --terminal-bg: rgba(20, 16, 30, 0.7);
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    font-family: 'VT323', monospace;
+    overflow: hidden; 
+    color: var(--text-main);
+}
+
+.scanlines {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+    background-size: 100% 4px;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.3;
+}
+
+/* Скролл контейнер */
+#feed-container {
+    height: 100vh;
+    height: 100dvh; /* Фикс для мобильных браузеров */
+    overflow-y: scroll;
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+    scrollbar-width: none; /* Скрыть скроллбар Firefox */
+}
+#feed-container::-webkit-scrollbar { display: none; } /* Скрыть скроллбар Chrome */
+
+/* Карточка видео */
+.video-card {
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    scroll-snap-align: start;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Информация о видео */
+.video-ui {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 20px 20px 80px 20px; /* Отступ снизу под кнопки Telegram */
+    background: linear-gradient(to top, rgba(13,13,18,0.95), transparent);
+    pointer-events: none;
+}
+
+.video-info {
+    pointer-events: auto;
+    text-shadow: 2px 2px 0px #000;
+}
+
+.author {
+    font-size: 26px;
+    color: var(--accent);
+    margin-bottom: 5px;
+}
+.author::before { content: '['; color: var(--text-dim); }
+.author::after { content: ']'; color: var(--text-dim); }
+
+.desc {
+    font-size: 20px;
+    line-height: 1.2;
+    opacity: 0.9;
+}
+
+/* Лоадер */
+.loading-state {
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 24px;
+    color: var(--accent);
+}
+.blink { animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Верхняя панель */
+.os-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%;
+    z-index: 50;
+    padding: 10px 15px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between;
+    font-size: 20px;
+    text-shadow: 1px 1px 2px black;
+    pointer-events: none;
+}
