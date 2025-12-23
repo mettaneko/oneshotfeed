@@ -7,17 +7,19 @@ let isLoading = false;
 let noMoreVideos = false;
 const feedContainer = document.querySelector('.tiktok-feed');
 const observerOptions = { root: null, rootMargin: '0px', threshold: 0.6 };
-
-// Данные авторизации из Telegram (будут пустыми, если открыто не в Telegram)
 const tgInitData = window.Telegram?.WebApp?.initData || '';
 
-// === 0. ПРОВЕРКА СТАТУСА (ТЕХ. РАБОТЫ) ===
+// === 0. ПРОВЕРКА СТАТУСА (ТЕХ. РАБОТЫ) - ИСПРАВЛЕНО ===
 async function checkMaintenance() {
     try {
-        const res = await fetch('/api/status'); // Относительный путь
+        // Добавляем случайный параметр, чтобы обойти кэш Vercel
+        const res = await fetch(`/api/status?t=${Date.now()}`); 
         const data = await res.json();
         if (data.maintenance) {
-            window.location.href = 'maintenance.html';
+            // Если включен режим тех. работ, перенаправляем
+            if (window.location.pathname !== '/maintenance.html' && window.location.pathname !== '/auth.html') {
+                window.location.href = 'maintenance.html';
+            }
             return true; 
         }
     } catch (e) {
@@ -31,14 +33,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isClosed = await checkMaintenance();
     if (isClosed) return;
 
-    await loadFeed(true); // Загружаем первую страницу
+    await loadFeed(true);
     
     feedContainer.addEventListener('scroll', handleScroll);
     document.getElementById('audio-unlock-overlay')?.addEventListener('click', unlockAudio);
     initTabs();
 });
 
-// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) ===
+// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) - ИСПРАВЛЕНО ===
 async function loadFeed(isNewFeed = false) {
     if (isLoading || (noMoreVideos && !isNewFeed)) return;
     isLoading = true;
@@ -56,15 +58,17 @@ async function loadFeed(isNewFeed = false) {
             ? `/api/get_feed?page=${currentPage}`
             : `/api/get_subs?page=${currentPage}`;
         
-        const res = await fetch(url, {
-            headers: { 'X-Telegram-Auth': tgInitData }
-        });
-
+        const res = await fetch(url, { headers: { 'X-Telegram-Auth': tgInitData } });
         if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
         
         const newVideos = await res.json();
 
-        if (!newVideos || newVideos.length === 0) {
+        // ПРОВЕРКА: Убеждаемся, что от API пришел именно массив
+        if (!Array.isArray(newVideos)) {
+            throw new TypeError('API не вернул массив видео. Ответ сервера: ' + JSON.stringify(newVideos));
+        }
+
+        if (newVideos.length === 0) {
             noMoreVideos = true;
             if (currentPage === 1) showEmptyMessage(currentFeed);
             return;
@@ -84,12 +88,12 @@ async function loadFeed(isNewFeed = false) {
 // === 3. РЕНДЕРИНГ ВИДЕО ===
 function renderVideos(videos) {
     videos.forEach(video => {
-        if (!video.videoUrl) return;
+        if (!video || !video.videoUrl) return; // Защита от пустых или битых объектов видео
 
         const slide = document.createElement('div');
         slide.className = 'video-slide';
         
-        // Экранируем кавычки, чтобы не сломать onclick
+        // Экранируем кавычки, чтобы не сломать атрибуты onclick
         const safeDesc = video.desc ? video.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
         const safeAuthor = video.author ? video.author.replace(/'/g, "\\'") : 'unknown';
 
@@ -106,9 +110,7 @@ function renderVideos(videos) {
                 <div class="video-info-capsule">
                     <div class="author-row">
                         <h3 class="author-name">@${safeAuthor}</h3>
-                        <button class="subscribe-btn" onclick="toggleSubscribe(this, '${safeAuthor}')">
-                            <i class="fas fa-plus"></i><i class="fas fa-check"></i>
-                        </button>
+                        <button class="subscribe-btn" onclick="toggleSubscribe(this, '${safeAuthor}')"><i class="fas fa-plus"></i><i class="fas fa-check"></i></button>
                     </div>
                     ${video.desc ? `<p class="video-desc">${video.desc}</p>` : ''}
                 </div>
@@ -204,7 +206,8 @@ const observer = new IntersectionObserver((entries) => {
 function setupProgressBar(slide, video) {
     const fill = slide.querySelector('.video-progress-fill');
     video.addEventListener('timeupdate', () => {
-        fill.style.height = `${(video.currentTime / video.duration) * 100}%`;
+        const percent = video.duration > 0 ? (video.currentTime / video.duration) * 100 : 0;
+        fill.style.height = `${percent}%`;
     });
 }
 
