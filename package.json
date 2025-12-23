@@ -1,6 +1,7 @@
 {
   "name": "oneshotfeed",
   "version": "1.0.0",
-  "scripts": {},
-  "dependencies": {}
+  "dependencies": {
+    "@vercel/kv": "^1.0.1"
+  }
 }
