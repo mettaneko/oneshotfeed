@@ -5,32 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>OneShot Feed</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Фоновый шум/глитч (опционально) -->
-    <div class="scanlines"></div>
-
     <!-- Контейнер ленты -->
     <div id="feed-container">
-        <!-- Сюда JS добавит видео -->
+        <!-- Начальный экран загрузки -->
         <div class="loading-state">
-            <div class="terminal-text">
-                LOADING_MEMORY_BANKS...<br>
-                <span class="blink">_</span>
-            </div>
+            <div>Connecting to World Machine...</div>
+            <div class="blink">_</div>
         </div>
     </div>
 
-    <!-- UI Overlay (поверх всего) -->
-    <div class="os-overlay">
-        <div class="top-bar">
-            <span>ENTITY: NIKO</span>
-            <span id="clock">00:00</span>
-        </div>
-    </div>
-
+    <!-- Скрипт ленты -->
     <script src="script.js"></script>
 </body>
 </html>

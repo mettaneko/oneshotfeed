@@ -1,42 +1,37 @@
+/* ==================================
+    ОСНОВА (из твоего style.css)
+   ================================== */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
 :root {
-    --bg-color: #0d0d12;
-    --accent: #fcfc30; /* Желтый фосфор */
-    --text-main: #ffffff;
-    --text-dim: #bfa5d6;
-    --terminal-bg: rgba(20, 16, 30, 0.7);
+    --text-color: rgb(226, 226, 226);
+    --background-color: rgb(20, 20, 25);
+    --accent-color: #fddb6d; /* Используем твой акцентный цвет */
+    --accent-color-dim: rgba(253, 219, 109, 0.4);
+    --font-sans: 'Manrope', sans-serif;
 }
 
 body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    font-family: var(--font-sans);
     margin: 0;
-    padding: 0;
-    background-color: var(--bg-color);
-    font-family: 'VT323', monospace;
-    overflow: hidden; 
-    color: var(--text-main);
+    overflow: hidden;
 }
 
-.scanlines {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
-    background-size: 100% 4px;
-    pointer-events: none;
-    z-index: 100;
-    opacity: 0.3;
-}
-
-/* Скролл контейнер */
+/* ==================================
+    ЛЕНТА (из твоего feed.css)
+   ================================== */
 #feed-container {
     height: 100vh;
-    height: 100dvh; /* Фикс для мобильных браузеров */
+    height: 100dvh;
     overflow-y: scroll;
     scroll-snap-type: y mandatory;
     scroll-behavior: smooth;
-    scrollbar-width: none; /* Скрыть скроллбар Firefox */
+    scrollbar-width: none;
 }
-#feed-container::-webkit-scrollbar { display: none; } /* Скрыть скроллбар Chrome */
+#feed-container::-webkit-scrollbar { display: none; }
 
-/* Карточка видео */
 .video-card {
     position: relative;
     width: 100%;
@@ -56,58 +51,90 @@ video {
     display: block;
 }
 
-/* Информация о видео */
+/* ==================================
+    UI ПОВЕРХ ВИДЕО (из твоего feed.css)
+   ================================== */
 .video-ui {
     position: absolute;
     bottom: 0;
     left: 0;
     width: 100%;
-    padding: 20px 20px 80px 20px; /* Отступ снизу под кнопки Telegram */
-    background: linear-gradient(to top, rgba(13,13,18,0.95), transparent);
-    pointer-events: none;
+    padding: 20px;
+    box-sizing: border-box;
+    z-index: 10;
+    
+    /* Градиент снизу, как у тебя */
+    background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0.8) 100%);
+    
+    /* Отступы для безопасной зоны на iPhone */
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
 }
 
 .video-info {
-    pointer-events: auto;
-    text-shadow: 2px 2px 0px #000;
+    position: relative;
+    max-width: 85%;
 }
 
 .author {
-    font-size: 26px;
-    color: var(--accent);
-    margin-bottom: 5px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-shadow: 0 1px 4px rgba(0,0,0,.5);
 }
-.author::before { content: '['; color: var(--text-dim); }
-.author::after { content: ']'; color: var(--text-dim); }
 
 .desc {
-    font-size: 20px;
-    line-height: 1.2;
+    margin-top: 5px;
+    font-size: 0.9rem;
+    font-weight: 500;
     opacity: 0.9;
+    line-height: 1.4;
+    text-shadow: 0 1px 4px rgba(0,0,0,.3);
+    
+    /* Ограничение на 3 строки */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-/* Лоадер */
+
+/* ==================================
+    СЛУЖЕБНЫЕ СТИЛИ (лоадеры)
+   ================================== */
 .loading-state {
     height: 100vh;
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    font-size: 24px;
-    color: var(--accent);
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--accent-color);
 }
-.blink { animation: blink 1s step-end infinite; }
-@keyframes blink { 50% { opacity: 0; } }
 
-/* Верхняя панель */
-.os-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%;
-    z-index: 50;
-    padding: 10px 15px;
-    box-sizing: border-box;
-    display: flex;
-    justify-content: space-between;
-    font-size: 20px;
-    text-shadow: 1px 1px 2px black;
-    pointer-events: none;
+.loading-state.small {
+    height: 80px;
+    font-size: 1rem;
+}
+
+.blink {
+    animation: blink 1.2s infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0.3; }
+}
+
+/* ==================================
+    АДАПТИВ (из твоего feed.css)
+   ================================== */
+@media (max-width: 400px) {
+    .author {
+        font-size: 1rem;
+    }
+    .desc {
+        font-size: 0.85rem;
+    }
 }

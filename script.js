@@ -11,8 +11,8 @@ tg.expand();
 try {
     const version = parseFloat(tg.version);
     if (version >= 6.1) {
-        tg.setHeaderColor('#0d0d12'); // Цвет фона OneShot
-        tg.setBackgroundColor('#0d0d12');
+        tg.setHeaderColor('#141419'); // Цвет фона из :root
+        tg.setBackgroundColor('#141419');
     } else {
         console.log('Telegram API version is too old for header color:', tg.version);
     }
@@ -62,17 +62,26 @@ async function loadMoreVideos() {
 
         // Если пришел пустой массив - значит видео кончились
         if (!newVideos || newVideos.length === 0) {
-            console.log("🏁 End of feed reached");
-            hasMore = false;
-            showLoader(false);
-            // Можно добавить сообщение "Конец связи"
-            const endMsg = document.createElement('div');
-            endMsg.className = 'loading-state small';
-            endMsg.innerText = '// END_OF_MEMORY_DUMP //';
-            endMsg.style.opacity = '0.5';
-            container.appendChild(endMsg);
+            if (currentPage === 0) {
+                // Если база пуста с самого начала
+                showError("MEMORY_BANKS_EMPTY. NO DATA.");
+            } else {
+                console.log("🏁 End of feed reached");
+                hasMore = false;
+                showLoader(false);
+                // Сообщение "Конец связи"
+                const endMsg = document.createElement('div');
+                endMsg.className = 'loading-state small';
+                endMsg.innerText = '// END_OF_MEMORY_DUMP //';
+                endMsg.style.opacity = '0.5';
+                container.appendChild(endMsg);
+            }
             return;
         }
+        
+        // Удаляем начальную заглушку, если она есть
+        const initialLoader = document.querySelector('.loading-state');
+        if (initialLoader) initialLoader.remove();
 
         // Рендерим видео
         newVideos.forEach(videoData => {
@@ -115,13 +124,13 @@ function createCard(data) {
         </video>
         <div class="video-ui">
             <div class="video-info">
-                <div class="author">${author}</div>
+                <div class="author">@${author}</div>
                 <div class="desc">${desc}</div>
             </div>
         </div>
     `;
 
-    // Обработка клика (Пауза / Плей / Звук)
+    // Обработка клика (Пауза / Плей)
     const vid = div.querySelector('video');
     div.addEventListener('click', () => {
         if (vid.paused) {
@@ -165,8 +174,6 @@ const videoObserver = new IntersectionObserver((entries) => {
 // Создаем невидимую линию в конце ленты
 const loadingTrigger = document.createElement('div');
 loadingTrigger.className = 'loading-trigger';
-loadingTrigger.style.height = '10px';
-loadingTrigger.style.background = 'transparent';
 
 const lazyLoadObserver = new IntersectionObserver((entries) => {
     // Если линия появилась внизу экрана - грузим еще
@@ -193,10 +200,8 @@ function showLoader(show) {
     if (show && !loader) {
         loader = document.createElement('div');
         loader.id = 'batch-loader';
-        loader.className = 'loading-state';
-        loader.style.height = '60px';
-        loader.style.fontSize = '18px';
-        loader.innerHTML = '<span class="blink">LOADING_DATA...</span>';
+        loader.className = 'loading-state small';
+        loader.innerHTML = '<span class="blink">Loading...</span>';
         container.appendChild(loader);
     }
     
@@ -210,12 +215,11 @@ function showError(msg) {
     const errDiv = document.createElement('div');
     errDiv.className = 'loading-state';
     errDiv.style.color = '#ff4444';
-    errDiv.style.flexDirection = 'column';
     errDiv.innerHTML = `
-        <div style="font-size: 40px; margin-bottom: 10px;">⚠️</div>
+        <div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div>
         <div>SYSTEM FAILURE</div>
-        <div style="font-size: 14px; opacity: 0.7; margin-top: 5px;">${msg}</div>
-        <div style="margin-top: 20px; font-size: 12px; cursor: pointer; text-decoration: underline;" onclick="location.reload()">[REBOOT_SYSTEM]</div>
+        <div style="font-size: 1rem; opacity: 0.7; margin-top: 5px;">${msg}</div>
+        <div style="margin-top: 20px; font-size: 0.8rem; cursor: pointer; text-decoration: underline;" onclick="location.reload()">[REBOOT_SYSTEM]</div>
     `;
     // Очищаем контейнер и показываем ошибку
     container.innerHTML = '';
@@ -223,22 +227,6 @@ function showError(msg) {
 }
 
 // ==========================================
-// 8. ЧАСЫ ONESHOT
+// 8. ЗАПУСК
 // ==========================================
-setInterval(() => {
-    const d = new Date();
-    const clockEl = document.getElementById('clock');
-    if (clockEl) {
-        clockEl.innerText = 
-            `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-    }
-}, 1000);
-
-// ==========================================
-// 9. ЗАПУСК
-// ==========================================
-// Удаляем начальную заглушку (если она была в HTML) и грузим первую партию
-const initialLoader = document.querySelector('.loading-state');
-if (initialLoader) initialLoader.remove();
-
 loadMoreVideos();
