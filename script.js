@@ -7,20 +7,23 @@ tg.expand();
 
 try {
     if (parseFloat(tg.version) >= 6.1) {
-        tg.setHeaderColor('#141419');
-        tg.setBackgroundColor('#141419');
+        tg.setHeaderColor('#0a0a0f');
+        tg.setBackgroundColor('#0a0a0f');
     }
-} catch (e) { console.error('Error setting TG colors:', e); }
+} catch (e) {
+    console.error('Error setting TG colors:', e);
+}
 
 // ==========================================
-// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И СОСТОЯНИЕ
+// 2. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 // ==========================================
 const container = document.getElementById('feed-container');
+const startOverlay = document.getElementById('start-overlay');
 const state = {
     currentPage: 0,
     isLoading: false,
     hasMore: true,
-    isMuted: true,
+    isMuted: true, // Всегда начинаем без звука
     activeFeed: 'foryou'
 };
 
@@ -34,25 +37,33 @@ async function loadMoreVideos() {
 
     try {
         const res = await fetch(`/api/get_feed?page=${state.currentPage}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
         const newVideos = await res.json();
-        
+
         if (newVideos.length === 0) {
             state.hasMore = false;
-            if (state.currentPage === 0) showError("Здесь пока пусто...");
-            else showEndOfFeed();
+            if (state.currentPage === 0) {
+                // Если база пуста, просто ничего не показываем
+                console.log("No videos found in the database.");
+            } else {
+                showEndOfFeed();
+            }
             return;
         }
-        
-        document.querySelector('.loading-state')?.remove();
-        newVideos.forEach(data => container.appendChild(createCard(data)));
-        videoObserver.observe(container.lastChild); // Следим только за последней добавленной карточкой
+
+        newVideos.forEach(data => {
+            const card = createCard(data);
+            container.appendChild(card);
+            videoObserver.observe(card);
+        });
 
         updateLoadingTrigger();
         state.currentPage++;
+
     } catch (e) {
-        console.error("Feed Error:", e);
-        showError(e.message);
+        showError(e.message); // Логгируем ошибку, но не показываем пользователю
     } finally {
         state.isLoading = false;
         showLoader(false);
@@ -60,7 +71,7 @@ async function loadMoreVideos() {
 }
 
 // ==========================================
-// 4. СОЗДАНИЕ HTML КАРТОЧКИ (НОВЫЙ ДИЗАЙН)
+// 4. СОЗДАНИЕ HTML КАРТОЧКИ
 // ==========================================
 function createCard(data) {
     const card = document.createElement('div');
@@ -68,9 +79,13 @@ function createCard(data) {
     card.dataset.videoId = data.id || 'unknown';
     card.dataset.videoUrl = data.videoUrl || data.url || '';
     card.dataset.author = data.author || 'Anon';
-
+    
+    // Устанавливаем постер для размытого фона
+    const coverUrl = data.cover ? `url(${data.cover})` : 'none';
+    
     card.innerHTML = `
-        <video loop playsinline muted poster="${data.cover || ''}" preload="metadata">
+        <div class="blurred-bg" style="background-image: ${coverUrl};"></div>
+        <video loop playsinline muted poster="" preload="metadata">
             <source src="${card.dataset.videoUrl}" type="video/mp4">
         </video>
         <div class="video-ui">
@@ -79,38 +94,21 @@ function createCard(data) {
                     <div class="author">${card.dataset.author}</div>
                     <div class="desc">${data.desc || 'on tiktok'}</div>
                 </div>
-                <div class="subscribe-btn">
-                    <i class="fa-solid fa-plus"></i>
-                </div>
+                <div class="subscribe-btn"><i class="fa-solid fa-plus"></i></div>
             </div>
             <div class="glass-panel actions-panel">
-                <div class="action-btn" id="sound-btn">
-                    <i class="fa-solid fa-volume-xmark"></i>
-                </div>
-                <div class="action-divider"></div>
-                <div class="action-btn" id="share-btn">
-                    <i class="fa-solid fa-share"></i>
-                </div>
-                <div class="action-divider"></div>
-                <div class="action-btn" id="suggest-btn">
-                    <i class="fa-solid fa-plus"></i>
-                </div>
+                <div class="action-btn" id="sound-btn"><i class="fa-solid fa-volume-xmark"></i></div>
+                <div class="action-btn" id="share-btn"><i class="fa-solid fa-share"></i></div>
+                <div class="action-btn" id="suggest-btn"><i class="fa-solid fa-plus"></i></div>
             </div>
         </div>
     `;
 
-    // Слушатели на кнопки
+    // Слушатели для кнопок
     card.querySelector('#sound-btn').addEventListener('click', handleSoundToggle);
     card.querySelector('#share-btn').addEventListener('click', handleShare);
     card.querySelector('#suggest-btn').addEventListener('click', handleSuggest);
-    card.querySelector('.subscribe-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        tg.HapticFeedback.impactOccurred('light');
-        const icon = e.currentTarget.querySelector('i');
-        icon.className = icon.className.includes('fa-plus') ? 'fa-solid fa-check' : 'fa-solid fa-plus';
-    });
     
-    // Пауза/Плей
     const videoElement = card.querySelector('video');
     videoElement.addEventListener('click', () => {
         if (videoElement.paused) videoElement.play();
@@ -123,76 +121,28 @@ function createCard(data) {
 // ==========================================
 // 5. ЛОГИКА КНОПОК
 // ==========================================
-function handleSoundToggle(e) {
-    e.stopPropagation();
+function handleSoundToggle(event) {
+    event.stopPropagation();
     state.isMuted = !state.isMuted;
-    tg.HapticFeedback.impactOccurred('light');
-    document.querySelectorAll('.video-card.is-active video').forEach(vid => vid.muted = state.isMuted);
+    
+    const currentCard = document.querySelector('.video-card.is-active');
+    if (currentCard) {
+        currentCard.querySelector('video').muted = state.isMuted;
+    }
+    
     document.querySelectorAll('#sound-btn i').forEach(icon => {
         icon.className = state.isMuted ? 'fa-solid fa-volume-xmark' : 'fa-solid fa-volume-high';
     });
 }
 
-function handleShare(e) { /* ... без изменений ... */ }
-function handleSuggest(e) { /* ... без изменений ... */ }
-function switchFeed(feedType) { /* ... без изменений ... */ }
-
-// ==========================================
-// 6. Intersection Observers (Автоплей и Lazy Load)
-// ==========================================
-const videoObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        entry.target.classList.remove('is-active');
-        if (entry.isIntersecting) {
-            entry.target.classList.add('is-active');
-            const vid = entry.target.querySelector('video');
-            vid.muted = state.isMuted;
-            vid.currentTime = 0;
-            vid.play().catch(e => console.warn("Autoplay was prevented"));
-        } else {
-            entry.target.querySelector('video').pause();
-        }
-    });
-}, { threshold: 0.6 });
-
-const loadingTrigger = document.createElement('div');
-loadingTrigger.className = 'loading-trigger';
-const lazyLoadObserver = new IntersectionObserver((e) => {
-    if (e[0].isIntersecting) loadMoreVideos();
-}, { rootMargin: '200px' });
-
-function updateLoadingTrigger() {
-    container.appendChild(loadingTrigger);
-    lazyLoadObserver.disconnect();
-    lazyLoadObserver.observe(loadingTrigger);
-}
-
-// ==========================================
-// 7. UI-ХЕЛПЕРЫ
-// ==========================================
-function showLoader(show) { /* ... без изменений ... */ }
-function showError(msg) { /* ... без изменений ... */ }
-function showEndOfFeed() { /* ... без изменений ... */ }
-
-// ==========================================
-// 8. ЗАПУСК
-// ==========================================
-document.querySelectorAll('.nav-tab').forEach(tab => {
-    tab.addEventListener('click', () => switchFeed(tab.dataset.feed));
-});
-
-loadMoreVideos();
-
-// КОСТЫЛИ ДЛЯ ДЕМОНСТРАЦИИ (потом удалить)
-// Функции, которые не менялись, я оставил свернутыми для краткости
-function handleShare(e) {
-    e.stopPropagation();
-    const card = e.target.closest('.video-card');
+function handleShare(event) {
+    event.stopPropagation();
+    const card = event.target.closest('.video-card');
     tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(card.dataset.videoUrl)}&text=Смотри, что я нашел в OneShot Feed!`);
 }
 
-function handleSuggest(e) {
-    e.stopPropagation();
+function handleSuggest(event) {
+    event.stopPropagation();
     tg.showPopup({
         title: 'Предложить видео',
         message: 'Эта функция в разработке.',
@@ -205,39 +155,97 @@ function switchFeed(feedType) {
     state.activeFeed = feedType;
     state.currentPage = 0;
     state.hasMore = true;
-
-    const nav = document.querySelector('.top-nav');
-    nav.dataset.active = feedType; // <-- ДОБАВЛЕНО
-
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.classList.toggle('active', tab.dataset.feed === feedType);
     });
-
-    container.innerHTML = '<div class="loading-state"><div class="blink">_</div></div>';
+    container.innerHTML = ""; // Очищаем ленту
     lazyLoadObserver.disconnect();
     loadMoreVideos();
 }
 
+// ==========================================
+// 6. Intersection Observers
+// ==========================================
+const videoObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        const card = entry.target;
+        const vid = card.querySelector('video');
+        card.classList.remove('is-active');
+
+        if (entry.isIntersecting) {
+            card.classList.add('is-active');
+            vid.muted = state.isMuted;
+            vid.currentTime = 0;
+            vid.play().catch(e => {}); // Ошибки автоплея игнорируем
+        } else {
+            vid.pause();
+        }
+    });
+}, { threshold: 0.6 });
+
+const loadingTrigger = document.createElement('div');
+loadingTrigger.className = 'loading-trigger';
+const lazyLoadObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !state.isLoading) {
+        loadMoreVideos();
+    }
+}, { rootMargin: '200px' });
+
+function updateLoadingTrigger() {
+    container.appendChild(loadingTrigger);
+    lazyLoadObserver.disconnect();
+    lazyLoadObserver.observe(loadingTrigger);
+}
+
+// ==========================================
+// 7. UI-ХЕЛПЕРЫ
+// ==========================================
 function showLoader(show) {
     let loader = document.getElementById('batch-loader');
     if (show && !loader) {
         loader = document.createElement('div');
         loader.id = 'batch-loader';
-        loader.className = 'loading-state small';
-        loader.innerHTML = '<span class="blink">Loading...</span>';
+        loader.className = 'loading-state';
+        loader.innerHTML = '<span class="blink">Загрузка...</span>';
         container.appendChild(loader);
+    } else if (!show && loader) {
+        loader.remove();
     }
-    if (!show && loader) loader.remove();
 }
 
 function showError(msg) {
-    container.innerHTML = `<div class="loading-state" style="color: #ff4444;"><div style="font-size: 2rem; margin-bottom: 10px;">⚠️</div><div>SYSTEM FAILURE</div><div style="font-size: 1rem; opacity: 0.7; margin-top: 5px;">${msg}</div></div>`;
+    console.error("Critical Feed Error:", msg);
 }
 
 function showEndOfFeed() {
     const endMsg = document.createElement('div');
-    endMsg.className = 'loading-state small';
-    endMsg.innerText = '// END_OF_MEMORY_DUMP //';
+    endMsg.className = 'loading-state';
+    endMsg.innerText = '// Конец ленты //';
     endMsg.style.opacity = '0.5';
     container.appendChild(endMsg);
 }
+
+// ==========================================
+// 8. ЗАПУСК ПРИЛОЖЕНИЯ
+// ==========================================
+function initApp() {
+    // Включаем звук глобально
+    state.isMuted = false;
+    
+    // Убираем оверлей
+    startOverlay.style.opacity = '0';
+    setTimeout(() => {
+        startOverlay.style.display = 'none';
+    }, 300);
+
+    // Начинаем грузить видео
+    loadMoreVideos();
+}
+
+// Слушаем клик по оверлею
+startOverlay.addEventListener('click', initApp, { once: true });
+
+// Инициализация табов
+document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => switchFeed(tab.dataset.feed));
+});
