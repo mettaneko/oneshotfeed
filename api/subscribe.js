@@ -1,35 +1,42 @@
+import { kv } from '@vercel/kv';
+
 export default async function handler(req, res) {
-  // CORS (разрешаем запросы с GitHub Pages)
+  // Разрешаем CORS
+  res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, user-id');
 
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
 
-  const { userId, author, action } = req.body;
-  
-  // Автоматические переменные от Upstash
-  const URL = process.env.KV_REST_API_URL;
-  const TOKEN = process.env.KV_REST_API_TOKEN;
+  // Получаем ID пользователя и автора
+  const userId = req.headers['user-id'] || req.query.userId;
+  const { author } = req.body || {};
 
-  if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
+  if (!userId || !author) {
+    return res.status(400).json({ error: 'Нужен userId и author' });
+  }
+
+  const key = `user:${userId}:subs`;
 
   try {
-    const key = `subs:${userId}`;
-    const command = action === 'add' ? 'sadd' : 'srem'; // sadd = добавить, srem = удалить
+    // Проверяем, подписан ли уже
+    const isSubscribed = await kv.sismember(key, author);
 
-    // Шлем запрос в базу
-    const dbRes = await fetch(`${URL}/${command}/${key}/${author}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` }
-    });
-    
-    const data = await dbRes.json();
-    if (data.error) throw new Error(data.error);
-
-    res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'DB Error' });
+    if (isSubscribed) {
+      // Если подписан — отписываемся
+      await kv.srem(key, author);
+      return res.status(200).json({ status: 'unsubscribed', author });
+    } else {
+      // Если не подписан — подписываемся
+      await kv.sadd(key, author);
+      return res.status(200).json({ status: 'subscribed', author });
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Ошибка базы данных' });
   }
 }

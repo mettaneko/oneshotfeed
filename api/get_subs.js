@@ -1,29 +1,53 @@
+import { kv } from '@vercel/kv';
+
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'user-id');
 
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  const userId = req.headers['user-id'] || req.query.userId;
 
-  const { userId } = req.body;
-  const URL = process.env.KV_REST_API_URL;
-  const TOKEN = process.env.KV_REST_API_TOKEN;
-
-  if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
+  if (!userId) {
+    return res.status(400).json([]);
+  }
 
   try {
-    // Получаем список подписок (smembers)
-    const dbRes = await fetch(`${URL}/smembers/subs:${userId}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` }
-    });
-    
-    const data = await dbRes.json();
-    const subs = Array.isArray(data.result) ? data.result : [];
+    // 1. Получаем список авторов, на которых подписан юзер
+    const subsKey = `user:${userId}:subs`;
+    const subscribedAuthors = await kv.smembers(subsKey); // Возвращает массив авторов
 
-    res.status(200).json({ subs });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'DB Error' });
+    if (!subscribedAuthors || subscribedAuthors.length === 0) {
+      return res.status(200).json([]); // Нет подписок — пустая лента
+    }
+
+    // 2. Получаем последние 1000 видео из общей ленты (Upstash KV не умеет делать сложные WHERE запросы, фильтруем в коде)
+    // Используем raw JSON list, который мы сделали в фиксе базы
+    // Сначала пробуем получить как массив JSON
+    let allVideos = [];
+    
+    // Пытаемся получить feed_videos. Если это массив JSON (после нашего фикса)
+    const rawData = await kv.get('feed_videos');
+    
+    if (rawData && Array.isArray(rawData)) {
+        allVideos = rawData;
+    } else {
+        // Если вдруг используется старый формат списка (LRANGE)
+        const listData = await kv.lrange('feed_videos', 0, 1000);
+        allVideos = listData.map(item => typeof item === 'string' ? JSON.parse(item) : item);
+    }
+
+    // 3. Фильтруем: оставляем только тех, кто есть в подписках
+    const subFeed = allVideos.filter(video => {
+        // Очищаем автора от @ на всякий случай для сравнения
+        const cleanAuthor = (video.author || "").replace('@', '');
+        return subscribedAuthors.includes(cleanAuthor);
+    });
+
+    return res.status(200).json(subFeed);
+
+  } catch (error) {
+    console.error("Subs Error:", error);
+    return res.status(500).json([]);
   }
 }
