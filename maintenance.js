@@ -1,44 +1,46 @@
-import { kv } from '@vercel/kv';
+// maintenance.js
+const API_BASE = 'https://feed.mettaneko.ru'; // Тот же API_BASE, что и в основном скрипте
 
-const STATUS_KEY = 'MAINTENANCE_MODE_STATUS';
+document.addEventListener('DOMContentLoaded', () => {
+    const totpInput = document.getElementById('totp-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorMessage = document.getElementById('error-message');
 
-export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
-    
-    // GET-запрос: Просто проверяет статус
-    if (req.method === 'GET') {
-        const status = await kv.get(STATUS_KEY);
-        // По умолчанию режим выключен, если в базе ничего нет
-        return res.status(200).json({ maintenance: status === 'on' });
-    }
-
-    // POST-запрос: Изменяет статус (только для админа)
-    if (req.method === 'POST') {
-        const { adminId, status } = req.body;
-        const
-         expectedAdminId = process.env.ADMIN_ID;
-
-        if (!expectedAdminId) {
-            return res.status(500).json({ error: 'Admin ID not configured' });
+    submitBtn.addEventListener('click', async () => {
+        const token = totpInput.value.trim();
+        if (token.length !== 6 || !/^\d{6}$/.test(token)) {
+            errorMessage.textContent = 'Код должен состоять из 6 цифр.';
+            return;
         }
 
-        if (String(adminId) !== expectedAdminId) {
-            return res.status(403).json({ error: 'Forbidden' });
+        errorMessage.textContent = '';
+        submitBtn.disabled = true;
+        submitBtn.textContent = '...';
+
+        try {
+            const response = await fetch(`${API_BASE}/api/verify_totp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.pass) {
+                    // Сохраняем "пропуск" в sessionStorage, чтобы он жил до закрытия вкладки
+                    sessionStorage.setItem('maintenance_access_pass', JSON.stringify(data.pass));
+                    // Перенаправляем на главную страницу
+                    window.location.href = '/'; 
+                }
+            } else {
+                const errorData = await response.json();
+                errorMessage.textContent = errorData.error || 'Неверный код.';
+            }
+        } catch (error) {
+            errorMessage.textContent = 'Ошибка сети. Попробуйте снова.';
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Войти';
         }
-
-        if (status !== 'on' && status !== 'off') {
-            return res.status(400).json({ error: 'Invalid status. Use "on" or "off".' });
-        }
-
-        await kv.set(STATUS_KEY, status);
-        return res.status(200).json({ success: true, newStatus: status });
-    }
-
-    return res.status(405).end();
-}
+    });
+});
