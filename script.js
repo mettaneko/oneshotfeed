@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Этот код запустится только когда вся страница будет готова
 
     // 1. ИНИЦИАЛИЗАЦИЯ И DOM
     const tg = window.Telegram.WebApp;
@@ -22,29 +23,47 @@ document.addEventListener('DOMContentLoaded', () => {
         isMuted: true, activeFeed: 'foryou', currentVideo: null
     };
 
-    // 2. АВТОРИЗАЦИЯ
+    // 2. АВТОРИЗАЦИЯ (с проверкой на локальный режим)
     async function authenticate() {
+        const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+        if (isLocal) {
+            console.warn("ЛОКАЛЬНЫЙ РЕЖИМ: Авторизация пропущена.");
+            state.token = 'local-dev-token';
+            return state.token;
+        }
         if (state.token) return state.token;
         const initData = tg.initData || '';
+        if (!initData) {
+             safeShowAlert('Ошибка: initData отсутствует. Откройте приложение через Telegram.');
+             return null;
+        }
         try {
             const res = await fetch('/api/auth', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ initData })
             });
-            if (!res.ok) throw new Error('Auth failed');
+            if (!res.ok) throw new Error('Auth failed: ' + res.status);
             const { token } = await res.json();
             state.token = token;
             return token;
         } catch (e) {
             console.error(e);
-            tg.showAlert('Ошибка авторизации. Попробуйте перезапустить приложение.');
+            safeShowAlert('Ошибка авторизации. Попробуйте перезапустить.');
             return null;
         }
     }
 
     // 3. API ЗАПРОСЫ
+    const TEST_VIDEOS = [
+        { id: 'local1', authorId: 'test1', authorName: 'LocalDev', desc: 'Тестовое видео #1', subscribed: 'false', cover: 'https://via.placeholder.com/400x600.png?text=Cover1', url: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm' },
+        { id: 'local2', authorId: 'test2', authorName: 'TestUser', desc: 'Тестовое видео #2', subscribed: 'true', cover: 'https://via.placeholder.com/400x600.png?text=Cover2', url: 'https://www.w3schools.com/html/mov_bbb.mp4' }
+    ];
+
     async function fetchVideos(page) {
+        if (state.token === 'local-dev-token') {
+            return new Promise(resolve => setTimeout(() => resolve(page === 0 ? TEST_VIDEOS : []), 500));
+        }
         const endpoint = state.activeFeed === 'foryou' ? '/api/get_feed' : '/api/get_subs';
         const res = await fetch(`${endpoint}?page=${page}`, {
             headers: { 'Authorization': `Bearer ${state.token}` }
@@ -54,14 +73,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function toggleSubscription(authorId) {
-        subscribeBtn.style.pointerEvents = 'none'; // Защита от двойного клика
+        if (state.token === 'local-dev-token') {
+            console.log(`LOCAL: Toggling subscription for ${authorId}`);
+            const currentSubStatus = subscribeBtn.className.includes('fa-check');
+            updateSubscribeButton(!currentSubStatus);
+            return;
+        }
+        subscribeBtn.style.pointerEvents = 'none';
         try {
             const res = await fetch('/api/subscribe', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${state.token}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.token}` },
                 body: JSON.stringify({ authorId })
             });
             const { subscribed } = await res.json();
@@ -72,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
             subscribeBtn.style.pointerEvents = 'auto';
         }
     }
-    
+
     // 4. ЛОГИКА ЛЕНТЫ
     async function loadMoreVideos() {
         if (state.isLoading || !state.hasMore) return;
@@ -98,10 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
         card.dataset.authorId = data.authorId || 'unknown';
         card.dataset.authorName = data.authorName || 'Anon';
         card.dataset.desc = data.desc || '...';
-        card.dataset.subscribed = data.subscribed; // Статус подписки из API
-
+        card.dataset.subscribed = data.subscribed;
+        card.dataset.videoUrl = data.url || '';
         const coverUrl = data.cover ? `url(${data.cover})` : 'none';
-        card.innerHTML = `<div class="blurred-bg" style="background-image: ${coverUrl};"></div><video loop playsinline muted poster="" preload="metadata"><source src="${data.url}" type="video/mp4"></video>`;
+        card.innerHTML = `<div class="blurred-bg" style="background-image: ${coverUrl};"></div><video loop playsinline muted poster="" preload="metadata"><source src="${card.dataset.videoUrl}" type="video/mp4"></video>`;
         card.querySelector('video').addEventListener('click', (e) => {
             const vid = e.target;
             if (vid.paused) vid.play(); else vid.pause();
@@ -109,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
         videoObserver.observe(card);
         return card;
     }
-    
+
     // 5. ЛОГИКА UI
     let uiUpdateTimeout;
     function updateUIMeta(card) {
@@ -165,24 +187,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const lazyLoadObserver = new IntersectionObserver(e => { if (e[0].isIntersecting && !state.isLoading) loadMoreVideos() }, { rootMargin: '200px' });
     function updateLoadingTrigger() { loadingTrigger.className = 'loading-trigger'; container.appendChild(loadingTrigger); lazyLoadObserver.disconnect(); lazyLoadObserver.observe(loadingTrigger) }
     
+    function showLoader(s){let l=document.getElementById('batch-loader');if(s&&!l){l=document.createElement('div');l.id='batch-loader';l.className='loading-state';l.innerHTML='<span class="blink">Загрузка...</span>';container.appendChild(l)}else if(!s&&l)l.remove()}
+    function showEndOfFeed(){const e=document.createElement('div');e.className='end-of-feed';e.innerText='// Конец ленты //';e.style.opacity='0.5';container.appendChild(e)}
+
     // 7. ЗАПУСК И СЛУШАТЕЛИ
     async function initApp() {
         const token = await authenticate();
         if (!token) return;
+        setupEventListeners();
         state.isMuted = false;
         document.querySelector('#sound-btn i').className = 'fa-solid fa-volume-high';
         startOverlay.style.opacity = '0';
         setTimeout(() => startOverlay.style.display = 'none', 300);
         loadMoreVideos();
     }
-    startOverlay.addEventListener('click', initApp, { once: true });
-    document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', () => switchFeed(t.dataset.feed)));
-    document.getElementById('sound-btn').addEventListener('click', handleSoundToggle);
-    document.querySelector('.subscribe-btn').addEventListener('click', () => {
-        if(state.currentVideo) toggleSubscription(state.currentVideo.dataset.authorId);
-    });
 
-    // Хелперы
-    function showLoader(s){let l=document.getElementById('batch-loader');if(s&&!l){l=document.createElement('div');l.id='batch-loader';l.className='loading-state';l.innerHTML='<span class="blink">Загрузка...</span>';container.appendChild(l)}else if(!s&&l)l.remove()}
-    function showEndOfFeed(){const e=document.createElement('div');e.className='end-of-feed';e.innerText='// Конец ленты //';e.style.opacity='0.5';container.appendChild(e)}
+    function setupEventListeners() {
+        document.querySelectorAll('.nav-tab').forEach(t => t.addEventListener('click', () => switchFeed(t.dataset.feed)));
+        document.getElementById('sound-btn').addEventListener('click', handleSoundToggle);
+        document.querySelector('.subscribe-btn').addEventListener('click', () => { if (state.currentVideo) toggleSubscription(state.currentVideo.dataset.authorId); });
+        document.getElementById('share-btn').addEventListener('click', () => { const c = document.querySelector('.video-card.is-active'); if (c) safeShowAlert(`Sharing: ${c.dataset.videoUrl}`) });
+        document.getElementById('suggest-btn').addEventListener('click', () => safeShowAlert('Предложить (в разработке).'));
+    }
+    
+    function safeShowAlert(m) { try { tg.showAlert(m) } catch (e) { alert(m) } }
+
+    startOverlay.addEventListener('click', initApp, { once: true });
 });
