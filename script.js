@@ -9,7 +9,7 @@ const feedContainer = document.querySelector('.tiktok-feed');
 const observerOptions = { root: null, rootMargin: '0px', threshold: 0.6 };
 const tgInitData = window.Telegram?.WebApp?.initData || '';
 
-// === 0. ПРОВЕРКА СТАТУСА (ТЕХ. РАБОТЫ) - ИСПРАВЛЕНО ===
+// === 0. ПРОВЕРКА СТАТУСА (ТЕХ. РАБОТЫ) ===
 async function checkMaintenance() {
     try {
         // Добавляем случайный параметр, чтобы обойти кэш Vercel
@@ -17,7 +17,8 @@ async function checkMaintenance() {
         const data = await res.json();
         if (data.maintenance) {
             // Если включен режим тех. работ, перенаправляем
-            if (window.location.pathname !== '/maintenance.html' && window.location.pathname !== '/auth.html') {
+            // Проверяем, чтобы не было бесконечного редиректа на самой странице
+            if (window.location.pathname.indexOf('maintenance.html') === -1 && window.location.pathname.indexOf('auth.html') === -1) {
                 window.location.href = 'maintenance.html';
             }
             return true; 
@@ -40,7 +41,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTabs();
 });
 
-// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) - ИСПРАВЛЕНО ===
+// === 2. ЛОГИКА ЗАГРУЗКИ (ПАГИНАЦИЯ) ===
 async function loadFeed(isNewFeed = false) {
     if (isLoading || (noMoreVideos && !isNewFeed)) return;
     isLoading = true;
@@ -61,9 +62,13 @@ async function loadFeed(isNewFeed = false) {
         const res = await fetch(url, { headers: { 'X-Telegram-Auth': tgInitData } });
         if (!res.ok) throw new Error(`Ошибка сети: ${res.status}`);
         
-        const newVideos = await res.json();
+        let newVideos = await res.json();
+        
+        // Умная проверка: если API вернул объект {videos: [...]}, достаем массив
+        if (!Array.isArray(newVideos) && newVideos && Array.isArray(newVideos.videos)) {
+             newVideos = newVideos.videos;
+        }
 
-        // ПРОВЕРКА: Убеждаемся, что от API пришел именно массив
         if (!Array.isArray(newVideos)) {
             throw new TypeError('API не вернул массив видео. Ответ сервера: ' + JSON.stringify(newVideos));
         }
@@ -88,12 +93,11 @@ async function loadFeed(isNewFeed = false) {
 // === 3. РЕНДЕРИНГ ВИДЕО ===
 function renderVideos(videos) {
     videos.forEach(video => {
-        if (!video || !video.videoUrl) return; // Защита от пустых или битых объектов видео
+        if (!video || !video.videoUrl) return;
 
         const slide = document.createElement('div');
         slide.className = 'video-slide';
         
-        // Экранируем кавычки, чтобы не сломать атрибуты onclick
         const safeDesc = video.desc ? video.desc.replace(/'/g, "\\'").replace(/"/g, '&quot;') : '';
         const safeAuthor = video.author ? video.author.replace(/'/g, "\\'") : 'unknown';
 
@@ -220,6 +224,7 @@ function handleScroll() {
 function initTabs() {
     const tabs = document.querySelectorAll('.nav-tab');
     const indicator = document.querySelector('.nav-indicator');
+    if(!tabs.length || !indicator) return;
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
