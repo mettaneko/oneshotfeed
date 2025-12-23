@@ -42,7 +42,7 @@ export default async function handler(req, res) {
         const allVideoStrings = await kv.lrange('feed_videos', 0, -1);
         
         const availableVideos = allVideoStrings
-            .map(str => JSON.parse(str))
+            .map(str => { try { return JSON.parse(str); } catch { return null; } })
             .filter(video => video && video.id && subscribedAuthors.includes(video.author) && !exclude.includes(video.id));
         
         const selectedVideos = [];

@@ -1,5 +1,5 @@
 // === KONFIG ===
-const API_BASE = ''; // Пусто, т.к. фронт и бэк на одном домене
+const API_BASE = ''; 
 const BATCH_SIZE = 5; 
 const BOT_LINK = 'https://t.me/oneshotfeedbot'; 
 
