@@ -1,6 +1,5 @@
 // script.js
 
-
 // --- БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ---
 (async function() {
     const API_BASE = 'https://feed.mettaneko.ru';
@@ -44,17 +43,13 @@ if (tg) {
 
 
 // === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
-
-
 function showCustomNotification(message, options = {}) {
     const { isError = false, showConfetti = false } = options;
     if (document.querySelector('.custom-toast-notification')) return;
 
-
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
     const avatarUrl = '/assets/avatar.jpg';
-
 
     toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
@@ -62,11 +57,9 @@ function showCustomNotification(message, options = {}) {
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
 
-
     document.body.appendChild(toast);
     setTimeout(() => toast.classList.add('show'), 10);
     if (showConfetti && !isError) triggerConfetti();
-
 
     setTimeout(() => {
         toast.classList.remove('show');
@@ -84,11 +77,9 @@ function triggerConfetti() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-
     const confettiCount = 150;
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
-
 
     for (let i = 0; i < confettiCount; i++) {
         confetti.push({
@@ -101,10 +92,8 @@ function triggerConfetti() {
         });
     }
 
-
     let frame = 0;
     const gravity = 0.4;
-
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -140,7 +129,6 @@ function injectNewStyles() {
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
 
-
         #top-nav-bar {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
@@ -153,15 +141,12 @@ function injectNewStyles() {
             pointer-events: none;
         }
 
-
         .liquid-controls-container { z-index: 100; }
-
 
         /* --- ИСПРАВЛЕНО: z-index для формы предложки --- */
         .suggest-form {
             z-index: 1001; /* Выше чем .liquid-controls-container (100) */
         }
-
 
         /* Стили уведомлений */
         .custom-toast-notification {
@@ -188,6 +173,26 @@ function injectNewStyles() {
             pointer-events: none;
             z-index: 50;
         }
+        
+        /* Стили для модального окна настроек (если еще не добавлены в CSS) */
+        .settings-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+            z-index: 10005; display: flex; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .settings-panel {
+            background: rgba(30, 30, 35, 0.95); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px; width: 300px; padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transform: scale(0.9); transition: transform 0.3s;
+        }
+        .settings-modal-overlay.show .settings-panel { transform: scale(1); }
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: bold; }
+        .settings-header button { background: none; border: none; color: white; cursor: pointer; }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .settings-footer { text-align: center; margin-top: 20px; font-size: 0.7rem; opacity: 0.5; }
     `;
     document.head.appendChild(style);
 }
@@ -211,9 +216,15 @@ const indicator = document.getElementById('nav-indicator');
 const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
-const uiVolBtn = document.getElementById('ui-vol-btn');
-const uiVolCont = document.getElementById('ui-vol-cont');
-const uiVolRange = document.getElementById('ui-vol-range');
+
+// Настройки (новые элементы)
+const uiSettingsBtn = document.getElementById('ui-settings-btn');
+const settingsModal = document.getElementById('settings-modal');
+const closeSettingsBtn = document.getElementById('close-settings');
+const modalVolRange = document.getElementById('modal-vol-range');
+const winterSettingRow = document.getElementById('winter-setting-row');
+const winterToggle = document.getElementById('winter-toggle');
+
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
 const suggestForm = document.getElementById('suggest-form');
@@ -228,7 +239,6 @@ let audioCtx;
 // === ПРОВЕРКА TELEGRAM (ОПЦИОНАЛЬНО) ===
 const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
 const redirectBanner = document.getElementById('disable-redirect-banner');
-
 
 if (!isTelegram && redirectBanner) redirectBanner.classList.add('show');
 if (redirectBanner) {
@@ -458,14 +468,35 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-uiVolBtn.addEventListener('click', (e) => { e.stopPropagation(); uiVolCont.classList.toggle('active'); });
-uiVolRange.addEventListener('input', (e) => {
-    e.stopPropagation();
-    globalVolume = parseFloat(e.target.value);
-    localStorage.setItem('niko_volume', globalVolume);
-    const v = document.querySelector('.video-slide.active-slide .video-player');
-    if (v) { v.volume = globalVolume; v.muted = (globalVolume === 0); }
-});
+// === ЛОГИКА НАСТРОЕК (ВМЕСТО ЗВУКОВОЙ КНОПКИ) ===
+if(uiSettingsBtn && settingsModal) {
+    uiSettingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settingsModal.style.display = 'flex';
+        setTimeout(() => settingsModal.classList.add('show'), 10);
+    });
+}
+if(closeSettingsBtn && settingsModal) {
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('show');
+        setTimeout(() => settingsModal.style.display = 'none', 300);
+    });
+    // Клик по фону закрывает
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettingsBtn.click();
+    });
+}
+
+// Громкость в модальном окне
+if(modalVolRange) {
+    modalVolRange.value = globalVolume;
+    modalVolRange.addEventListener('input', (e) => {
+        globalVolume = parseFloat(e.target.value);
+        localStorage.setItem('niko_volume', globalVolume);
+        const v = document.querySelector('.video-slide.active-slide .video-player');
+        if (v) { v.volume = globalVolume; v.muted = (globalVolume === 0); }
+    });
+}
 
 
 // === 9. API ФУНКЦИИ (Предложка + Шер) ===
@@ -539,21 +570,31 @@ if (uiShareBtn) {
 async function checkWinterTheme() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
-        if (!res.ok) return; // API может еще не быть, игнорируем ошибку
-        const data = await res.json();
+        // if (!res.ok) return; // API может еще не быть (в первый раз), игнорим ошибку, чтобы не падать
+        let data = { isWinter: false, version: 1 };
+        if (res.ok) {
+           data = await res.json();
+        }
 
-        // Если зима выключена админом - удаляем стиль, если он есть
+        // Если зима выключена админом - удаляем стиль
         if (!data.isWinter) {
             const existingLink = document.getElementById('winter-theme-css');
             if (existingLink) existingLink.remove();
+            if (winterSettingRow) winterSettingRow.style.display = 'none';
             return;
         }
 
+        // Если включена, показываем тогл в настройках
+        if (winterSettingRow) winterSettingRow.style.display = 'flex';
+
         const lastSeenVersion = localStorage.getItem('winter_theme_seen_version');
-        const userAccepted = localStorage.getItem('winter_theme_accepted'); // 'true' или 'false'
+        const userAccepted = localStorage.getItem('winter_theme_accepted'); // 'true', 'false', null
+
+        // Синхронизация тогла в настройках
+        if (winterToggle) winterToggle.checked = (userAccepted === 'true');
 
         // Если версия обновилась (сброс от админа) - забываем выбор
-        if (parseInt(lastSeenVersion) !== data.version) {
+        if (lastSeenVersion && parseInt(lastSeenVersion) !== data.version) {
             localStorage.removeItem('winter_theme_accepted');
             showWinterBanner(data.version);
         }
@@ -562,13 +603,14 @@ async function checkWinterTheme() {
             enableWinterTheme();
         }
         // Если еще не решал - показываем баннер
-        else if (!userAccepted) {
+        else if (userAccepted === null) {
             showWinterBanner(data.version);
         }
         // Если отказался (userAccepted === 'false') - ничего не делаем
 
     } catch (e) { console.error('Theme check failed', e); }
 }
+
 
 function enableWinterTheme() {
     if (document.getElementById('winter-theme-css')) return;
@@ -577,7 +619,15 @@ function enableWinterTheme() {
     link.rel = 'stylesheet';
     link.href = 'css/winter.css';
     document.head.appendChild(link);
+    if(winterToggle) winterToggle.checked = true;
 }
+
+function disableWinterTheme() {
+    const link = document.getElementById('winter-theme-css');
+    if (link) link.remove();
+    if(winterToggle) winterToggle.checked = false;
+}
+
 
 function showWinterBanner(version) {
     if (document.querySelector('.winter-banner')) return;
@@ -636,11 +686,24 @@ function showWinterBanner(version) {
     }
 }
 
+// Слушатель переключателя темы в настройках
+if (winterToggle) {
+    winterToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            enableWinterTheme();
+            localStorage.setItem('winter_theme_accepted', 'true');
+        } else {
+            disableWinterTheme();
+            localStorage.setItem('winter_theme_accepted', 'false');
+        }
+    });
+}
+
 
 // === INIT ===
 window.addEventListener('load', async () => {
     injectNewStyles();
-    if (uiVolRange) uiVolRange.value = globalVolume;
+    if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
     await syncSubs();
     
