@@ -147,91 +147,116 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* --- ЕДИНЫЙ СТИЛЬ УВЕДОМЛЕНИЙ И МОДАЛОК --- */
-        .glass-panel-style {
-            background-color: rgba(30, 30, 35, 0.85);
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            color: #fff;
-            border-radius: 16px;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            font-family: "Manrope", sans-serif;
-        }
-
-        /* Уведомления */
+        /* --- СТИЛИ УВЕДОМЛЕНИЙ --- */
+        /* Z-index 2000, чтобы быть НИЖЕ аудио-заглушки (обычно у нее 10000+), но выше контента */
         .custom-toast-notification {
-            position: fixed; top: 15px; left: 50%; min-width: 300px; max-width: 90%;
+            position: fixed; 
+            top: 20px; /* Чуть ниже */
+            left: 50%; 
+            min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%);
-            padding: 10px 15px;
-            z-index: 10000; opacity: 0;
+            padding: 12px 16px;
+            z-index: 2000; 
+            opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
-            /* Применяем общий стиль */
+            
             background-color: rgba(30, 30, 35, 0.85);
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            font-family: "Manrope", sans-serif;
         }
         .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.2); }
-        .toast-avatar { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
-        .toast-message { font-weight: 500; font-size: 0.9rem; flex: 1; }
+        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.9); border-color: rgba(255, 80, 80, 0.3); }
+        .toast-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
+        .toast-message { font-weight: 500; font-size: 0.9rem; flex: 1; line-height: 1.3; }
 
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
         
-        /* МОДАЛЬНОЕ ОКНО НАСТРОЕК (В том же стиле) */
+        /* --- МОДАЛЬНОЕ ОКНО --- */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); 
-            z-index: 10005; display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.6); 
+            z-index: 9000; /* Тоже ниже заглушки */
+            display: flex; justify-content: center; align-items: center;
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
         
         .settings-panel {
-            width: 300px; padding: 20px;
+            width: 280px; padding: 24px 20px;
             transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            /* Применяем общий стиль */
-            background-color: rgba(30, 30, 35, 0.85);
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            background-color: rgba(25, 25, 30, 0.95);
+            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+            color: #fff; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
         
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: bold; font-size: 1.1rem; }
-        .settings-header button { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 5px; }
-        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .settings-footer { text-align: center; margin-top: 10px; font-size: 0.75rem; opacity: 0.4; }
+        .settings-header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 24px; font-weight: 700; font-size: 1.2rem; letter-spacing: 0.5px;
+        }
+        .settings-header button { 
+            background: rgba(255,255,255,0.1); border: none; color: white; 
+            width: 30px; height: 30px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .settings-header button:active { background: rgba(255,255,255,0.2); }
+        
+        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
+        .settings-footer { text-align: center; margin-top: 10px; font-size: 0.7rem; opacity: 0.3; }
 
-        /* ТОНКИЙ ПОЛЗУНОК ГРОМКОСТИ */
+        /* --- 1. ТОНКИЙ ПОЛЗУНОК ГРОМКОСТИ (Меньше ширина) --- */
         .thin-range {
-            -webkit-appearance: none; width: 120px; height: 4px; 
-            background: rgba(255,255,255,0.2); border-radius: 2px; outline: none;
+            -webkit-appearance: none; 
+            width: 80px; /* Сделали уже */
+            height: 4px; 
+            background: rgba(255,255,255,0.15); border-radius: 2px; outline: none;
         }
         .thin-range::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none;
-            width: 14px; height: 14px; border-radius: 50%; 
+            width: 12px; height: 12px; border-radius: 50%; 
             background: #fff; cursor: pointer; border: none;
-            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            box-shadow: 0 0 8px rgba(255,255,255,0.4);
+            transition: transform 0.1s;
         }
+        .thin-range::-webkit-slider-thumb:active { transform: scale(1.2); }
 
-        /* ВЫПАДАЮЩИЙ СПИСОК ТЕМЫ */
+        /* --- 2. ОФОРМЛЕНИЕ ВЫПАДАЮЩЕГО СПИСКА --- */
         .theme-select {
-            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
-            color: white; padding: 5px 10px; border-radius: 8px; outline: none;
-            font-family: inherit; font-size: 0.9rem;
+            appearance: none; -webkit-appearance: none;
+            background-color: rgba(255,255,255,0.08); 
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white; 
+            padding: 8px 32px 8px 12px; /* Место справа под стрелку */
+            border-radius: 10px; 
+            outline: none;
+            font-family: inherit; font-size: 0.9rem; font-weight: 500;
+            cursor: pointer;
+            
+            /* Кастомная стрелка */
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px top 50%;
+            background-size: 10px auto;
         }
-        .theme-select option { background: #222; color: white; }
+        .theme-select:focus { border-color: rgba(255,255,255,0.3); background-color: rgba(255,255,255,0.12); }
+        .theme-select option { background: #1e1e23; color: white; padding: 10px; }
 
         /* КНОПКИ В БАННЕРЕ */
-        .banner-actions { display: flex; gap: 8px; }
+        .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn {
-            border: none; padding: 6px 12px; border-radius: 8px; 
+            border: none; padding: 6px 14px; border-radius: 8px; 
             font-size: 0.85rem; cursor: pointer; font-weight: 600;
+            transition: transform 0.1s, opacity 0.2s;
         }
-        .btn-accept { background: rgba(255,255,255,0.2); color: white; }
-        .btn-decline { background: transparent; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.1); }
+        .banner-btn:active { transform: scale(0.95); }
+        .btn-accept { background: white; color: black; }
+        .btn-decline { background: rgba(255,255,255,0.1); color: white; }
     `;
     document.head.appendChild(style);
 }
