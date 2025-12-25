@@ -35,8 +35,8 @@ export default async function handler(req, res) {
 *25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
 *25.12.6R* - Фикс багов с кнопками стартового сообщения.
 *25.12.6X* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
-*25.12.7* - Апдейт лог: https://t.me/mettaneko/2849
-*25.12.8W* - Апдейт лог: https://t.me/mettaneko/2861
+*25.12.7* - Апдейт лог: [https://t.me/mettaneko/2849](https://t.me/mettaneko/2849)
+*25.12.8W* - Апдейт лог: [https://t.me/mettaneko/2861](https://t.me/mettaneko/2861)
 `;
                 await sendMessage(token, chatId, historyText, null, 'Markdown');
 
@@ -106,6 +106,7 @@ export default async function handler(req, res) {
                 }
             }
 
+
             // --- УПРАВЛЕНИЕ ЗИМНЕЙ ТЕМОЙ (НОВАЯ ФИШКА) ---
             const winterMatch = /\/winter (on|off|reset)/.exec(text);
             if (winterMatch) {
@@ -147,7 +148,7 @@ export default async function handler(req, res) {
                 if (!tikTokUrl) {
                     await sendMessage(token, chatId, "❌ Нет ссылки.\nПример: /add [https://vm.tiktok.com/](https://vm.tiktok.com/)...", null, 'HTML');
                 } else {
-                    await sendMessage(token, chatId, "⏳ Загружаю...", null, 'HTML');
+                    await sendMessage(token, chatId, "⏳ Загружаю (TikWM)...", null, 'HTML');
                     try {
                         let finalVideoUrl = null;
                         let finalCover = null;
@@ -156,52 +157,51 @@ export default async function handler(req, res) {
 
                         let tikData = null;
                         
-                        // 1. Сначала пробуем TikWM (через POST для надежности)
+                        // 1. Запрос к TikWM (через POST)
                         try {
                             const apiRes = await fetch("https://www.tikwm.com/api/", {
                                 method: "POST",
-                                headers: {
-                                    "Content-Type": "application/x-www-form-urlencoded"
-                                },
+                                headers: { "Content-Type": "application/x-www-form-urlencoded" },
                                 body: new URLSearchParams({ url: tikTokUrl })
                             });
                             const apiJson = await apiRes.json();
                             if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                         } catch (e) { console.error("TikWM fail:", e); }
 
-                        // 2. Cobalt используем только как резерв, если TikWM не сработал
-                        let cobaltUrl = null;
-                        if (!tikData) {
-                            cobaltUrl = await getCobaltLink(tikTokUrl);
-                        }
-
+                        // 2. Если есть данные, формируем ВЕЧНУЮ ссылку вручную
                         if (tikData) {
                             finalId = tikData.id;
-                            finalCover = tikData.cover;
                             finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
                             
-                            // ВАЖНО: Приоритет отдаем tikwm ссылке (она проксированная)
-                            finalVideoUrl = tikData.play;
+                            // Формируем ссылки на прокси TikWM, которые не протухают
+                            finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
+                            finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
                             
                             if (tikData.images && tikData.images.length > 0) {
                                 await sendMessage(token, chatId, "❌ Это слайд-шоу! Отмена.");
                                 return res.status(200).json({ ok: true });
                             }
-                        } else if (cobaltUrl) {
-                            // Резервный вариант (может быть временная ссылка)
-                            finalVideoUrl = cobaltUrl;
-                            finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
-                            finalAuthor = 'cobalt_user';
-                            finalCover = 'https://via.placeholder.com/150?text=No+Cover';
+                        } 
+                        // 3. Если TikWM не сработал, пробуем Cobalt (как резерв)
+                        else {
+                            const cobaltUrl = await getCobaltLink(tikTokUrl);
+                            if (cobaltUrl) {
+                                finalVideoUrl = cobaltUrl;
+                                finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
+                                finalAuthor = 'cobalt_user';
+                                finalCover = 'https://via.placeholder.com/150?text=No+Cover';
+                            }
                         }
 
                         if (finalVideoUrl) {
-                            // Если ссылка относительная (/video/media/...), делаем её абсолютной
-                            if (!finalVideoUrl.startsWith('http')) {
-                                finalVideoUrl = `https://www.tikwm.com${finalVideoUrl}`;
-                            }
-                            
-                            const newVideo = { id: finalId, videoUrl: finalVideoUrl, author: finalAuthor, desc: 'on tiktok', cover: finalCover };
+                            const newVideo = { 
+                                id: finalId, 
+                                videoUrl: finalVideoUrl, 
+                                author: finalAuthor, 
+                                desc: tikData?.title || 'on tiktok', 
+                                cover: finalCover,
+                                date: Date.now() // Добавляем дату для сортировки
+                            };
                             
                             await fetch(`${DB_URL}/`, {
                                 method: 'POST',
@@ -209,8 +209,8 @@ export default async function handler(req, res) {
                                 body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                             });
                             
-                            const sourceLabel = tikData ? "TikWM (Вечная)" : "Cobalt (Временная?)";
-                            await sendMessage(token, chatId, `✅ Сохранено [${sourceLabel}]!\n👤 @${newVideo.author}\n🔗 Видео`, null, 'HTML');
+                            const sourceInfo = tikData ? "TikWM Proxy (Вечная)" : "Cobalt (Резерв)";
+                            await sendMessage(token, chatId, `✅ Сохранено [${sourceInfo}]!\n👤 @${newVideo.author}\n🔗 Видео`, null, 'HTML');
                         } else {
                             await sendMessage(token, chatId, "❌ Ошибка!\nНе удалось скачать видео ни через TikWM, ни через Cobalt.");
                         }
