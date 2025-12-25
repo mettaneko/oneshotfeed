@@ -42,7 +42,7 @@ if (tg) {
 }
 
 
-// === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
+// === УВЕДОМЛЕНИЯ ===
 function showCustomNotification(message, options = {}) {
     const { isError = false, showConfetti = false } = options;
     if (document.querySelector('.custom-toast-notification:not(.persistent-banner)')) return;
@@ -123,7 +123,7 @@ function triggerConfetti() {
 }
 
 
-// === ВНЕДРЕНИЕ СТИЛЕЙ ===
+// === СТИЛИ ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -145,7 +145,7 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* УВЕДОМЛЕНИЯ (НИЖЕ ЗАГЛУШКИ) */
+        /* УВЕДОМЛЕНИЯ */
         .custom-toast-notification {
             position: fixed; 
             top: 20px; 
@@ -157,7 +157,6 @@ function injectNewStyles() {
             opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
-            
             background-color: rgba(30, 30, 35, 0.85);
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
@@ -171,7 +170,7 @@ function injectNewStyles() {
 
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
         
-        /* МОДАЛЬНОЕ ОКНО */
+        /* МОДАЛКА НАСТРОЕК */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.6); 
@@ -205,10 +204,8 @@ function injectNewStyles() {
         
         .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
-        /* Подвал удален из CSS тоже */
         .settings-footer { display: none; }
 
-        /* ТОНКИЙ ПОЛЗУНОК */
         .thin-range {
             -webkit-appearance: none; width: 80px; height: 4px; 
             background: rgba(255,255,255,0.15); border-radius: 2px; outline: none;
@@ -220,15 +217,13 @@ function injectNewStyles() {
             box-shadow: 0 0 8px rgba(255,255,255,0.4);
         }
 
-        /* ВЫПАДАЮЩИЙ СПИСОК */
         .theme-select {
             appearance: none; -webkit-appearance: none;
             background-color: rgba(255,255,255,0.08); 
             border: 1px solid rgba(255,255,255,0.1);
             color: white; 
             padding: 8px 32px 8px 12px;
-            border-radius: 10px; 
-            outline: none;
+            border-radius: 10px; outline: none;
             font-family: inherit; font-size: 0.9rem; font-weight: 500;
             cursor: pointer;
             background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
@@ -238,7 +233,6 @@ function injectNewStyles() {
         }
         .theme-select option { background: #1e1e23; color: white; }
 
-        /* БАННЕР */
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn {
             border: none; padding: 6px 14px; border-radius: 8px; 
@@ -251,7 +245,7 @@ function injectNewStyles() {
 }
 
 
-// === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
+// === GLOBAL VARS ===
 let subscribedAuthors = [];
 let hasInteracted = false;
 let savedVol = localStorage.getItem('niko_volume');
@@ -261,7 +255,7 @@ let currentActiveAuthor = null;
 let allVideos = [];
 
 
-// === DOM Элементы ===
+// === DOM ===
 const feedContainer = document.getElementById('feed');
 const tabForYou = document.getElementById('tab-foryou');
 const tabFollowing = document.getElementById('tab-following');
@@ -270,7 +264,6 @@ const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
 
-// Настройки
 const uiSettingsBtn = document.getElementById('ui-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings');
@@ -288,7 +281,7 @@ const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 
 
-// === ЗАГРУЗКА ВИДЕО ===
+// === VIDEO LOADING ===
 async function loadVideosOnce() {
     let localVideos = [], dbVideos = [];
     try {
@@ -315,7 +308,7 @@ async function reloadVideosAndFeed() {
 }
 
 
-// === СИНХРОНИЗАЦИЯ ПОДПИСОК ===
+// === SUBSCRIPTIONS ===
 async function syncSubs() {
     const local = JSON.parse(localStorage.getItem('subscribedAuthors'));
     if (local) subscribedAuthors = local;
@@ -329,7 +322,7 @@ async function syncSubs() {
 }
 
 
-// === АУДИО И ОВЕРЛЕЙ ===
+// === AUDIO & OVERLAY ===
 function unlockAudioContext(e) {
     if (e) e.stopPropagation();
     if (!audioCtx) audioCtx = new AudioContext();
@@ -352,7 +345,7 @@ const overlayEl = document.getElementById('audio-unlock-overlay');
 if (overlayEl) { overlayEl.addEventListener('click', unlockAudioContext); overlayEl.addEventListener('touchstart', unlockAudioContext); }
 
 
-// === НАВИГАЦИЯ ===
+// === NAVIGATION ===
 function updateInd(tab) {
     if (!tab) return;
     indicator.style.width = `${tab.offsetWidth}px`;
@@ -378,7 +371,7 @@ tabFollowing.addEventListener('click', () => {
 });
 
 
-// === UI ЛОГИКА ===
+// === UI UPDATES ===
 function updateSubBtnState() { if (!currentActiveAuthor) return; uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor)); }
 function updateGlobalUI(videoData) {
     if (uiAuthor) uiAuthor.innerText = `@${videoData.author}`;
@@ -409,7 +402,7 @@ function getActiveSlideData() {
 }
 
 
-// === УПРАВЛЕНИЕ ПАМЯТЬЮ ===
+// === MEMORY & VIDEO LOGIC ===
 function loadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
@@ -433,7 +426,7 @@ function manageVideoMemory(activeSlide) {
 }
 
 
-// === СЛАЙДЫ + ПЛЕЕР ===
+// === SLIDE CREATION ===
 function createSlide(data) {
     const slide = document.createElement('div');
     slide.className = 'video-slide';
@@ -504,7 +497,7 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === НАСТРОЙКИ UI ===
+// === SETTINGS UI ===
 if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -521,7 +514,6 @@ if(closeSettingsBtn && settingsModal) {
         if (e.target === settingsModal) closeSettingsBtn.click();
     });
 }
-// Скрываем версию, если она есть в HTML
 const footer = document.querySelector('.settings-footer');
 if(footer) footer.style.display = 'none';
 
@@ -536,7 +528,7 @@ if(modalVolRange) {
 }
 
 
-// === API ФУНКЦИИ ===
+// === ACTIONS (SHARE/SUGGEST) ===
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex'; });
 }
@@ -585,7 +577,9 @@ if (uiShareBtn) {
 }
 
 
-// === МЕНЕДЖЕР ТЕМ (ДИНАМИЧЕСКАЯ ПОДГРУЗКА) ===
+// === МЕНЕДЖЕР ТЕМ ===
+
+// Подгрузка файла темы
 function loadThemeScript(url, callback) {
     if (document.querySelector(`script[src="${url}"]`)) {
         if(callback) callback();
@@ -597,10 +591,9 @@ function loadThemeScript(url, callback) {
     document.body.appendChild(script);
 }
 
+// Применение темы
 function applyTheme(themeName) {
-    // Отключаем старое
     if (window.WinterTheme) window.WinterTheme.disable();
-    // (тут можно добавить отключение других тем, если будут)
 
     if (themeName === 'winter') {
         loadThemeScript('themes/winter.js', () => {
@@ -612,44 +605,45 @@ function applyTheme(themeName) {
     localStorage.setItem('app_theme_preference', themeName);
 }
 
+// ГЛАВНАЯ ПРОВЕРКА: Если в БД false — ничего не предлагать
 async function checkThemes() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
+        
+        // Если API работает, берем данные. Если нет — считаем, что выключено.
         if (res.ok) data = await res.json();
 
         const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
-        
-        // Если админ отключил зиму
-        if (!data.isWinter) {
-            if (winterOption) winterOption.disabled = true;
-            // Если была выбрана зима - сброс
-            if (localStorage.getItem('app_theme_preference') === 'winter') {
-                applyTheme('default');
-            }
-        } else {
-            // Если включил - разблокируем
-            if (winterOption) winterOption.disabled = false;
-        }
-
         const savedTheme = localStorage.getItem('app_theme_preference');
         const lastSeenVersion = localStorage.getItem('winter_theme_seen_version');
 
+        // === ВАЖНО: Если админ выключил зиму ===
+        if (!data.isWinter) {
+            // Блокируем опцию
+            if (winterOption) winterOption.disabled = true;
+            // Если у юзера была включена — сбрасываем
+            if (savedTheme === 'winter') {
+                applyTheme('default');
+            }
+            // И ВЫХОДИМ. Никаких баннеров.
+            return;
+        }
+
+        // === Если админ включил ===
+        if (winterOption) winterOption.disabled = false;
+
         if (savedTheme) {
             applyTheme(savedTheme);
-            // Если вышла новая версия зимы, а юзер на дефолте -> предложим снова
-            if (data.isWinter && savedTheme !== 'winter') {
+            // Предлагаем снова, только если вышла новая версия и юзер НЕ на зиме
+            if (savedTheme !== 'winter') {
                  if (parseInt(lastSeenVersion) !== data.version) {
                     showWinterBanner(data.version);
                  }
             }
         } else {
-            // Первый заход
-            if (data.isWinter) {
-                 showWinterBanner(data.version);
-            } else {
-                applyTheme('default');
-            }
+            // Первый заход пользователя -> предлагаем
+            showWinterBanner(data.version);
         }
 
     } catch (e) { console.error('Theme check failed', e); }
@@ -665,8 +659,8 @@ function showWinterBanner(version) {
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
-            <span style="font-weight:bold;">Включить снег? ❄️</span>
-            <span style="font-size:0.8em; opacity:0.8;">Зимнее настроение</span>
+            <span style="font-weight:bold;">Включить снег?</span>
+            <span style="font-size:0.8em; opacity:0.8;">Новый год близко же!</span>
         </div>
         <div class="banner-actions">
             <button class="banner-btn btn-accept">Да</button>
@@ -683,7 +677,7 @@ function showWinterBanner(version) {
         applyTheme('winter');
         localStorage.setItem('winter_theme_seen_version', version);
         closeBanner();
-        showCustomNotification("❄️ Ура! Снег пошел!", { showConfetti: true });
+        showCustomNotification("Смотри, снег пошел!", { showConfetti: true });
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
@@ -712,7 +706,7 @@ window.addEventListener('load', async () => {
     await loadVideosOnce(); 
     await syncSubs();
     
-    // Запуск менеджера тем
+    // Запуск проверки тем
     checkThemes();
     
     updateInd(tabForYou);
