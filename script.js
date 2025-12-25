@@ -145,7 +145,7 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* УВЕДОМЛЕНИЯ */
+        /* --- СТЕКЛЯННЫЕ УВЕДОМЛЕНИЯ --- */
         .custom-toast-notification {
             position: fixed; 
             top: 20px; 
@@ -157,14 +157,20 @@ function injectNewStyles() {
             opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
-            background-color: rgba(30, 30, 35, 0.85);
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-            color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            
+            /* Эффект матового стекла */
+            background-color: rgba(22, 22, 24, 0.85); 
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            
+            color: #fff; 
+            border-radius: 16px; 
+            border: 0.5px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             font-family: "Manrope", sans-serif;
         }
         .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.9); border-color: rgba(255, 80, 80, 0.3); }
+        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.3); }
         .toast-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
         .toast-message { font-weight: 500; font-size: 0.9rem; flex: 1; line-height: 1.3; }
 
@@ -183,9 +189,13 @@ function injectNewStyles() {
         .settings-panel {
             width: 280px; padding: 24px 20px;
             transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            background-color: rgba(25, 25, 30, 0.95);
-            backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-            color: #fff; border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.1);
+            
+            /* СТЕКЛО */
+            background-color: rgba(22, 22, 24, 0.85);
+            backdrop-filter: blur(16px) saturate(180%);
+            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            
+            color: #fff; border-radius: 24px; border: 0.5px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
@@ -206,15 +216,18 @@ function injectNewStyles() {
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
 
+        /* --- ПОЛЗУНОК ГРОМКОСТИ (УЗКИЙ) --- */
         .thin-range {
-            -webkit-appearance: none; width: 80px; height: 4px; 
-            background: rgba(255,255,255,0.15); border-radius: 2px; outline: none;
+            -webkit-appearance: none; 
+            width: 80px !important;
+            height: 4px; 
+            background: rgba(255,255,255,0.2); border-radius: 2px; outline: none;
         }
         .thin-range::-webkit-slider-thumb {
             -webkit-appearance: none; appearance: none;
-            width: 12px; height: 12px; border-radius: 50%; 
+            width: 14px; height: 14px; border-radius: 50%; 
             background: #fff; cursor: pointer; border: none;
-            box-shadow: 0 0 8px rgba(255,255,255,0.4);
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
         }
 
         .theme-select {
@@ -578,8 +591,6 @@ if (uiShareBtn) {
 
 
 // === МЕНЕДЖЕР ТЕМ ===
-
-// Подгрузка файла темы
 function loadThemeScript(url, callback) {
     if (document.querySelector(`script[src="${url}"]`)) {
         if(callback) callback();
@@ -591,7 +602,6 @@ function loadThemeScript(url, callback) {
     document.body.appendChild(script);
 }
 
-// Применение темы
 function applyTheme(themeName) {
     if (window.WinterTheme) window.WinterTheme.disable();
 
@@ -605,44 +615,35 @@ function applyTheme(themeName) {
     localStorage.setItem('app_theme_preference', themeName);
 }
 
-// ГЛАВНАЯ ПРОВЕРКА: Если в БД false — ничего не предлагать
 async function checkThemes() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
         
-        // Если API работает, берем данные. Если нет — считаем, что выключено.
         if (res.ok) data = await res.json();
 
         const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
         const savedTheme = localStorage.getItem('app_theme_preference');
         const lastSeenVersion = localStorage.getItem('winter_theme_seen_version');
 
-        // === ВАЖНО: Если админ выключил зиму ===
         if (!data.isWinter) {
-            // Блокируем опцию
             if (winterOption) winterOption.disabled = true;
-            // Если у юзера была включена — сбрасываем
             if (savedTheme === 'winter') {
                 applyTheme('default');
             }
-            // И ВЫХОДИМ. Никаких баннеров.
             return;
         }
 
-        // === Если админ включил ===
         if (winterOption) winterOption.disabled = false;
 
         if (savedTheme) {
             applyTheme(savedTheme);
-            // Предлагаем снова, только если вышла новая версия и юзер НЕ на зиме
             if (savedTheme !== 'winter') {
                  if (parseInt(lastSeenVersion) !== data.version) {
                     showWinterBanner(data.version);
                  }
             }
         } else {
-            // Первый заход пользователя -> предлагаем
             showWinterBanner(data.version);
         }
 
@@ -681,7 +682,7 @@ function showWinterBanner(version) {
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
-        localStorage.setItem('winter_theme_seen_version', version);
+        localStorage.setItem('winter_theme_seen_version', version); // <-- Вернули: запоминаем, что юзер видел эту версию
         closeBanner();
     };
 
@@ -705,10 +706,7 @@ window.addEventListener('load', async () => {
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
     await syncSubs();
-    
-    // Запуск проверки тем
     checkThemes();
-    
     updateInd(tabForYou);
     renderFeed(shuffle([...allVideos]).slice(0, 5));
 });
