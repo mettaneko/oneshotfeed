@@ -45,7 +45,7 @@ if (tg) {
 // === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
 function showCustomNotification(message, options = {}) {
     const { isError = false, showConfetti = false } = options;
-    if (document.querySelector('.custom-toast-notification')) return;
+    if (document.querySelector('.custom-toast-notification:not(.persistent-banner)')) return;
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
@@ -54,11 +54,15 @@ function showCustomNotification(message, options = {}) {
     toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
     
+    // Сдвигаем навигацию
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
 
     document.body.appendChild(toast);
-    setTimeout(() => toast.classList.add('show'), 10);
+    
+    // Анимация
+    requestAnimationFrame(() => toast.classList.add('show'));
+    
     if (showConfetti && !isError) triggerConfetti();
 
     setTimeout(() => {
@@ -77,7 +81,7 @@ function triggerConfetti() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const confettiCount = 150;
+    const confettiCount = 100; // Чуть меньше конфетти
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
 
@@ -125,7 +129,7 @@ function triggerConfetti() {
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        /* Стили для кнопок навигации */
+        /* Навигация и слои */
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
 
@@ -137,62 +141,97 @@ function injectNewStyles() {
         }
         #top-nav-bar.hidden-by-toast {
             transform: translateX(-50%) translateY(-150%);
-            opacity: 0;
-            pointer-events: none;
+            opacity: 0; pointer-events: none;
         }
 
         .liquid-controls-container { z-index: 100; }
-
-        /* --- ИСПРАВЛЕНО: z-index для формы предложки --- */
-        .suggest-form {
-            z-index: 1001; /* Выше чем .liquid-controls-container (100) */
+        .suggest-form { z-index: 1001; }
+        
+        /* --- ЕДИНЫЙ СТИЛЬ УВЕДОМЛЕНИЙ И МОДАЛОК --- */
+        .glass-panel-style {
+            background-color: rgba(30, 30, 35, 0.85);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: #fff;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            font-family: "Manrope", sans-serif;
         }
 
-        /* Стили уведомлений */
+        /* Уведомления */
         .custom-toast-notification {
-            position: fixed; top: 15px; left: 50%; min-width: 320px;
+            position: fixed; top: 15px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%);
-            background-color: rgba(30, 30, 35, 0.85);
-            backdrop-filter: blur(10px); color: #fff;
-            padding: 8px 25px 8px 15px; border-radius: 16px;
-            font-family: "Manrope", sans-serif; font-size: 0.9rem;
+            padding: 10px 15px;
             z-index: 10000; opacity: 0;
-            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            /* Применяем общий стиль */
+            background-color: rgba(30, 30, 35, 0.85);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
         }
         .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 255, 255, 0.2); }
-        .toast-avatar { width: 32px; height: 32px; border-radius: 8px; }
-        .toast-message { font-weight: 500; }
+        .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.2); }
+        .toast-avatar { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+        .toast-message { font-weight: 500; font-size: 0.9rem; flex: 1; }
+
+        .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
         
-        .confetti-canvas {
-            position: fixed; bottom: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 50;
-        }
-        
-        /* Стили для модального окна настроек (если еще не добавлены в CSS) */
+        /* МОДАЛЬНОЕ ОКНО НАСТРОЕК (В том же стиле) */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+            background: rgba(0,0,0,0.5); 
             z-index: 10005; display: flex; justify-content: center; align-items: center;
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
+        
         .settings-panel {
-            background: rgba(30, 30, 35, 0.95); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 20px; width: 300px; padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            transform: scale(0.9); transition: transform 0.3s;
+            width: 300px; padding: 20px;
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            /* Применяем общий стиль */
+            background-color: rgba(30, 30, 35, 0.85);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            color: #fff; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: bold; }
-        .settings-header button { background: none; border: none; color: white; cursor: pointer; }
-        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .settings-footer { text-align: center; margin-top: 20px; font-size: 0.7rem; opacity: 0.5; }
+        
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-weight: bold; font-size: 1.1rem; }
+        .settings-header button { background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer; padding: 5px; }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .settings-footer { text-align: center; margin-top: 10px; font-size: 0.75rem; opacity: 0.4; }
+
+        /* ТОНКИЙ ПОЛЗУНОК ГРОМКОСТИ */
+        .thin-range {
+            -webkit-appearance: none; width: 120px; height: 4px; 
+            background: rgba(255,255,255,0.2); border-radius: 2px; outline: none;
+        }
+        .thin-range::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 14px; height: 14px; border-radius: 50%; 
+            background: #fff; cursor: pointer; border: none;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+        }
+
+        /* ВЫПАДАЮЩИЙ СПИСОК ТЕМЫ */
+        .theme-select {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
+            color: white; padding: 5px 10px; border-radius: 8px; outline: none;
+            font-family: inherit; font-size: 0.9rem;
+        }
+        .theme-select option { background: #222; color: white; }
+
+        /* КНОПКИ В БАННЕРЕ */
+        .banner-actions { display: flex; gap: 8px; }
+        .banner-btn {
+            border: none; padding: 6px 12px; border-radius: 8px; 
+            font-size: 0.85rem; cursor: pointer; font-weight: 600;
+        }
+        .btn-accept { background: rgba(255,255,255,0.2); color: white; }
+        .btn-decline { background: transparent; color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.1); }
     `;
     document.head.appendChild(style);
 }
@@ -217,13 +256,12 @@ const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
 
-// Настройки (новые элементы)
+// Настройки
 const uiSettingsBtn = document.getElementById('ui-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings');
 const modalVolRange = document.getElementById('modal-vol-range');
-const winterSettingRow = document.getElementById('winter-setting-row');
-const winterToggle = document.getElementById('winter-toggle');
+const themeSelect = document.getElementById('theme-select'); // Новый селект
 
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
@@ -236,34 +274,22 @@ const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 
 
-// === ПРОВЕРКА TELEGRAM (ОПЦИОНАЛЬНО) ===
+// === ПРОВЕРКА TELEGRAM ===
 const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-const redirectBanner = document.getElementById('disable-redirect-banner');
-
-if (!isTelegram && redirectBanner) redirectBanner.classList.add('show');
-if (redirectBanner) {
-    const disableBtn = document.getElementById('disable-redirect-btn');
-    if (disableBtn) {
-        disableBtn.addEventListener('click', () => {
-            redirectBanner.classList.remove('show');
-            setTimeout(() => redirectBanner.remove(), 500);
-        });
-    }
-}
 
 
-// === 2. ЗАГРУЗКА ВИДЕО (ГИБРИДНАЯ: JSON + БД) ===
+// === 2. ЗАГРУЗКА ВИДЕО ===
 async function loadVideosOnce() {
     let localVideos = [], dbVideos = [];
     try {
         const res = await fetch('public/videos.json', { cache: 'no-store' });
         if (res.ok) localVideos = await res.json();
         else { const res2 = await fetch('videos.json'); if (res2.ok) localVideos = await res2.json(); }
-    } catch (e) { console.error('Local JSON error:', e); }
+    } catch (e) { }
     try {
         const res = await fetch(`${API_BASE}/api/get_feed`);
         if (res.ok) dbVideos = await res.json();
-    } catch (e) { console.error('DB Feed error:', e); }
+    } catch (e) { }
     allVideos = [...dbVideos, ...localVideos];
     if (allVideos.length === 0) console.warn('No videos found!');
 }
@@ -288,7 +314,7 @@ async function syncSubs() {
             const res = await fetch(`${API_BASE}/api/get_subs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id }) });
             const data = await res.json();
             if (data.subs) { subscribedAuthors = data.subs; localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); updateSubBtnState(); }
-        } catch (e) { console.error('Sync subs error:', e); }
+        } catch (e) { }
     }
 }
 
@@ -363,7 +389,7 @@ uiSubBtn.addEventListener('click', async (e) => {
         else { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author)); renderFeed(filtered.slice(0, 5)); }
     }
     if (tg?.initDataUnsafe?.user) {
-        try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }); } catch (e) { console.error('Sub API error:', e); }
+        try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }); } catch (e) { }
     } else { localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); }
 });
 function getActiveSlideData() {
@@ -373,7 +399,7 @@ function getActiveSlideData() {
 }
 
 
-// === 7. УПРАВЛЕНИЕ ПАМЯТЬЮ И ЗАГРУЗКОЙ ВИДЕО ===
+// === 7. УПРАВЛЕНИЕ ПАМЯТЬЮ ===
 function loadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
@@ -408,7 +434,7 @@ function createSlide(data) {
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
-    vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => console.log('Click play error', e)); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
+    vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     let isDragging = false;
     const handle = (y) => { const rect = bar.getBoundingClientRect(); if (vid.duration) { vid.currentTime = Math.max(0, Math.min(1, 1 - (y - rect.top) / rect.height)) * vid.duration; } };
@@ -438,7 +464,7 @@ const observer = new IntersectionObserver((entries) => {
                 if (vid.paused) {
                     const playPromise = vid.play();
                     if (playPromise !== undefined) {
-                        playPromise.then(() => { bg.play().catch(() => {}); }).catch(error => { vid.muted = true; vid.play().catch(e => console.log('Muted play also failed', e)); bg.play().catch(() => {}); });
+                        playPromise.then(() => { bg.play().catch(() => {}); }).catch(error => { vid.muted = true; vid.play().catch(e => {}); bg.play().catch(() => {}); });
                     }
                 }
             });
@@ -468,7 +494,7 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === ЛОГИКА НАСТРОЕК (ВМЕСТО ЗВУКОВОЙ КНОПКИ) ===
+// === ЛОГИКА НАСТРОЕК ===
 if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -481,13 +507,12 @@ if(closeSettingsBtn && settingsModal) {
         settingsModal.classList.remove('show');
         setTimeout(() => settingsModal.style.display = 'none', 300);
     });
-    // Клик по фону закрывает
     settingsModal.addEventListener('click', (e) => {
         if (e.target === settingsModal) closeSettingsBtn.click();
     });
 }
 
-// Громкость в модальном окне
+// Громкость
 if(modalVolRange) {
     modalVolRange.value = globalVolume;
     modalVolRange.addEventListener('input', (e) => {
@@ -498,8 +523,7 @@ if(modalVolRange) {
     });
 }
 
-
-// === 9. API ФУНКЦИИ (Предложка + Шер) ===
+// === 9. API ФУНКЦИИ ===
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex'; });
 }
@@ -519,10 +543,6 @@ if (sugBtn) {
                 sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
                 showCustomNotification('Спасибо за предложенное видео!', { showConfetti: true });
                 setTimeout(() => { suggestForm.style.display = 'none'; sugBtn.innerText = originalText; sugBtn.disabled = false; }, 1000);
-            } else if (res.status === 429) {
-                showCustomNotification('Слишком часто! Подождите минуту.', { isError: true });
-                sugBtn.innerText = originalText;
-                sugBtn.disabled = false;
             } else {
                 showCustomNotification('Ошибка API.', { isError: true });
                 sugBtn.innerText = originalText;
@@ -541,161 +561,130 @@ if (uiShareBtn) {
         const data = getActiveSlideData();
         if (!data) return;
         if (!tg?.initDataUnsafe?.user) {
-            navigator.clipboard.writeText(data.videoUrl).then(() => {
-                showCustomNotification('Ссылка на видео скопирована!', { showConfetti: true });
-            }).catch(() => {
-                showCustomNotification('Не удалось скопировать ссылку.', { isError: true });
-            });
+            navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); }).catch(() => {});
             return;
         }
         try {
-            const res = await fetch(`${API_BASE}/api/share`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ videoUrl: data.videoUrl, author: data.author, desc: data.desc, user: tg.initDataUnsafe.user })
-            });
-            if (res.ok) {
-                showCustomNotification('Видео отправлено в личные сообщения!', { showConfetti: true });
-            } else {
-                showCustomNotification('Ошибка отправки.', { isError: true });
-            }
-        } catch (e) {
-            showCustomNotification('Ошибка сети.', { isError: true });
-        }
+            await fetch(`${API_BASE}/api/share`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoUrl: data.videoUrl, author: data.author, desc: data.desc, user: tg.initDataUnsafe.user }) });
+            showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
+        } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
     });
 }
 
 
-// === НОВАЯ ФИЧА: ЗИМНЯЯ ТЕМА ===
+// === НОВАЯ ЛОГИКА ТЕМ (ОБНОВЛЕННАЯ) ===
 async function checkWinterTheme() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
-        // if (!res.ok) return; // API может еще не быть (в первый раз), игнорим ошибку, чтобы не падать
         let data = { isWinter: false, version: 1 };
-        if (res.ok) {
-           data = await res.json();
-        }
+        if (res.ok) data = await res.json();
 
-        // Если зима выключена админом - удаляем стиль
+        // 1. Убираем/скрываем опцию "Зима" из селекта, если она выключена админом
+        const winterOption = themeSelect.querySelector('option[value="winter"]');
         if (!data.isWinter) {
-            const existingLink = document.getElementById('winter-theme-css');
-            if (existingLink) existingLink.remove();
-            if (winterSettingRow) winterSettingRow.style.display = 'none';
-            return;
+            if (winterOption) winterOption.disabled = true; // Или remove()
+            // Если была выбрана зима, сбрасываем на default
+            if (themeSelect.value === 'winter') {
+                 changeTheme('default');
+            }
+        } else {
+            if (winterOption) winterOption.disabled = false;
         }
 
-        // Если включена, показываем тогл в настройках
-        if (winterSettingRow) winterSettingRow.style.display = 'flex';
-
+        // 2. Логика баннера и сохраненной темы
+        const savedTheme = localStorage.getItem('app_theme_preference'); // 'default', 'winter'
         const lastSeenVersion = localStorage.getItem('winter_theme_seen_version');
-        const userAccepted = localStorage.getItem('winter_theme_accepted'); // 'true', 'false', null
 
-        // Синхронизация тогла в настройках
-        if (winterToggle) winterToggle.checked = (userAccepted === 'true');
-
-        // Если версия обновилась (сброс от админа) - забываем выбор
-        if (lastSeenVersion && parseInt(lastSeenVersion) !== data.version) {
-            localStorage.removeItem('winter_theme_accepted');
-            showWinterBanner(data.version);
+        // Если есть сохраненная тема - применяем её
+        if (savedTheme) {
+            changeTheme(savedTheme);
+        } else {
+            // Если темы нет, но зима активна и версия новая -> предлагаем баннер
+            if (data.isWinter) {
+                // Если пользователь еще не видел эту версию зимы
+                if (parseInt(lastSeenVersion) !== data.version) {
+                    showWinterBanner(data.version);
+                }
+            }
         }
-        // Если пользователь уже согласился - включаем
-        else if (userAccepted === 'true') {
-            enableWinterTheme();
-        }
-        // Если еще не решал - показываем баннер
-        else if (userAccepted === null) {
-            showWinterBanner(data.version);
-        }
-        // Если отказался (userAccepted === 'false') - ничего не делаем
-
     } catch (e) { console.error('Theme check failed', e); }
 }
 
+function changeTheme(themeName) {
+    // 1. Обновляем селект
+    if (themeSelect) themeSelect.value = themeName;
+    localStorage.setItem('app_theme_preference', themeName);
 
-function enableWinterTheme() {
-    if (document.getElementById('winter-theme-css')) return;
-    const link = document.createElement('link');
-    link.id = 'winter-theme-css';
-    link.rel = 'stylesheet';
-    link.href = 'css/winter.css';
-    document.head.appendChild(link);
-    if(winterToggle) winterToggle.checked = true;
+    // 2. Логика применения CSS
+    if (themeName === 'winter') {
+        if (!document.getElementById('winter-theme-css')) {
+            const link = document.createElement('link');
+            link.id = 'winter-theme-css';
+            link.rel = 'stylesheet';
+            link.href = 'css/winter.css';
+            document.head.appendChild(link);
+        }
+    } else {
+        const link = document.getElementById('winter-theme-css');
+        if (link) link.remove();
+    }
 }
-
-function disableWinterTheme() {
-    const link = document.getElementById('winter-theme-css');
-    if (link) link.remove();
-    if(winterToggle) winterToggle.checked = false;
-}
-
 
 function showWinterBanner(version) {
-    if (document.querySelector('.winter-banner')) return;
+    // Создаем элемент с ТЕМ ЖЕ классом, что и обычные уведомления
+    // + добавляем класс persistent-banner, чтобы не перекрывался обычными тостами
+    if (document.querySelector('.persistent-banner')) return;
 
     const banner = document.createElement('div');
-    banner.className = 'winter-banner';
-    banner.style.cssText = `
-        position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(100px);
-        background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-        padding: 12px 20px; border-radius: 16px; width: 90%; max-width: 340px;
-        display: flex; align-items: center; gap: 15px; color: white;
-        box-shadow: 0 5px 20px rgba(137, 207, 240, 0.5);
-        z-index: 10002; opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    `;
+    banner.className = 'custom-toast-notification persistent-banner';
+    // Добавляем аватарку
+    const avatarUrl = '/assets/avatar.jpg';
     
     banner.innerHTML = `
-        <i class="fas fa-snowflake" style="font-size: 1.5em;"></i>
-        <div style="flex:1">
-            <div style="font-weight:bold; font-size: 0.95em;">Включить зиму?</div>
-            <div style="font-size: 0.8em; opacity: 0.9;">Снег и атмосфера</div>
+        <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
+        <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
+            <span style="font-weight:bold;">Включить снег? ❄️</span>
+            <span style="font-size:0.8em; opacity:0.8;">Зимнее настроение</span>
         </div>
-        <button class="winter-btn-yes" style="
-            background: rgba(255,255,255,0.2); border: none; color: white;
-            padding: 6px 12px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-right: 5px;">Да!</button>
-        <button class="winter-btn-no" style="
-            background: transparent; border: 1px solid rgba(255,255,255,0.3); color: white;
-            padding: 6px 12px; border-radius: 8px; cursor: pointer;">Нет</button>
+        <div class="banner-actions">
+            <button class="banner-btn btn-accept">Да</button>
+            <button class="banner-btn btn-decline">Нет</button>
+        </div>
     `;
+
+    // Сдвигаем навигацию (как обычный тост)
+    const navBar = document.getElementById('top-nav-bar');
+    if (navBar) navBar.classList.add('hidden-by-toast');
 
     document.body.appendChild(banner);
     
-    // Анимация появления
-    requestAnimationFrame(() => {
-        banner.style.transform = 'translateX(-50%) translateY(0)';
-        banner.style.opacity = '1';
-    });
+    // Анимация
+    requestAnimationFrame(() => banner.classList.add('show'));
 
-    banner.querySelector('.winter-btn-yes').onclick = () => {
-        enableWinterTheme();
-        localStorage.setItem('winter_theme_accepted', 'true');
+    // Обработчики
+    banner.querySelector('.btn-accept').onclick = () => {
+        changeTheme('winter');
         localStorage.setItem('winter_theme_seen_version', version);
         closeBanner();
-        showCustomNotification("❄️ Снег пошел!", { showConfetti: true });
+        showCustomNotification("❄️ Ура! Снег пошел!", { showConfetti: true });
     };
 
-    banner.querySelector('.winter-btn-no').onclick = () => {
-        localStorage.setItem('winter_theme_accepted', 'false');
+    banner.querySelector('.btn-decline').onclick = () => {
         localStorage.setItem('winter_theme_seen_version', version);
         closeBanner();
     };
 
     function closeBanner() {
-        banner.style.transform = 'translateX(-50%) translateY(100px)';
-        banner.style.opacity = '0';
+        banner.classList.remove('show');
+        if (navBar) navBar.classList.remove('hidden-by-toast');
         setTimeout(() => banner.remove(), 500);
     }
 }
 
-// Слушатель переключателя темы в настройках
-if (winterToggle) {
-    winterToggle.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            enableWinterTheme();
-            localStorage.setItem('winter_theme_accepted', 'true');
-        } else {
-            disableWinterTheme();
-            localStorage.setItem('winter_theme_accepted', 'false');
-        }
+// Слушатель селекта
+if (themeSelect) {
+    themeSelect.addEventListener('change', (e) => {
+        changeTheme(e.target.value);
     });
 }
 
