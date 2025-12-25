@@ -132,7 +132,7 @@ export default async function handler(req, res) {
                         
                         await sendMessage(token, chatId, reply);
                     } else {
-                         await sendMessage(token, chatId, `❌ Ошибка API темы: ${response.status}`);
+                          await sendMessage(token, chatId, `❌ Ошибка API темы: ${response.status}`);
                     }
                 } catch (error) {
                     await sendMessage(token, chatId, `❌ Ошибка сети: ${error.message}`);
@@ -155,24 +155,40 @@ export default async function handler(req, res) {
                         let finalId = null;
 
                         let tikData = null;
+                        
+                        // 1. Сначала пробуем TikWM (через POST для надежности)
                         try {
-                            const apiRes = await fetch(`https://www.tikwm.com/api/?url=${tikTokUrl}`);
+                            const apiRes = await fetch("https://www.tikwm.com/api/", {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: new URLSearchParams({ url: tikTokUrl })
+                            });
                             const apiJson = await apiRes.json();
                             if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                         } catch (e) { console.error("TikWM fail:", e); }
 
-                        let cobaltUrl = await getCobaltLink(tikTokUrl);
+                        // 2. Cobalt используем только как резерв, если TikWM не сработал
+                        let cobaltUrl = null;
+                        if (!tikData) {
+                            cobaltUrl = await getCobaltLink(tikTokUrl);
+                        }
 
                         if (tikData) {
                             finalId = tikData.id;
                             finalCover = tikData.cover;
                             finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                            finalVideoUrl = cobaltUrl || tikData.play;
+                            
+                            // ВАЖНО: Приоритет отдаем tikwm ссылке (она проксированная)
+                            finalVideoUrl = tikData.play;
+                            
                             if (tikData.images && tikData.images.length > 0) {
                                 await sendMessage(token, chatId, "❌ Это слайд-шоу! Отмена.");
                                 return res.status(200).json({ ok: true });
                             }
                         } else if (cobaltUrl) {
+                            // Резервный вариант (может быть временная ссылка)
                             finalVideoUrl = cobaltUrl;
                             finalId = extractIdFromUrl(tikTokUrl) || Date.now().toString();
                             finalAuthor = 'cobalt_user';
@@ -180,7 +196,11 @@ export default async function handler(req, res) {
                         }
 
                         if (finalVideoUrl) {
-                            if (!finalVideoUrl.startsWith('http')) finalVideoUrl = `https://www.tikwm.com${finalVideoUrl}`;
+                            // Если ссылка относительная (/video/media/...), делаем её абсолютной
+                            if (!finalVideoUrl.startsWith('http')) {
+                                finalVideoUrl = `https://www.tikwm.com${finalVideoUrl}`;
+                            }
+                            
                             const newVideo = { id: finalId, videoUrl: finalVideoUrl, author: finalAuthor, desc: 'on tiktok', cover: finalCover };
                             
                             await fetch(`${DB_URL}/`, {
@@ -188,9 +208,11 @@ export default async function handler(req, res) {
                                 headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
                                 body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                             });
-                            await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}\n🔗 Видео`, null, 'HTML');
+                            
+                            const sourceLabel = tikData ? "TikWM (Вечная)" : "Cobalt (Временная?)";
+                            await sendMessage(token, chatId, `✅ Сохранено [${sourceLabel}]!\n👤 @${newVideo.author}\n🔗 Видео`, null, 'HTML');
                         } else {
-                            await sendMessage(token, chatId, "❌ Ошибка!\nНе удалось скачать видео.");
+                            await sendMessage(token, chatId, "❌ Ошибка!\nНе удалось скачать видео ни через TikWM, ни через Cobalt.");
                         }
                     } catch (e) {
                         await sendMessage(token, chatId, "❌ Ошибка скрипта: " + e.message);
@@ -198,12 +220,14 @@ export default async function handler(req, res) {
                 }
             }
 
+
             else if (text === '/clear') {
                 await fetch(`${DB_URL}/del/feed_videos`, {
                     headers: { Authorization: `Bearer ${DB_TOKEN}` }
                 });
                 await sendMessage(token, chatId, "🗑 База очищена!", null, 'HTML');
             }
+
 
             else if (text.startsWith('/broadcast')) {
                 const bText = text.replace('/broadcast', '').trim();
@@ -227,6 +251,7 @@ export default async function handler(req, res) {
             }
         }
 
+
         else if (!isAdmin(chatId) && chatId > 0) {
             if (text.startsWith('/add') || text.startsWith('/clear')) {
                 return res.status(200).json({ ok: true });
@@ -248,6 +273,7 @@ export default async function handler(req, res) {
 }
 
 
+
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 async function getCobaltLink(url) {
     try {
@@ -262,10 +288,12 @@ async function getCobaltLink(url) {
     } catch (e) { return null; }
 }
 
+
 function extractIdFromUrl(url) {
     const match = url.match(/\/video\/(\d+)/);
     return match ? match[1] : null;
 }
+
 
 async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true };
