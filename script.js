@@ -45,6 +45,7 @@ if (tg) {
 // === СИСТЕМА УВЕДОМЛЕНИЙ И КОНФЕТТИ ===
 function showCustomNotification(message, options = {}) {
     const { isError = false, showConfetti = false } = options;
+    // Не показываем дубли, если это не баннер
     if (document.querySelector('.custom-toast-notification:not(.persistent-banner)')) return;
 
     const toast = document.createElement('div');
@@ -54,13 +55,10 @@ function showCustomNotification(message, options = {}) {
     toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
     
-    // Сдвигаем навигацию
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
 
     document.body.appendChild(toast);
-    
-    // Анимация
     requestAnimationFrame(() => toast.classList.add('show'));
     
     if (showConfetti && !isError) triggerConfetti();
@@ -81,7 +79,7 @@ function triggerConfetti() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    const confettiCount = 100; // Чуть меньше конфетти
+    const confettiCount = 100;
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
 
@@ -126,10 +124,11 @@ function triggerConfetti() {
 }
 
 
+// === ВНЕДРЕНИЕ СТИЛЕЙ (Уведомления ниже, тонкий ползунок, селект) ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        /* Навигация и слои */
+        /* Навигация */
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
 
@@ -147,16 +146,15 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* --- СТИЛИ УВЕДОМЛЕНИЙ --- */
-        /* Z-index 2000, чтобы быть НИЖЕ аудио-заглушки (обычно у нее 10000+), но выше контента */
+        /* --- УВЕДОМЛЕНИЯ (НИЖЕ ЗАГЛУШКИ) --- */
         .custom-toast-notification {
             position: fixed; 
-            top: 20px; /* Чуть ниже */
+            top: 20px; /* Опустили ниже */
             left: 50%; 
             min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%);
             padding: 12px 16px;
-            z-index: 2000; 
+            z-index: 2000; /* Ниже 9999 (обычно у оверлеев) */
             opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
@@ -178,7 +176,7 @@ function injectNewStyles() {
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.6); 
-            z-index: 9000; /* Тоже ниже заглушки */
+            z-index: 9000; 
             display: flex; justify-content: center; align-items: center;
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
@@ -196,7 +194,7 @@ function injectNewStyles() {
         
         .settings-header { 
             display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 24px; font-weight: 700; font-size: 1.2rem; letter-spacing: 0.5px;
+            margin-bottom: 24px; font-weight: 700; font-size: 1.2rem;
         }
         .settings-header button { 
             background: rgba(255,255,255,0.1); border: none; color: white; 
@@ -210,10 +208,10 @@ function injectNewStyles() {
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { text-align: center; margin-top: 10px; font-size: 0.7rem; opacity: 0.3; }
 
-        /* --- 1. ТОНКИЙ ПОЛЗУНОК ГРОМКОСТИ (Меньше ширина) --- */
+        /* --- ТОНКИЙ ПОЛЗУНОК (МАЛЕНЬКИЙ) --- */
         .thin-range {
             -webkit-appearance: none; 
-            width: 80px; /* Сделали уже */
+            width: 80px; 
             height: 4px; 
             background: rgba(255,255,255,0.15); border-radius: 2px; outline: none;
         }
@@ -222,39 +220,32 @@ function injectNewStyles() {
             width: 12px; height: 12px; border-radius: 50%; 
             background: #fff; cursor: pointer; border: none;
             box-shadow: 0 0 8px rgba(255,255,255,0.4);
-            transition: transform 0.1s;
         }
-        .thin-range::-webkit-slider-thumb:active { transform: scale(1.2); }
 
-        /* --- 2. ОФОРМЛЕНИЕ ВЫПАДАЮЩЕГО СПИСКА --- */
+        /* --- СТИЛЬНЫЙ ВЫПАДАЮЩИЙ СПИСОК --- */
         .theme-select {
             appearance: none; -webkit-appearance: none;
             background-color: rgba(255,255,255,0.08); 
             border: 1px solid rgba(255,255,255,0.1);
             color: white; 
-            padding: 8px 32px 8px 12px; /* Место справа под стрелку */
+            padding: 8px 32px 8px 12px;
             border-radius: 10px; 
             outline: none;
             font-family: inherit; font-size: 0.9rem; font-weight: 500;
             cursor: pointer;
-            
-            /* Кастомная стрелка */
             background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
             background-repeat: no-repeat;
             background-position: right 10px top 50%;
             background-size: 10px auto;
         }
-        .theme-select:focus { border-color: rgba(255,255,255,0.3); background-color: rgba(255,255,255,0.12); }
-        .theme-select option { background: #1e1e23; color: white; padding: 10px; }
+        .theme-select option { background: #1e1e23; color: white; }
 
-        /* КНОПКИ В БАННЕРЕ */
+        /* КНОПКИ БАННЕРА */
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn {
             border: none; padding: 6px 14px; border-radius: 8px; 
             font-size: 0.85rem; cursor: pointer; font-weight: 600;
-            transition: transform 0.1s, opacity 0.2s;
         }
-        .banner-btn:active { transform: scale(0.95); }
         .btn-accept { background: white; color: black; }
         .btn-decline { background: rgba(255,255,255,0.1); color: white; }
     `;
@@ -286,7 +277,7 @@ const uiSettingsBtn = document.getElementById('ui-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings');
 const modalVolRange = document.getElementById('modal-vol-range');
-const themeSelect = document.getElementById('theme-select'); // Новый селект
+const themeSelect = document.getElementById('theme-select'); 
 
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
@@ -297,10 +288,6 @@ const sugDesc = document.getElementById('sug-desc');
 const sugBtn = document.getElementById('sug-send');
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
-
-
-// === ПРОВЕРКА TELEGRAM ===
-const isTelegram = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
 
 
 // === 2. ЗАГРУЗКА ВИДЕО ===
@@ -548,6 +535,7 @@ if(modalVolRange) {
     });
 }
 
+
 // === 9. API ФУНКЦИИ ===
 if (uiSuggestBtn && suggestForm) {
     uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex'; });
@@ -597,36 +585,77 @@ if (uiShareBtn) {
 }
 
 
-// === НОВАЯ ЛОГИКА ТЕМ (ОБНОВЛЕННАЯ) ===
+// === НОВАЯ ЛОГИКА ТЕМ С РЕАЛЬНЫМИ СНЕЖИНКАМИ ===
+let snowInterval;
+
+function startSnowfall() {
+    let container = document.getElementById('snow-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'snow-container';
+        document.body.appendChild(container);
+    }
+
+    if (snowInterval) clearInterval(snowInterval);
+
+    const symbols = ['❄', '❅', '❆', '•']; 
+
+    snowInterval = setInterval(() => {
+        if (!document.getElementById('snow-container')) return;
+
+        const flake = document.createElement('div');
+        flake.className = 'snowflake';
+        flake.innerText = symbols[Math.floor(Math.random() * symbols.length)];
+        
+        // РАНДОМ: Позиция, Размер (МАЛЕНЬКИЕ), Скорость
+        const left = Math.random() * 100; 
+        const size = Math.random() * 0.8 + 0.4; // 0.4em - 1.2em (маленькие)
+        const duration = Math.random() * 10 + 5; // 5s - 15s (медленно)
+        const opacity = Math.random() * 0.6 + 0.2; 
+
+        flake.style.left = left + '%';
+        flake.style.fontSize = size + 'em';
+        flake.style.opacity = opacity;
+        flake.style.animationDuration = duration + 's';
+        
+        container.appendChild(flake);
+
+        // Удаление
+        setTimeout(() => {
+            flake.remove();
+        }, duration * 1000);
+
+    }, 300); // Интервал создания
+}
+
+function stopSnowfall() {
+    if (snowInterval) clearInterval(snowInterval);
+    const container = document.getElementById('snow-container');
+    if (container) container.remove();
+}
+
+
 async function checkWinterTheme() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
         if (res.ok) data = await res.json();
 
-        // 1. Убираем/скрываем опцию "Зима" из селекта, если она выключена админом
-        const winterOption = themeSelect.querySelector('option[value="winter"]');
+        const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
         if (!data.isWinter) {
-            if (winterOption) winterOption.disabled = true; // Или remove()
-            // Если была выбрана зима, сбрасываем на default
-            if (themeSelect.value === 'winter') {
-                 changeTheme('default');
-            }
+            if (winterOption) winterOption.disabled = true;
+            if (themeSelect && themeSelect.value === 'winter') changeTheme('default');
         } else {
             if (winterOption) winterOption.disabled = false;
         }
 
-        // 2. Логика баннера и сохраненной темы
-        const savedTheme = localStorage.getItem('app_theme_preference'); // 'default', 'winter'
+        const savedTheme = localStorage.getItem('app_theme_preference');
         const lastSeenVersion = localStorage.getItem('winter_theme_seen_version');
 
-        // Если есть сохраненная тема - применяем её
         if (savedTheme) {
             changeTheme(savedTheme);
         } else {
-            // Если темы нет, но зима активна и версия новая -> предлагаем баннер
             if (data.isWinter) {
-                // Если пользователь еще не видел эту версию зимы
                 if (parseInt(lastSeenVersion) !== data.version) {
                     showWinterBanner(data.version);
                 }
@@ -636,33 +665,38 @@ async function checkWinterTheme() {
 }
 
 function changeTheme(themeName) {
-    // 1. Обновляем селект
     if (themeSelect) themeSelect.value = themeName;
     localStorage.setItem('app_theme_preference', themeName);
 
-    // 2. Логика применения CSS
     if (themeName === 'winter') {
-        if (!document.getElementById('winter-theme-css')) {
-            const link = document.createElement('link');
-            link.id = 'winter-theme-css';
-            link.rel = 'stylesheet';
-            link.href = 'css/winter.css';
-            document.head.appendChild(link);
-        }
+        enableWinterTheme();
     } else {
-        const link = document.getElementById('winter-theme-css');
-        if (link) link.remove();
+        disableWinterTheme();
     }
 }
 
+function enableWinterTheme() {
+    if (!document.getElementById('winter-theme-css')) {
+        const link = document.createElement('link');
+        link.id = 'winter-theme-css';
+        link.rel = 'stylesheet';
+        link.href = 'css/winter.css';
+        document.head.appendChild(link);
+    }
+    startSnowfall();
+}
+
+function disableWinterTheme() {
+    const link = document.getElementById('winter-theme-css');
+    if (link) link.remove();
+    stopSnowfall();
+}
+
 function showWinterBanner(version) {
-    // Создаем элемент с ТЕМ ЖЕ классом, что и обычные уведомления
-    // + добавляем класс persistent-banner, чтобы не перекрывался обычными тостами
     if (document.querySelector('.persistent-banner')) return;
 
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
-    // Добавляем аватарку
     const avatarUrl = '/assets/avatar.jpg';
     
     banner.innerHTML = `
@@ -677,16 +711,12 @@ function showWinterBanner(version) {
         </div>
     `;
 
-    // Сдвигаем навигацию (как обычный тост)
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
 
     document.body.appendChild(banner);
-    
-    // Анимация
     requestAnimationFrame(() => banner.classList.add('show'));
 
-    // Обработчики
     banner.querySelector('.btn-accept').onclick = () => {
         changeTheme('winter');
         localStorage.setItem('winter_theme_seen_version', version);
@@ -706,7 +736,6 @@ function showWinterBanner(version) {
     }
 }
 
-// Слушатель селекта
 if (themeSelect) {
     themeSelect.addEventListener('change', (e) => {
         changeTheme(e.target.value);
@@ -721,7 +750,6 @@ window.addEventListener('load', async () => {
     await loadVideosOnce(); 
     await syncSubs();
     
-    // --- ЗАПУСК ПРОВЕРКИ ТЕМЫ ---
     checkWinterTheme();
     
     updateInd(tabForYou);
