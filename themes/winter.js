@@ -1,22 +1,16 @@
 // themes/winter.js
 
 (function() {
-    // 1. СТИЛИ (CSS)
     const styleId = 'winter-theme-style';
+    
+    // CSS прямо внутри JS для удобства инъекции
     const cssContent = `
-        /* css/winter.css INJECTED */
-        :root {
-            --bg-color: #0f1218;
-            --accent-color: #a0d8ef; 
-        }
-
-        /* Контейнер для снега */
+        /* Снежинки */
         #snow-container {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
-            /* Z-INDEX: 50 (Выше плеера, но ниже UI, у которого 100) */
-            z-index: 50; 
+            z-index: 50; /* ВЫШЕ видео (0-10), но НИЖЕ интерфейса (100) */
             overflow: hidden;
         }
 
@@ -39,7 +33,6 @@
         }
     `;
 
-    // 2. ГЕНЕРАТОР СНЕГА
     let snowInterval;
 
     function startSnowfall() {
@@ -61,10 +54,10 @@
             flake.className = 'snowflake';
             flake.innerText = symbols[Math.floor(Math.random() * symbols.length)];
             
-            // Рандом: маленькие снежинки
+            // Настройки рандома: маленькие и аккуратные
             const left = Math.random() * 100; 
             const size = Math.random() * 0.8 + 0.4; // 0.4em - 1.2em
-            const duration = Math.random() * 10 + 5; // 5s - 15s
+            const duration = Math.random() * 10 + 5; // 5s - 15s (медленно)
             const opacity = Math.random() * 0.6 + 0.2; 
 
             flake.style.left = left + '%';
@@ -84,10 +77,9 @@
         if (container) container.remove();
     }
 
-    // 3. ЭКСПОРТ (Глобальный объект)
+    // Экспортируем глобальный объект управления темой
     window.WinterTheme = {
         enable: () => {
-            // Добавляем CSS
             if (!document.getElementById(styleId)) {
                 const style = document.createElement('style');
                 style.id = styleId;
@@ -97,7 +89,6 @@
             startSnowfall();
         },
         disable: () => {
-            // Удаляем CSS
             const style = document.getElementById(styleId);
             if (style) style.remove();
             stopSnowfall();
