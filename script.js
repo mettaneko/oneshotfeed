@@ -145,38 +145,38 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* --- СТЕКЛЯННЫЕ УВЕДОМЛЕНИЯ --- */
+        /* --- СТЕКЛЯННЫЕ УВЕДОМЛЕНИЯ (ТОЧНО КАК В FEED.CSS) --- */
         .custom-toast-notification {
             position: fixed; 
             top: 20px; 
             left: 50%; 
             min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%);
-            padding: 12px 16px;
+            padding: 12px 24px;
             z-index: 2000; 
             opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
             
-            /* Эффект матового стекла */
-            background-color: rgba(22, 22, 24, 0.85); 
-            backdrop-filter: blur(16px) saturate(180%);
-            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            /* СТИЛЬ СТЕКЛА */
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            border-radius: 30px; /* Круглее, как капсулы */
             
             color: #fff; 
-            border-radius: 16px; 
-            border: 0.5px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
             font-family: "Manrope", sans-serif;
         }
         .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
         .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.3); }
         .toast-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
-        .toast-message { font-weight: 500; font-size: 0.9rem; flex: 1; line-height: 1.3; }
+        .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
 
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
         
-        /* МОДАЛКА НАСТРОЕК */
+        /* МОДАЛКА НАСТРОЕК (ТОТ ЖЕ СТИЛЬ) */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.6); 
@@ -191,12 +191,14 @@ function injectNewStyles() {
             transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             
             /* СТЕКЛО */
-            background-color: rgba(22, 22, 24, 0.85);
-            backdrop-filter: blur(16px) saturate(180%);
-            -webkit-backdrop-filter: blur(16px) saturate(180%);
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            border-radius: 30px;
             
-            color: #fff; border-radius: 24px; border: 0.5px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+            color: #fff;
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
         
@@ -682,7 +684,7 @@ function showWinterBanner(version) {
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
-        localStorage.setItem('winter_theme_seen_version', version); // <-- Вернули: запоминаем, что юзер видел эту версию
+        localStorage.setItem('winter_theme_seen_version', version); // Запоминаем отказ
         closeBanner();
     };
 
