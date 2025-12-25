@@ -2,26 +2,25 @@
 <html lang="ru" data-theme="default">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OneShot Feed</title>
-    <meta name="description" content="OneShot Feed — Telegram-мини-приложение в стиле TikTok с лентой видео, рекомендациями и подписками по тематике OneShot. Скачивайте ролики напрямую через @OneshotFeedBot!">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/feed.css">
+    <meta name="referrer" content="no-referrer" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <meta name="referrer" content="no-referrer" />
 </head>
 <body>
 
-    <!-- ОВЕРЛЕЙ ЗВУКА -->
+    <!-- ОВЕРЛЕЙ ЗВУКА (оставляем для первого клика) -->
     <div id="audio-unlock-overlay">
         <div class="unlock-message">
             <i class="fas fa-volume-up"></i>
-            <p>Нажмите, чтобы начать просмотр видео</p>
+            <p>Нажмите, чтобы включить звук</p>
         </div>
     </div>
 
-    <!-- НАВИГАЦИЯ (ИЗМЕНЕНО: добавлен id) -->
+    <!-- НАВИГАЦИЯ -->
     <div class="feed-navigation" id="top-nav-bar">
         <div class="nav-indicator" id="nav-indicator"></div>
         <button class="nav-tab active" id="tab-foryou">Для вас</button>
@@ -31,9 +30,9 @@
     <!-- ЛЕНТА -->
     <div class="tiktok-feed" id="feed"></div>
 
-    <!-- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС (FIXED) -->
+    <!-- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС -->
     <div class="liquid-controls-container" id="global-ui">
-        <!-- Инфо -->
+        <!-- Инфо о видео -->
         <div class="video-info-capsule">
             <div class="author-row" style="display:flex; justify-content:center; align-items:center; gap:6px; margin-bottom:4px;">
                 <h3 class="author-name" id="ui-author">@loading</h3>
@@ -44,45 +43,63 @@
             <p class="video-desc" id="ui-desc">...</p>
         </div>
 
-        <!-- Кнопки -->
+        <!-- Кнопки управления -->
         <div class="glass-deck">
-            <div class="volume-control-wrapper">
-                <button class="control-btn btn-volume" id="ui-vol-btn"><i class="fas fa-volume-up"></i></button>
-                <div class="volume-slider-container" id="ui-vol-cont">
-                    <input type="range" class="volume-range" id="ui-vol-range" min="0" max="1" step="0.05" value="1">
-                </div>
-            </div>
+            <!-- КНОПКА НАСТРОЕК (ВМЕСТО ЗВУКА) -->
+            <button class="control-btn btn-settings" id="ui-settings-btn">
+                <i class="fas fa-cog"></i>
+            </button>
             
             <div class="divider"></div>
             
-            <!-- КНОПКА SHARE -->
+            <!-- SHARE -->
             <button class="control-btn btn-share" id="ui-share-btn"><i class="fas fa-share-alt"></i></button>
             
             <div class="divider"></div>
             
-            <!-- КНОПКА ПРЕДЛОЖКИ -->
+            <!-- SUGGEST -->
             <button class="control-btn btn-suggest" id="ui-suggest-btn"><i class="fas fa-plus"></i></button>
         </div>
     </div>
 
-    <!-- ФОРМА ПРЕДЛОЖКИ (скрыта по умолчанию) -->
-    <div class="suggest-form" id="suggest-form" style="display: none;">
-        <div class="suggest-form-title">Предложить своё видео</div>
-        <input id="sug-url" class="suggest-input" type="url" placeholder="Ссылка на видео">
-        <input id="sug-author" class="suggest-input" type="text" placeholder="Автор видео">
-        <textarea id="sug-desc" class="suggest-textarea" placeholder="Описание (по желанию)"></textarea>
-        <button id="sug-send" class="suggest-send-btn">Отправить</button>
-    </div>
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК -->
+    <div class="settings-modal-overlay" id="settings-modal" style="display: none;">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <span>Настройки</span>
+                <button id="close-settings"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <!-- Громкость -->
+            <div class="setting-item">
+                <div class="setting-label"><i class="fas fa-volume-up"></i> Громкость</div>
+                <input type="range" class="volume-range" id="modal-vol-range" min="0" max="1" step="0.05" value="1">
+            </div>
 
-    <!-- ПЛАШКА "ОТКЛЮЧИТЬ ПЕРЕНАПРАВЛЕНИЕ" (скрыта по умолчанию) -->
-    <div id="disable-redirect-banner" class="disable-banner">
-        <div class="disable-content">
-            <i class="fas fa-info-circle"></i>
-            <span>Открывай через <b>@OneshotFeedBot</b></span>
+            <!-- Зимняя тема -->
+            <div class="setting-item" id="winter-setting-row" style="display:none;">
+                <div class="setting-label"><i class="fas fa-snowflake"></i> Зимняя тема</div>
+                <label class="switch">
+                    <input type="checkbox" id="winter-toggle">
+                    <span class="slider round"></span>
+                </label>
+            </div>
+            
+            <div class="settings-footer">
+                OneShot Feed v0.9.5
+            </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <!-- ФОРМА ПРЕДЛОЖКИ -->
+    <div class="suggest-form" id="suggest-form" style="display: none;">
+        <div class="suggest-form-title">Предложить видео</div>
+        <input id="sug-url" class="suggest-input" type="url" placeholder="Ссылка">
+        <input id="sug-author" class="suggest-input" type="text" placeholder="Автор">
+        <textarea id="sug-desc" class="suggest-textarea" placeholder="Описание"></textarea>
+        <button id="sug-send" class="suggest-send-btn">Отправить</button>
+    </div>
 
+    <script src="script.js"></script>
 </body>
 </html>

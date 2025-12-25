@@ -1,0 +1,24 @@
+/* css/winter.css */
+:root {
+    --bg-color: #0f1218;
+    --accent-color: #a0d8ef; /* Ледяной голубой */
+    --text-color: #f0f8ff;
+    --card-bg: rgba(20, 25, 40, 0.7);
+}
+
+/* Снег */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 9998;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="1" fill="white" opacity="0.6"/></svg>');
+    background-size: 200px 200px;
+    animation: snow 8s linear infinite;
+}
+
+@keyframes snow {
+    0% { background-position: 0 0, 0 0; }
+    100% { background-position: 50px 200px, 0 200px; }
+}
