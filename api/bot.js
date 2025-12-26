@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
             if (data === 'version_history') {
                 const historyText = `
-📜 *История версий Niko Feed:*
+📜 *История версий Oneshot Feed:*
 
 (Нумерация - Год.Месяц.Номер версии)
 
@@ -70,7 +70,7 @@ export default async function handler(req, res) {
 
         if (text === '/start') {
             await sendMessage(token, chatId,
-                "👋 Привет! Добро пожаловать в Niko Feed.\nСмотри, предлагай видео или просто читай обновления!", {
+                "👋 Привет! Добро пожаловать в Oneshot Feed.\nСмотри, предлагай видео или просто читай обновления!", {
                     inline_keyboard: [
                         [{ text: "📱 Открыть", web_app: { url: webAppUrl } }],
                         [{ text: "📜 История", callback_data: "version_history" }]
