@@ -145,7 +145,6 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* Стеклянные уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%); padding: 12px 24px;
@@ -170,7 +169,6 @@ function injectNewStyles() {
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
-        
         .settings-panel {
             width: 280px; padding: 24px 20px;
             transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -179,19 +177,14 @@ function injectNewStyles() {
             border-radius: 30px; color: #fff;
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
-        
         .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; font-weight: 700; font-size: 1.2rem; }
         .settings-header button { background: rgba(255,255,255,0.1); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
         .settings-header button:active { background: rgba(255,255,255,0.2); }
-        
         .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
-
-        /* Ползунок */
         .thin-range { -webkit-appearance: none; width: 80px !important; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; }
         .thin-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
-
         .theme-select {
             appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
             border: 1px solid rgba(255,255,255,0.1); color: white; padding: 8px 32px 8px 12px;
@@ -200,7 +193,6 @@ function injectNewStyles() {
             background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto;
         }
         .theme-select option { background: #1e1e23; color: white; }
-
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
         .btn-accept { background: white; color: black; }
@@ -217,7 +209,7 @@ let savedVol = localStorage.getItem('niko_volume');
 let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
-let allVideos = [];
+let allVideos = []; // Хранит ВСЕ видео, включая секретные
 
 
 // === DOM ===
@@ -258,24 +250,19 @@ async function loadVideosOnce() {
         const res = await fetch(`${API_BASE}/api/get_feed`);
         if (res.ok) dbVideos = await res.json();
     } catch (e) { }
+    // Загружаем ВСЕ видео в память, фильтрация происходит при рендере
     allVideos = [...dbVideos, ...localVideos];
     if (allVideos.length === 0) console.warn('No videos found!');
 }
 
 
 async function reloadVideosAndFeed() {
-    // Не перезагружаем, если юзер скроллит (можно уточнить логику, но пока так безопаснее)
-    if (feedContainer.scrollTop > 100) return; 
-
+    if (feedContainer.scrollTop > 100) return;
     const oldVideos = allVideos.slice();
     await loadVideosOnce();
     const oldIds = new Set(oldVideos.map(v => v.id));
     const newOnes = allVideos.filter(v => !oldIds.has(v.id));
     if (newOnes.length === 0) return;
-    
-    // При перезагрузке можно добавлять новые видео, но пока просто обновим массив
-    // Если хотите динамическое добавление в начало:
-    // newOnes.forEach(v => { const s = createSlide(v); feedContainer.prepend(s); observer.observe(s); });
 }
 
 
@@ -316,20 +303,25 @@ const overlayEl = document.getElementById('audio-unlock-overlay');
 if (overlayEl) { overlayEl.addEventListener('click', unlockAudioContext); overlayEl.addEventListener('touchstart', unlockAudioContext); }
 
 
-// === NAVIGATION ===
+// === NAVIGATION (С ФИЛЬТРАЦИЕЙ СЕКРЕТНЫХ) ===
 function updateInd(tab) {
     if (!tab) return;
     indicator.style.width = `${tab.offsetWidth}px`;
     indicator.style.transform = `translateX(${tab.offsetLeft}px)`;
 }
 function shuffle(arr) { return arr.sort(() => Math.random() - 0.5); }
+
 function switchToForYou() {
     currentTab = 'foryou';
     tabForYou.classList.add('active');
     tabFollowing.classList.remove('active');
     updateInd(tabForYou);
-    renderFeed(shuffle([...allVideos]).slice(0, 5));
+    
+    // ФИЛЬТР: Убираем секретные из общей ленты
+    const publicVideos = allVideos.filter(v => !v.isSecret);
+    renderFeed(shuffle([...publicVideos]).slice(0, 5));
 }
+
 tabForYou.addEventListener('click', switchToForYou);
 tabFollowing.addEventListener('click', () => {
     if (subscribedAuthors.length === 0) return;
@@ -337,7 +329,9 @@ tabFollowing.addEventListener('click', () => {
     tabFollowing.classList.add('active');
     tabForYou.classList.remove('active');
     updateInd(tabFollowing);
-    const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author));
+    
+    // ФИЛЬТР: Убираем секретные из подписок
+    const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
     renderFeed(filtered.slice(0, 5));
 });
 
@@ -360,7 +354,7 @@ uiSubBtn.addEventListener('click', async (e) => {
     updateSubBtnState();
     if (currentTab === 'following') {
         if (subscribedAuthors.length === 0) switchToForYou();
-        else { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author)); renderFeed(filtered.slice(0, 5)); }
+        else { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret); renderFeed(filtered.slice(0, 5)); }
     }
     if (tg?.initDataUnsafe?.user) {
         try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }); } catch (e) { }
@@ -453,6 +447,7 @@ function renderFeed(videos, append = false) {
 }
 
 
+// === SCROLL (С ФИЛЬТРАЦИЕЙ СЕКРЕТНЫХ) ===
 let isFetching = false;
 feedContainer.addEventListener('scroll', () => {
     if (feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight) < 300) {
@@ -460,7 +455,15 @@ feedContainer.addEventListener('scroll', () => {
         isFetching = true;
         setTimeout(() => {
             let nextBatch = [];
-            if (currentTab === 'foryou') { nextBatch = shuffle([...allVideos]).slice(0, 5); } else if (subscribedAuthors.length) { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author)); nextBatch = shuffle(filtered).slice(0, 5); }
+            if (currentTab === 'foryou') {
+                // Фильтруем секретные
+                const publicVideos = allVideos.filter(v => !v.isSecret);
+                nextBatch = shuffle([...publicVideos]).slice(0, 5);
+            } else if (subscribedAuthors.length) { 
+                // Фильтруем секретные
+                const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
+                nextBatch = shuffle(filtered).slice(0, 5); 
+            }
             if (nextBatch.length > 0) { renderFeed(nextBatch, true); }
             isFetching = false;
         }, 500);
@@ -533,33 +536,30 @@ if (sugBtn) {
     });
 }
 
-// === КНОПКА ПОДЕЛИТЬСЯ (Исправлено) ===
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const data = getActiveSlideData();
         if (!data) return;
         
-        // Если не в ТГ — просто копируем ссылку
         if (!tg?.initDataUnsafe?.user) {
             navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); }).catch(() => {});
             return;
         }
         
-        // Отправка в ТГ
         try {
             await fetch(`${API_BASE}/api/share`, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ 
-                    id: data.id,           // Добавили ID для генерации Deep Link
+                    id: data.id,
                     videoUrl: data.videoUrl, 
                     author: data.author, 
                     desc: data.desc, 
                     user: tg.initDataUnsafe.user 
                 }) 
             });
-            showCustomNotification('Видео отправлено в Личные Сообщения!', { showConfetti: true });
+            showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
         } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
     });
 }
@@ -579,13 +579,11 @@ function loadThemeScript(url, callback) {
 
 function applyTheme(themeName) {
     if (window.WinterTheme) window.WinterTheme.disable();
-
     if (themeName === 'winter') {
         loadThemeScript('themes/winter.js', () => {
             if (window.WinterTheme) window.WinterTheme.enable();
         });
     }
-
     if (themeSelect) themeSelect.value = themeName;
     localStorage.setItem('app_theme_preference', themeName);
 }
@@ -594,7 +592,6 @@ async function checkThemes() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
-        
         if (res.ok) data = await res.json();
 
         const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
@@ -603,9 +600,7 @@ async function checkThemes() {
 
         if (!data.isWinter) {
             if (winterOption) winterOption.disabled = true;
-            if (savedTheme === 'winter') {
-                applyTheme('default');
-            }
+            if (savedTheme === 'winter') applyTheme('default');
             return;
         }
 
@@ -614,24 +609,18 @@ async function checkThemes() {
         if (savedTheme) {
             applyTheme(savedTheme);
             if (savedTheme !== 'winter') {
-                 if (parseInt(lastSeenVersion) !== data.version) {
-                    showWinterBanner(data.version);
-                 }
+                 if (parseInt(lastSeenVersion) !== data.version) showWinterBanner(data.version);
             }
-        } else {
-            showWinterBanner(data.version);
-        }
+        } else { showWinterBanner(data.version); }
 
     } catch (e) { console.error('Theme check failed', e); }
 }
 
 function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
-
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
     const avatarUrl = '/assets/avatar.jpg';
-    
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
@@ -645,7 +634,6 @@ function showWinterBanner(version) {
     `;
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
-
     document.body.appendChild(banner);
     requestAnimationFrame(() => banner.classList.add('show'));
 
@@ -668,14 +656,10 @@ function showWinterBanner(version) {
     }
 }
 
-if (themeSelect) {
-    themeSelect.addEventListener('change', (e) => {
-        applyTheme(e.target.value);
-    });
-}
+if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.target.value)); }
 
 
-// === INIT (С обработкой Deep Linking) ===
+// === INIT ===
 window.addEventListener('load', async () => {
     injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
@@ -684,8 +668,9 @@ window.addEventListener('load', async () => {
     checkThemes();
     updateInd(tabForYou);
 
-    // --- DEEP LINKING LOGIC ---
+    // --- DEEP LINKING ---
     let targetId = null;
+    
     // 1. Проверяем startapp из параметров TG Web App (t.me/bot/app?startapp=v_123)
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
         const param = tg.initDataUnsafe.start_param; 
@@ -693,25 +678,29 @@ window.addEventListener('load', async () => {
             targetId = param.replace('v_', '');
         }
     }
-    // 2. Проверяем хэш (резервный вариант)
+    
+    // 2. Проверяем хэш
     if (!targetId && window.location.hash.includes('video=')) {
         targetId = window.location.hash.split('video=')[1];
     }
 
     let feedToRender = [];
     if (targetId) {
-        // Ищем видео по ID
+        // Ищем видео в общем массиве (даже если оно секретное)
         const targetVideo = allVideos.find(v => String(v.id) === String(targetId));
         if (targetVideo) {
-            // Ставим его первым, остальные перемешиваем
-            const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId)));
+            // Если нашли - ставим его первым
+            // А остальные фильтруем (убираем секретные)
+            const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId) && !v.isSecret));
             feedToRender = [targetVideo, ...others];
             console.log("Deep linked to video:", targetId);
         } else {
-            feedToRender = shuffle([...allVideos]);
+            // Не нашли целевое видео - показываем публичную ленту
+            feedToRender = shuffle(allVideos.filter(v => !v.isSecret));
         }
     } else {
-        feedToRender = shuffle([...allVideos]);
+        // Обычный вход - показываем только публичные видео
+        feedToRender = shuffle(allVideos.filter(v => !v.isSecret));
     }
 
     renderFeed(feedToRender.slice(0, 5));

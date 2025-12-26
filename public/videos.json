@@ -3,13 +3,22 @@
     "id": 1,
     "videoUrl": "https://nikotube.nekoweb.org/resources/50/@hui87684=34e047(1).mp4",
     "author": "mettaneko",
-    "desc": "Тест. НЕ МОЕ!"
+    "desc": "Тест. НЕ МОЕ!",
+    "isSecret": true
   },
   {
     "id": 2,
     "videoUrl": "https://nikotube.nekoweb.org/resources/Oneshot%20videos%20from%20Google%20Drive/profspiffy_2025-07-20-13-56-53_1753009013013.mp4",
     "author": "mettaneko",
-    "desc": "Тест 2. ТАКЖЕ НЕ МОЕ!"
+    "desc": "Тест 2. ТАКЖЕ НЕ МОЕ!",
+    "isSecret": true
+  },
+  {
+    "id": 2905,
+    "videoUrl": "https://www.dropbox.com/scl/fi/hrj4q88kw4ot7cv08meut/isSecret_Video.mp4?rlkey=grogntv2vz0vt3rgv1tf3hsa3&st=022xd5x8&dl=1",
+    "author": "???",
+    "desc": "Ты пришел не с Ленты.",
+    "isSecret": true
   },
   {
     "id": 3,
