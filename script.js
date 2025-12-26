@@ -145,29 +145,16 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* --- СТЕКЛЯННЫЕ УВЕДОМЛЕНИЯ (ТОЧНО КАК В FEED.CSS) --- */
+        /* Стеклянные уведомления */
         .custom-toast-notification {
-            position: fixed; 
-            top: 20px; 
-            left: 50%; 
-            min-width: 300px; max-width: 90%;
-            transform: translateX(-50%) translateY(-150%);
-            padding: 12px 24px;
-            z-index: 2000; 
-            opacity: 0;
+            position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
+            transform: translateX(-50%) translateY(-150%); padding: 12px 24px;
+            z-index: 2000; opacity: 0;
             transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
             display: flex; align-items: center; gap: 12px;
-            
-            /* СТИЛЬ СТЕКЛА */
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            border-radius: 30px; /* Круглее, как капсулы */
-            
-            color: #fff; 
-            font-family: "Manrope", sans-serif;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            border-radius: 30px; color: #fff; font-family: "Manrope", sans-serif;
         }
         .custom-toast-notification.show { transform: translateX(-50%) translateY(0); opacity: 1; }
         .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.3); }
@@ -176,12 +163,10 @@ function injectNewStyles() {
 
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
         
-        /* МОДАЛКА НАСТРОЕК (ТОТ ЖЕ СТИЛЬ) */
+        /* Модалка настроек */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); 
-            z-index: 9000; 
-            display: flex; justify-content: center; align-items: center;
+            background: rgba(0,0,0,0.6); z-index: 9000; display: flex; justify-content: center; align-items: center;
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
@@ -189,70 +174,47 @@ function injectNewStyles() {
         .settings-panel {
             width: 280px; padding: 24px 20px;
             transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            
-            /* СТЕКЛО */
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(15px);
-            -webkit-backdrop-filter: blur(15px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            border-radius: 30px;
-            
-            color: #fff;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            border-radius: 30px; color: #fff;
         }
         .settings-modal-overlay.show .settings-panel { transform: scale(1); }
         
-        .settings-header { 
-            display: flex; justify-content: space-between; align-items: center; 
-            margin-bottom: 24px; font-weight: 700; font-size: 1.2rem;
-        }
-        .settings-header button { 
-            background: rgba(255,255,255,0.1); border: none; color: white; 
-            width: 30px; height: 30px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; transition: background 0.2s;
-        }
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; font-weight: 700; font-size: 1.2rem; }
+        .settings-header button { background: rgba(255,255,255,0.1); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
         .settings-header button:active { background: rgba(255,255,255,0.2); }
         
         .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
 
-        /* --- ПОЛЗУНОК ГРОМКОСТИ (УЗКИЙ) --- */
-        .thin-range {
-            -webkit-appearance: none; 
-            width: 80px !important;
-            height: 4px; 
-            background: rgba(255,255,255,0.2); border-radius: 2px; outline: none;
+        .suggest-form {
+            background: rgba(0, 0, 0, 0.6) !important; backdrop-filter: blur(15px) !important; -webkit-backdrop-filter: blur(15px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 30px !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+            padding: 24px !important; gap: 16px !important; width: 90% !important; max-width: 340px !important;
         }
-        .thin-range::-webkit-slider-thumb {
-            -webkit-appearance: none; appearance: none;
-            width: 14px; height: 14px; border-radius: 50%; 
-            background: #fff; cursor: pointer; border: none;
-            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        .suggest-form-title { font-size: 1.1rem !important; font-weight: 700 !important; color: white !important; margin-bottom: 4px !important; }
+        .suggest-input, .suggest-textarea {
+            background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 12px !important; padding: 12px 14px !important; color: white !important; font-family: inherit !important; transition: background 0.2s;
         }
+        .suggest-input:focus, .suggest-textarea:focus { background: rgba(255, 255, 255, 0.1) !important; border-color: rgba(255, 255, 255, 0.2) !important; }
+        .suggest-send-btn { border-radius: 12px !important; font-weight: 700 !important; padding: 12px !important; background: white !important; color: black !important; }
+
+        .thin-range { -webkit-appearance: none; width: 80px !important; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; }
+        .thin-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
 
         .theme-select {
-            appearance: none; -webkit-appearance: none;
-            background-color: rgba(255,255,255,0.08); 
-            border: 1px solid rgba(255,255,255,0.1);
-            color: white; 
-            padding: 8px 32px 8px 12px;
-            border-radius: 10px; outline: none;
-            font-family: inherit; font-size: 0.9rem; font-weight: 500;
-            cursor: pointer;
+            appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
+            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 8px 32px 8px 12px;
+            border-radius: 10px; outline: none; font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
             background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-            background-repeat: no-repeat;
-            background-position: right 10px top 50%;
-            background-size: 10px auto;
+            background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto;
         }
         .theme-select option { background: #1e1e23; color: white; }
 
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
-        .banner-btn {
-            border: none; padding: 6px 14px; border-radius: 8px; 
-            font-size: 0.85rem; cursor: pointer; font-weight: 600;
-        }
+        .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
         .btn-accept { background: white; color: black; }
         .btn-decline { background: rgba(255,255,255,0.1); color: white; }
     `;
@@ -314,12 +276,13 @@ async function loadVideosOnce() {
 
 
 async function reloadVideosAndFeed() {
+    if (feedContainer.scrollTop > 100) return; // Не обновляем если юзер скроллит
     const oldVideos = allVideos.slice();
     await loadVideosOnce();
     const oldIds = new Set(oldVideos.map(v => v.id));
     const newOnes = allVideos.filter(v => !oldIds.has(v.id));
     if (newOnes.length === 0) return;
-    newOnes.forEach(v => { const slide = createSlide(v); feedContainer.appendChild(slide); observer.observe(slide); });
+    // Можно добавить логику добавления, но пока просто обновим массив
 }
 
 
@@ -532,6 +495,7 @@ if(closeSettingsBtn && settingsModal) {
 const footer = document.querySelector('.settings-footer');
 if(footer) footer.style.display = 'none';
 
+
 if(modalVolRange) {
     modalVolRange.value = globalVolume;
     modalVolRange.addEventListener('input', (e) => {
@@ -606,13 +570,11 @@ function loadThemeScript(url, callback) {
 
 function applyTheme(themeName) {
     if (window.WinterTheme) window.WinterTheme.disable();
-
     if (themeName === 'winter') {
         loadThemeScript('themes/winter.js', () => {
             if (window.WinterTheme) window.WinterTheme.enable();
         });
     }
-
     if (themeSelect) themeSelect.value = themeName;
     localStorage.setItem('app_theme_preference', themeName);
 }
@@ -621,7 +583,6 @@ async function checkThemes() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
-        
         if (res.ok) data = await res.json();
 
         const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
@@ -630,9 +591,7 @@ async function checkThemes() {
 
         if (!data.isWinter) {
             if (winterOption) winterOption.disabled = true;
-            if (savedTheme === 'winter') {
-                applyTheme('default');
-            }
+            if (savedTheme === 'winter') applyTheme('default');
             return;
         }
 
@@ -641,24 +600,18 @@ async function checkThemes() {
         if (savedTheme) {
             applyTheme(savedTheme);
             if (savedTheme !== 'winter') {
-                 if (parseInt(lastSeenVersion) !== data.version) {
-                    showWinterBanner(data.version);
-                 }
+                 if (parseInt(lastSeenVersion) !== data.version) showWinterBanner(data.version);
             }
-        } else {
-            showWinterBanner(data.version);
-        }
+        } else { showWinterBanner(data.version); }
 
     } catch (e) { console.error('Theme check failed', e); }
 }
 
 function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
-
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
     const avatarUrl = '/assets/avatar.jpg';
-    
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
@@ -672,7 +625,6 @@ function showWinterBanner(version) {
     `;
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
-
     document.body.appendChild(banner);
     requestAnimationFrame(() => banner.classList.add('show'));
 
@@ -684,7 +636,7 @@ function showWinterBanner(version) {
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
-        localStorage.setItem('winter_theme_seen_version', version); // Запоминаем отказ
+        localStorage.setItem('winter_theme_seen_version', version);
         closeBanner();
     };
 
@@ -695,14 +647,10 @@ function showWinterBanner(version) {
     }
 }
 
-if (themeSelect) {
-    themeSelect.addEventListener('change', (e) => {
-        applyTheme(e.target.value);
-    });
-}
+if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.target.value)); }
 
 
-// === INIT ===
+// === INIT (ГЛАВНОЕ ИЗМЕНЕНИЕ ЗДЕСЬ) ===
 window.addEventListener('load', async () => {
     injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
@@ -710,8 +658,39 @@ window.addEventListener('load', async () => {
     await syncSubs();
     checkThemes();
     updateInd(tabForYou);
-    renderFeed(shuffle([...allVideos]).slice(0, 5));
-});
 
+    // === DEEP LINKING LOGIC ===
+    let targetId = null;
+    
+    // 1. Проверяем startapp из параметров TG Web App (t.me/bot/app?startapp=v_123)
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
+        const param = tg.initDataUnsafe.start_param; 
+        if (param.startsWith('v_')) {
+            targetId = param.replace('v_', '');
+        }
+    }
+    
+    // 2. Проверяем хэш (для браузера или если первый метод не сработал)
+    if (!targetId && window.location.hash.includes('video=')) {
+        targetId = window.location.hash.split('video=')[1];
+    }
+
+    let feedToRender = [];
+    if (targetId) {
+        const targetVideo = allVideos.find(v => String(v.id) === String(targetId));
+        if (targetVideo) {
+            // Целевое видео ставим первым, остальные перемешиваем
+            const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId)));
+            feedToRender = [targetVideo, ...others];
+            console.log("Deep linked to video:", targetId);
+        } else {
+            feedToRender = shuffle([...allVideos]);
+        }
+    } else {
+        feedToRender = shuffle([...allVideos]);
+    }
+
+    renderFeed(feedToRender.slice(0, 5));
+});
 
 setInterval(reloadVideosAndFeed, 30000);
