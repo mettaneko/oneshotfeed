@@ -542,7 +542,7 @@ if (uiShareBtn) {
         
         // Если не в ТГ — просто копируем ссылку
         if (!tg?.initDataUnsafe?.user) {
-            navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); }).catch(() => {});
+            navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: false }); }).catch(() => {});
             return;
         }
         
@@ -559,7 +559,7 @@ if (uiShareBtn) {
                     user: tg.initDataUnsafe.user 
                 }) 
             });
-            showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
+            showCustomNotification('Видео отправлено в Личные Сообщения!', { showConfetti: false });
         } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
     });
 }
@@ -653,7 +653,7 @@ function showWinterBanner(version) {
         applyTheme('winter');
         localStorage.setItem('winter_theme_seen_version', version);
         closeBanner();
-        showCustomNotification("Смотри, снег пошел!", { showConfetti: true });
+        showCustomNotification("Смотри, снег пошел!", { showConfetti: false });
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
