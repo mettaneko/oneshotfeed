@@ -188,19 +188,7 @@ function injectNewStyles() {
         .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
 
-        .suggest-form {
-            background: rgba(0, 0, 0, 0.6) !important; backdrop-filter: blur(15px) !important; -webkit-backdrop-filter: blur(15px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 30px !important; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
-            padding: 24px !important; gap: 16px !important; width: 90% !important; max-width: 340px !important;
-        }
-        .suggest-form-title { font-size: 1.1rem !important; font-weight: 700 !important; color: white !important; margin-bottom: 4px !important; }
-        .suggest-input, .suggest-textarea {
-            background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-radius: 12px !important; padding: 12px 14px !important; color: white !important; font-family: inherit !important; transition: background 0.2s;
-        }
-        .suggest-input:focus, .suggest-textarea:focus { background: rgba(255, 255, 255, 0.1) !important; border-color: rgba(255, 255, 255, 0.2) !important; }
-        .suggest-send-btn { border-radius: 12px !important; font-weight: 700 !important; padding: 12px !important; background: white !important; color: black !important; }
-
+        /* Ползунок */
         .thin-range { -webkit-appearance: none; width: 80px !important; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; }
         .thin-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
 
@@ -276,13 +264,18 @@ async function loadVideosOnce() {
 
 
 async function reloadVideosAndFeed() {
-    if (feedContainer.scrollTop > 100) return; // Не обновляем если юзер скроллит
+    // Не перезагружаем, если юзер скроллит (можно уточнить логику, но пока так безопаснее)
+    if (feedContainer.scrollTop > 100) return; 
+
     const oldVideos = allVideos.slice();
     await loadVideosOnce();
     const oldIds = new Set(oldVideos.map(v => v.id));
     const newOnes = allVideos.filter(v => !oldIds.has(v.id));
     if (newOnes.length === 0) return;
-    // Можно добавить логику добавления, но пока просто обновим массив
+    
+    // При перезагрузке можно добавлять новые видео, но пока просто обновим массив
+    // Если хотите динамическое добавление в начало:
+    // newOnes.forEach(v => { const s = createSlide(v); feedContainer.prepend(s); observer.observe(s); });
 }
 
 
@@ -539,17 +532,33 @@ if (sugBtn) {
         }
     });
 }
+
+// === КНОПКА ПОДЕЛИТЬСЯ (Исправлено) ===
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const data = getActiveSlideData();
         if (!data) return;
+        
+        // Если не в ТГ — просто копируем ссылку
         if (!tg?.initDataUnsafe?.user) {
             navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); }).catch(() => {});
             return;
         }
+        
+        // Отправка в ТГ
         try {
-            await fetch(`${API_BASE}/api/share`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ videoUrl: data.videoUrl, author: data.author, desc: data.desc, user: tg.initDataUnsafe.user }) });
+            await fetch(`${API_BASE}/api/share`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
+                    id: data.id,           // Добавили ID для генерации Deep Link
+                    videoUrl: data.videoUrl, 
+                    author: data.author, 
+                    desc: data.desc, 
+                    user: tg.initDataUnsafe.user 
+                }) 
+            });
             showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
         } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
     });
@@ -570,11 +579,13 @@ function loadThemeScript(url, callback) {
 
 function applyTheme(themeName) {
     if (window.WinterTheme) window.WinterTheme.disable();
+
     if (themeName === 'winter') {
         loadThemeScript('themes/winter.js', () => {
             if (window.WinterTheme) window.WinterTheme.enable();
         });
     }
+
     if (themeSelect) themeSelect.value = themeName;
     localStorage.setItem('app_theme_preference', themeName);
 }
@@ -583,6 +594,7 @@ async function checkThemes() {
     try {
         const res = await fetch(`${API_BASE}/api/theme`);
         let data = { isWinter: false, version: 1 };
+        
         if (res.ok) data = await res.json();
 
         const winterOption = themeSelect ? themeSelect.querySelector('option[value="winter"]') : null;
@@ -591,7 +603,9 @@ async function checkThemes() {
 
         if (!data.isWinter) {
             if (winterOption) winterOption.disabled = true;
-            if (savedTheme === 'winter') applyTheme('default');
+            if (savedTheme === 'winter') {
+                applyTheme('default');
+            }
             return;
         }
 
@@ -600,18 +614,24 @@ async function checkThemes() {
         if (savedTheme) {
             applyTheme(savedTheme);
             if (savedTheme !== 'winter') {
-                 if (parseInt(lastSeenVersion) !== data.version) showWinterBanner(data.version);
+                 if (parseInt(lastSeenVersion) !== data.version) {
+                    showWinterBanner(data.version);
+                 }
             }
-        } else { showWinterBanner(data.version); }
+        } else {
+            showWinterBanner(data.version);
+        }
 
     } catch (e) { console.error('Theme check failed', e); }
 }
 
 function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
+
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
     const avatarUrl = '/assets/avatar.jpg';
+    
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
@@ -625,6 +645,7 @@ function showWinterBanner(version) {
     `;
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
+
     document.body.appendChild(banner);
     requestAnimationFrame(() => banner.classList.add('show'));
 
@@ -636,7 +657,7 @@ function showWinterBanner(version) {
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
-        localStorage.setItem('winter_theme_seen_version', version);
+        localStorage.setItem('winter_theme_seen_version', version); 
         closeBanner();
     };
 
@@ -647,10 +668,14 @@ function showWinterBanner(version) {
     }
 }
 
-if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.target.value)); }
+if (themeSelect) {
+    themeSelect.addEventListener('change', (e) => {
+        applyTheme(e.target.value);
+    });
+}
 
 
-// === INIT (ГЛАВНОЕ ИЗМЕНЕНИЕ ЗДЕСЬ) ===
+// === INIT (С обработкой Deep Linking) ===
 window.addEventListener('load', async () => {
     injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
@@ -659,9 +684,8 @@ window.addEventListener('load', async () => {
     checkThemes();
     updateInd(tabForYou);
 
-    // === DEEP LINKING LOGIC ===
+    // --- DEEP LINKING LOGIC ---
     let targetId = null;
-    
     // 1. Проверяем startapp из параметров TG Web App (t.me/bot/app?startapp=v_123)
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
         const param = tg.initDataUnsafe.start_param; 
@@ -669,17 +693,17 @@ window.addEventListener('load', async () => {
             targetId = param.replace('v_', '');
         }
     }
-    
-    // 2. Проверяем хэш (для браузера или если первый метод не сработал)
+    // 2. Проверяем хэш (резервный вариант)
     if (!targetId && window.location.hash.includes('video=')) {
         targetId = window.location.hash.split('video=')[1];
     }
 
     let feedToRender = [];
     if (targetId) {
+        // Ищем видео по ID
         const targetVideo = allVideos.find(v => String(v.id) === String(targetId));
         if (targetVideo) {
-            // Целевое видео ставим первым, остальные перемешиваем
+            // Ставим его первым, остальные перемешиваем
             const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId)));
             feedToRender = [targetVideo, ...others];
             console.log("Deep linked to video:", targetId);
