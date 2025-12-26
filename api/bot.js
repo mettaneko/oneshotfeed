@@ -48,6 +48,7 @@ export default async function handler(req, res) {
 *25.12.7* - Апдейт лог: [https://t.me/mettaneko/2849](https://t.me/mettaneko/2849)
 *25.12.8W* - Апдейт лог: [https://t.me/mettaneko/2861](https://t.me/mettaneko/2861)
 *25.12.9* - Апдейт лог: [https://t.me/mettaneko/2867](https://t.me/mettaneko/2867)
+*25.12.9T* - Апдейт лог: [https://t.me/mettaneko/2869](https://t.me/mettaneko/2869)
 `;
                 await sendMessage(token, chatId, historyText, null, 'Markdown');
                 await answerCallback(token, callbackId);
