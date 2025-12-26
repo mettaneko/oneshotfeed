@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         }
 
         // Формируем подпись
-        const caption = `📥 <b>Скачано из [Oneshot Feed](https://t.me/oneshotfeed/)!</b>\n\n👤 Автор: <code>${author || 'unknown'}</code> ${desc || 'unknown'}\n🔗 <a href="${deepLink}">Открыть это видео в приложении</a>`;
+        const caption = `📥 <b>Скачано из [Oneshot Feed](https://t.me/oneshotfeed)!</b>\n\n👤 Автор: <code>${author || 'unknown'}</code> ${desc || 'unknown'}\n🔗 <a href="${deepLink}">Открыть это видео в приложении</a>`;
 
         // Создаем кнопку "Смотреть в приложении"
         const keyboard = {
