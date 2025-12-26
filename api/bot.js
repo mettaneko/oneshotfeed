@@ -9,9 +9,7 @@ export default async function handler(req, res) {
 
         // === КОНФИГУРАЦИЯ ===
         const rawAdminIds = (process.env.ADMIN_ID || '').split(',');
-        // Список всех разрешенных ID (люди + каналы)
         const allowedIds = rawAdminIds.map(id => String(id).trim());
-        // Список только людей-админов (для получения логов), исключаем каналы (-100...)
         const adminUsers = allowedIds.filter(id => !id.startsWith('-100'));
 
         const isAllowed = (id) => allowedIds.includes(String(id));
@@ -55,26 +53,22 @@ export default async function handler(req, res) {
 
 
         // === 2. ПОДГОТОВКА ДАННЫХ СООБЩЕНИЯ ===
-        const msg = body.message || body.channel_post; // Ловим и личку, и каналы
+        const msg = body.message || body.channel_post;
         if (!msg) return res.status(200).json({ ok: true });
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || '';
-        // Определяем, канал это или нет (по ID)
         const isChannel = String(chatId).startsWith('-100');
 
-        // Если это канал, но его нет в списке админов -> игнор
         if (isChannel && !isAllowed(chatId)) {
             return res.status(200).json({ ok: true });
         }
 
 
         // === 3. ЛОГИКА ДЛЯ ЛИЧНЫХ СООБЩЕНИЙ (КОМАНДЫ) ===
-        // В каналах команды НЕ выполняются
         if (!isChannel) {
             const user = msg.from || { id: chatId, username: 'Channel' };
 
-            // Сохраняем юзера
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
                     await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, {
@@ -83,7 +77,6 @@ export default async function handler(req, res) {
                 } catch (e) { console.error("User save error:", e); }
             }
 
-            // /start
             if (text === '/start') {
                 await sendMessage(token, chatId,
                     "👋 Привет! Добро пожаловать в Oneshot Feed.\nСмотри, предлагай видео или просто читай обновления!", {
@@ -96,10 +89,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            // Админские команды (кроме /add, она обработается ниже вместе с каналами)
             if (isAllowed(chatId)) {
-                
-                // Tech Works
                 const maintenanceMatch = /\/maintenance (on|off)/.exec(text);
                 if (maintenanceMatch) {
                     const status = maintenanceMatch[1];
@@ -116,7 +106,6 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // Winter Theme
                 const winterMatch = /\/winter (on|off|reset)/.exec(text);
                 if (winterMatch) {
                     const action = winterMatch[1];
@@ -135,14 +124,12 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // Clear
                 if (text === '/clear') {
                     await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                     await sendMessage(token, chatId, "🗑 База очищена!", null, 'HTML');
                     return res.status(200).json({ ok: true });
                 }
 
-                // Broadcast
                 if (text.startsWith('/broadcast')) {
                     const bText = text.replace('/broadcast', '').trim();
                     if (!bText) return sendMessage(token, chatId, "Текст?");
@@ -163,13 +150,9 @@ export default async function handler(req, res) {
         }
 
 
-        // === 4. УНИВЕРСАЛЬНЫЙ ПАРСИНГ (КАНАЛЫ + ЛС АДМИНА) ===
-        // Условия запуска: 
-        // 1. Чат разрешен (канал или админ)
-        // 2. В тексте есть ссылка на тикток (даже скрытая) ИЛИ это команда /add в ЛС
-        
+        // === 4. АВТОПАРСИНГ ===
         const extractedUrl = extractTikTokLink(msg);
-        const isAddCommand = !isChannel && text.startsWith('/add'); // /add только в ЛС
+        const isAddCommand = !isChannel && text.startsWith('/add');
         const isAutoParse = isAllowed(chatId) && extractedUrl;
 
         if (isAddCommand || isAutoParse) {
@@ -180,12 +163,10 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            // В каналах молчим, в ЛС пишем статус
             if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю (TikWM)...", null, 'HTML');
 
             try {
                 let tikData = null;
-                // 1. Запрос к TikWM
                 try {
                     const apiRes = await fetch("https://www.tikwm.com/api/", {
                         method: "POST",
@@ -196,7 +177,6 @@ export default async function handler(req, res) {
                     if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                 } catch (e) { console.error("TikWM fail:", e); }
 
-                // Проверка на слайд-шоу
                 if (tikData && tikData.images && tikData.images.length > 0) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Это фото/слайд-шоу. Пропуск.");
                     return res.status(200).json({ ok: true });
@@ -210,11 +190,9 @@ export default async function handler(req, res) {
                 if (tikData) {
                     finalId = tikData.id;
                     finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                    // Формируем вечную ссылку прокси TikWM
                     finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                     finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
                 } else {
-                    // Fallback на Cobalt
                     const cobaltUrl = await getCobaltLink(targetUrl);
                     if (cobaltUrl) {
                         finalVideoUrl = cobaltUrl;
@@ -229,7 +207,7 @@ export default async function handler(req, res) {
                         id: finalId, 
                         videoUrl: finalVideoUrl, 
                         author: finalAuthor, 
-                        desc: tikData?.title || 'on tiktok', 
+                        desc: 'on tiktok', // <--- ПЕРМАНЕНТНОЕ ОПИСАНИЕ
                         cover: finalCover,
                         date: Date.now() 
                     };
@@ -242,12 +220,10 @@ export default async function handler(req, res) {
                     
                     const logMsg = `✅ <b>New Video Parsed!</b>\nFrom: ${isChannel ? 'Channel' : 'Admin DM'}\nID: <code>${newVideo.id}</code>\nAuthor: @${newVideo.author}`;
                     
-                    // Логи шлем только ЛЮДЯМ-админам
                     for (const adminId of adminUsers) {
                         await sendMessage(token, adminId, logMsg, null, 'HTML');
                     }
                     
-                    // Если это было ЛС админа, дублируем ему подтверждение (если он не в списке выше, хотя должен быть)
                     if (!isChannel && !adminUsers.includes(String(chatId))) {
                         await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}`, null, 'HTML');
                     }
@@ -256,7 +232,6 @@ export default async function handler(req, res) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить видео.");
                 }
             } catch (e) {
-                // Ошибки парсинга из канала тоже шлем админам
                 const errText = `⚠️ <b>Parse Error</b>\nSource: ${isChannel ? 'Channel' : 'DM'}\nError: ${e.message}`;
                 for (const adminId of adminUsers) {
                     await sendMessage(token, adminId, errText, null, 'HTML');
@@ -265,8 +240,7 @@ export default async function handler(req, res) {
         }
 
 
-        // === 5. ПРЕДЛОЖКА ОТ ОБЫЧНЫХ ЮЗЕРОВ ===
-        // Только ЛС, только если не админ
+        // === 5. ПРЕДЛОЖКА ===
         if (!isChannel && !isAllowed(chatId) && chatId > 0) {
             if (text.startsWith('/add') || text.startsWith('/clear')) {
                 return res.status(200).json({ ok: true });
@@ -290,16 +264,13 @@ export default async function handler(req, res) {
 
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
-
-// Умный поиск ссылки (включая скрытые ссылки [текст](url) и пересылки)
 function extractTikTokLink(msg) {
     const text = msg.text || msg.caption || '';
     const entities = msg.entities || msg.caption_entities || [];
 
-    // 1. Проверяем гиперссылки (entities)
     for (const entity of entities) {
         if (entity.type === 'text_link' && entity.url && (entity.url.includes('tiktok.com'))) {
-            return entity.url; // Нашли скрытую ссылку
+            return entity.url;
         }
         if (entity.type === 'url') {
             const substr = text.substring(entity.offset, entity.offset + entity.length);
@@ -307,7 +278,6 @@ function extractTikTokLink(msg) {
         }
     }
 
-    // 2. Если entities не помогли, ищем регуляркой в тексте
     const match = text.match(/https?:\/\/(www\.|vm\.|vt\.)?tiktok\.com\/[^\s]+/);
     if (match) return match[0];
 
