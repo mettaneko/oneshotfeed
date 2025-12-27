@@ -27,8 +27,8 @@
         el = document.createElement('div');
         el.id = 'streak-badge-container';
         el.className = 'streak-capsule hidden'; 
+        // Вставляем ПОД навигацией
         navBar.parentNode.insertBefore(el, navBar.nextSibling);
-
         return el;
     }
 
@@ -43,6 +43,9 @@
 
         el.classList.remove('hidden');
 
+        // Убираем класс glowing, если был (сброс стилей)
+        el.classList.remove('glowing');
+
         if (isCompleted) {
             // Только блины + сияние
             el.textContent = `${streak} 🥞`;
@@ -50,7 +53,6 @@
         } else {
             // Блины + прогресс (без сияния)
             el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
-            el.classList.remove('glowing');
         }
     }
 
@@ -77,6 +79,12 @@
             }
         },
 
+        // Вызывается извне при сбросе (например, через веб-сокет или поллинг, если реализуете)
+        // Но пока просто метод для обновления UI
+        resetUI() {
+            render({ streak: 0, todayCount: 0, target: DAILY_TARGET, todayCompleted: false });
+        },
+
         attachToVideo(videoEl, videoId) {
             if (!videoEl || !videoId) return;
             if (videoEl._pancakeAttached) return;
@@ -90,14 +98,10 @@
                 const progress = videoEl.currentTime / videoEl.duration;
                 if (progress < PROGRESS_THRESHOLD) return;
 
-                if (!this._userId) {
-                    sent = true; 
-                    videoEl.removeEventListener('timeupdate', onTimeUpdate);
-                    return;
-                }
-
                 sent = true;
                 videoEl.removeEventListener('timeupdate', onTimeUpdate);
+
+                if (!this._userId) return;
 
                 try {
                     const res = await fetch('/api/streak', {
@@ -164,6 +168,9 @@ const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : 
 if (tg) {
     tg.expand();
     tg.ready();
+    // Красим хедер в черный, чтобы сливалось
+    tg.setHeaderColor('#000000');
+    tg.setBackgroundColor('#000000');
 }
 
 
@@ -174,9 +181,9 @@ function showCustomNotification(message, options = {}) {
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-    const avatarUrl = '/assets/avatar.jpg';
+    const avatarUrl = 'assets/avatar.jpg'; // Убедитесь, что путь верный
 
-    toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
+    toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
     
     const navBar = document.getElementById('top-nav-bar');
@@ -230,40 +237,38 @@ function triggerConfetti() {
     draw();
 }
 
-
 // === СТИЛИ ===
-function injectNewStyles() {
+// Генерируем только то, что нельзя перенести в CSS (динамические пути и т.д.)
+// Основные стили теперь в feed.css!
+function injectDynamicStyles() {
     const style = document.createElement('style');
     style.textContent = `
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
 
-        .feed-navigation { gap: 20px; }
-        .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
+        /* Скрываем навбар при уведомлении */
         #top-nav-bar {
-            transform: translateX(-50%) translateY(0); opacity: 1;
-            transition: transform 0.5s, opacity 0.5s; z-index: 100;
+            transition: transform 0.5s, opacity 0.5s;
         }
-        #top-nav-bar.hidden-by-toast { transform: translateX(-50%) translateY(-150%); opacity: 0; pointer-events: none; }
+        #top-nav-bar.hidden-by-toast { transform: translateX(-50%) translateY(-200%); opacity: 0; pointer-events: none; }
         
         /* === КАПСУЛА СТРИКА === */
         .streak-capsule {
             position: fixed;
-            top: 85px; /* Увеличил отступ от верха (было 70px) */
+            top: 85px; 
             left: 50%;
             transform: translateX(-50%);
             z-index: 99;
             
-            background: rgba(0, 0, 0, 0.5); /* Чуть темнее фон для контраста */
+            /* Фон (без подсветки блока) */
+            background: rgba(0, 0, 0, 0.5); 
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            
-            /* Тонкая рамка */
             border: 1px solid rgba(255, 255, 255, 0.15);
             
             padding: 6px 16px;
             border-radius: 20px;
             
-            /* Цвет текста - БЛИННЫЙ (Золотой) */
+            /* Текст - БЛИННЫЙ (Золотой) */
             color: #ffca28;
             font-family: 'JetBrains Mono', monospace; 
             font-size: 0.9rem;
@@ -277,29 +282,25 @@ function injectNewStyles() {
         }
         .streak-capsule.hidden { opacity: 0; pointer-events: none; }
         
-        /* СИЯНИЕ ТЕКСТА (только текст светится) */
+        /* СИЯНИЕ ТЕКСТА (только текст!) */
         .streak-capsule.glowing {
-            color: #ffeb3b; /* Более яркий желтый при сиянии */
-            border-color: rgba(255, 215, 0, 0.4); /* Золотистая рамка */
+            color: #ffeb3b; 
+            border-color: rgba(255, 215, 0, 0.4); 
             
             /* Текстовое свечение */
             text-shadow: 
                 0 0 5px rgba(255, 202, 40, 0.8),
                 0 0 10px rgba(255, 202, 40, 0.5),
                 0 0 20px rgba(255, 140, 0, 0.4);
-                
-            /* Легкая пульсация рамки (опционально) */
-            box-shadow: 0 0 15px rgba(255, 202, 40, 0.2); 
         }
 
+        /* Шрифт автора */
         .author-name {
             font-family: 'JetBrains Mono', monospace !important;
             font-weight: 700;
         }
-
-        .liquid-controls-container { z-index: 100; }
-        .suggest-form { z-index: 1001; }
         
+        /* Уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%); padding: 12px 24px; z-index: 2000; opacity: 0;
@@ -312,58 +313,57 @@ function injectNewStyles() {
         .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.3); }
         .toast-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
+        
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 
-        .settings-modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 9000; 
-            display: flex; align-items: flex-end; justify-content: center;
-            background: transparent; 
-            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        /* Баннер действий (кнопки да/нет) */
+        .banner-actions {
+            display: flex; gap: 10px; margin-top: 4px; width: 100%; justify-content: flex-end;
         }
-        .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
-
-        .settings-panel {
-            width: 100%; max-width: 100%;
-            height: 75vh; max-height: 75vh;
-            padding: 30px 24px 50px; 
-            transform: translateY(100%); 
-            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
-            background: rgba(0, 0, 0, 0.6); 
-            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 32px 32px 0 0; 
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
-            color: #fff;
-            display: flex; flex-direction: column;
+        .banner-btn {
+            background: rgba(255,255,255,0.15); border: none; color: white;
+            padding: 4px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem;
         }
-        .settings-panel::before {
-            content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-            width: 40px; height: 5px; background: rgba(255,255,255,0.25); border-radius: 3px;
+        .banner-btn:active { background: rgba(255,255,255,0.3); }
+        .btn-accept { background: rgba(100, 255, 100, 0.2); color: #aaffaa; }
+        
+        /* Стили для формы предложки (как настройки) */
+        /* Используем классы settings-modal-overlay и settings-panel из feed.css, но для формы */
+        #suggest-form-modal .settings-panel {
+             height: auto; /* Авто-высота под контент */
+             max-height: 80vh;
+             padding-bottom: 30px;
         }
-        .settings-modal-overlay.show .settings-panel { transform: translateY(0); }
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .settings-header h2 { font-size: 1.4rem; font-weight: 700; margin: 0; }
-        .settings-header button { 
-            background: rgba(255,255,255,0.1); border: none; color: white; width: 34px; height: 34px; 
-            border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-            cursor: pointer; transition: background 0.2s; 
+        #suggest-form-modal textarea {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            width: 100%;
+            resize: none;
+            font-family: inherit;
         }
-        .settings-header button:active { background: rgba(255,255,255,0.2); }
-        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-        .setting-label { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.9); }
-        .settings-footer { display: none; }
-        .thin-range { -webkit-appearance: none; width: 110px !important; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; }
-        .thin-range::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-        .theme-select {
-            appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
-            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 10px 36px 10px 14px;
-            border-radius: 12px; font-size: 0.95rem; font-weight: 500; cursor: pointer;
-            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-            background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
+        #suggest-form-modal input {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            padding: 12px;
+            border-radius: 12px;
+            width: 100%;
+            margin-bottom: 12px;
+            font-family: inherit;
         }
-        .theme-select option { background: #1e1e23; color: white; }
+        .suggest-send-btn {
+            margin-top: 15px;
+            width: 100%;
+            padding: 14px;
+            border-radius: 16px;
+            background: var(--accent-color);
+            color: #000;
+            font-weight: 700;
+            font-size: 1rem;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -388,6 +388,7 @@ const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
 
+// Кнопки и модалки
 const uiSettingsBtn = document.getElementById('ui-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings');
@@ -396,11 +397,12 @@ const themeSelect = document.getElementById('theme-select');
 
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
-const suggestForm = document.getElementById('suggest-form');
-const sugUrl = document.getElementById('sug-url');
-const sugAuthor = document.getElementById('sug-author');
-const sugDesc = document.getElementById('sug-desc');
-const sugBtn = document.getElementById('sug-send');
+
+// Предложка теперь тоже модалка
+// Создаем DOM для модалки предложки динамически или используем скрытый div, переделанный под шторку
+// В вашем HTML был блок .suggest-form, мы его обернем в логику шторки.
+
+
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 
@@ -637,42 +639,53 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === SETTINGS UI ===
-if(uiSettingsBtn && settingsModal) {
-    uiSettingsBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        
-        const activeVid = document.querySelector('.video-slide.active-slide .video-player');
-        const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
-        
-        settingsWasPlaying = !!(activeVid && !activeVid.paused);
+// === MODAL UTILS ===
+function openModal(modalId) {
+    const m = document.getElementById(modalId);
+    if (!m) return;
+    
+    // Пауза видео при открытии
+    const activeVid = document.querySelector('.video-slide.active-slide .video-player');
+    const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
+    settingsWasPlaying = !!(activeVid && !activeVid.paused);
+    if (activeVid) activeVid.pause();
+    if (activeBg) activeBg.pause();
 
-        if (activeVid) activeVid.pause();
-        if (activeBg) activeBg.pause();
-
-        settingsModal.style.display = 'flex';
-        setTimeout(() => settingsModal.classList.add('show'), 10);
-    });
+    m.style.display = 'flex';
+    setTimeout(() => m.classList.add('show'), 10);
 }
-if(closeSettingsBtn && settingsModal) {
-    closeSettingsBtn.addEventListener('click', () => {
+
+function closeModal(modalId) {
+    const m = document.getElementById(modalId);
+    if (!m) return;
+
+    m.classList.remove('show');
+    setTimeout(() => {
+        m.style.display = 'none';
+        // Воспроизведение видео при закрытии
         const activeVid = document.querySelector('.video-slide.active-slide .video-player');
         const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
-        
         if (settingsWasPlaying) {
             if (activeVid) activeVid.play().catch(()=>{});
             if (activeBg) activeBg.play().catch(()=>{});
         }
+    }, 300);
+}
 
-        settingsModal.classList.remove('show');
-        setTimeout(() => settingsModal.style.display = 'none', 300);
-    });
-    settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) closeSettingsBtn.click();
+
+// === SETTINGS UI ===
+if(uiSettingsBtn && settingsModal) {
+    uiSettingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openModal('settings-modal');
     });
 }
-const footer = document.querySelector('.settings-footer');
-if(footer) footer.style.display = 'none';
+if(closeSettingsBtn && settingsModal) {
+    closeSettingsBtn.addEventListener('click', () => closeModal('settings-modal'));
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeModal('settings-modal');
+    });
+}
 
 if(modalVolRange) {
     modalVolRange.value = globalVolume;
@@ -685,39 +698,88 @@ if(modalVolRange) {
 }
 
 
-// === ACTIONS (SHARE/SUGGEST) ===
-if (uiSuggestBtn && suggestForm) {
-    uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex'; });
-}
-if (sugBtn) {
-    sugBtn.addEventListener('click', async () => {
-        const url = sugUrl.value.trim();
-        const author = sugAuthor.value.trim();
-        const desc = sugDesc.value.trim();
-        if (!url) { showCustomNotification('Вставьте ссылку!', { isError: true }); return; }
-        const originalText = sugBtn.innerText;
-        sugBtn.innerText = '...';
-        sugBtn.disabled = true;
+// === ПРЕДЛОЖКА (Новая - Шторка) ===
+// Динамически создаем структуру шторки, если ее нет, либо используем существующую
+// Для унификации, создадим шторку для предложки программно
+function createSuggestModal() {
+    if (document.getElementById('suggest-form-modal')) return;
+    
+    const modal = document.createElement('div');
+    modal.id = 'suggest-form-modal';
+    modal.className = 'settings-modal-overlay';
+    modal.innerHTML = `
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h2>Предложить видео</h2>
+                <button id="close-suggest"><i class="fas fa-times"></i></button>
+            </div>
+            <div style="padding-bottom: 20px;">
+                <input id="sug-url" type="url" placeholder="Ссылка на видео (TikTok/YouTube)">
+                <input id="sug-author" type="text" placeholder="Автор (необязательно)">
+                <textarea id="sug-desc" placeholder="Комментарий или описание..." rows="3"></textarea>
+                <button id="sug-send" class="suggest-send-btn">Отправить</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Логика закрытия
+    document.getElementById('close-suggest').addEventListener('click', () => closeModal('suggest-form-modal'));
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('suggest-form-modal'); });
+    
+    // Логика отправки
+    document.getElementById('sug-send').addEventListener('click', async () => {
+        const urlInput = document.getElementById('sug-url');
+        const authorInput = document.getElementById('sug-author');
+        const descInput = document.getElementById('sug-desc');
+        const btn = document.getElementById('sug-send');
+        
+        const url = urlInput.value.trim();
+        const author = authorInput.value.trim();
+        const desc = descInput.value.trim();
+
+        if (!url) { showCustomNotification('Нужна ссылка!', { isError: true }); return; }
+
+        const originalText = btn.innerText;
+        btn.innerText = 'Отправка...';
+        btn.disabled = true;
+
         try {
-            const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) });
+            const res = await fetch(`${API_BASE}/api/suggest`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) 
+            });
             if (res.ok) {
-                sugBtn.innerText = 'Отправлено!';
-                sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
-                showCustomNotification('Спасибо за предложенное видео!', { showConfetti: true });
-                setTimeout(() => { suggestForm.style.display = 'none'; sugBtn.innerText = originalText; sugBtn.disabled = false; }, 1000);
+                showCustomNotification('Спасибо за видео!', { showConfetti: true });
+                urlInput.value = ''; authorInput.value = ''; descInput.value = '';
+                closeModal('suggest-form-modal');
             } else {
-                showCustomNotification('Ошибка API.', { isError: true });
-                sugBtn.innerText = originalText;
-                sugBtn.disabled = false;
+                showCustomNotification('Ошибка сервера.', { isError: true });
             }
         } catch (e) {
             showCustomNotification('Ошибка сети.', { isError: true });
-            sugBtn.innerText = originalText;
-            sugBtn.disabled = false;
+        } finally {
+            btn.innerText = originalText;
+            btn.disabled = false;
         }
     });
 }
+createSuggestModal(); // Создаем сразу
 
+if (uiSuggestBtn) {
+    uiSuggestBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // Скрываем старую форму если она была (из html)
+        const oldForm = document.getElementById('suggest-form');
+        if (oldForm) oldForm.style.display = 'none'; 
+        
+        openModal('suggest-form-modal');
+    });
+}
+
+
+// === SHARE ===
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -802,18 +864,21 @@ function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
-    const avatarUrl = '/assets/avatar.jpg';
+    const avatarUrl = 'assets/avatar.jpg';
+    
+    // ВАЖНО: Кнопки теперь видны!
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
-        <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
+        <div class="toast-message" style="display:flex; flex-direction:column; gap:4px; width:100%;">
             <span style="font-weight:bold;">Включить снег?</span>
-            <span style="font-size:0.8em; opacity:0.8;">Новый год близко же!</span>
-        </div>
-        <div class="banner-actions">
-            <button class="banner-btn btn-accept">Да</button>
-            <button class="banner-btn btn-decline">Нет</button>
+            <span style="font-size:0.8em; opacity:0.8;">Новый год близко!</span>
+            <div class="banner-actions">
+                <button class="banner-btn btn-accept">Да</button>
+                <button class="banner-btn btn-decline">Нет</button>
+            </div>
         </div>
     `;
+    
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
     document.body.appendChild(banner);
@@ -843,9 +908,9 @@ if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.ta
 
 // === INIT ===
 window.addEventListener('load', async () => {
-    injectNewStyles();
+    injectDynamicStyles();
     
-    // Инициализируем стрик сразу (модуль уже загружен в начале файла)
+    // Инициализируем стрик сразу
     if (window.PancakeStreak) await window.PancakeStreak.init();
 
     if (modalVolRange) modalVolRange.value = globalVolume;

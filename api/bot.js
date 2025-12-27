@@ -7,16 +7,17 @@ export default async function handler(req, res) {
         const body = req.body;
         const token = process.env.BOT_TOKEN;
 
-        // === НАСТРОЙКИ ССЫЛОК ===
-        const botUsername = 'OneShotFeedBot'; 
-        const appName = 'app'; 
+        // === НАСТРОЙКИ ===
+        const botUsername = 'OneShotFeedBot'; // Замени на юзернейм своего бота без @
+        const appName = 'app'; // Название Web App в BotFather
 
         // === КОНФИГУРАЦИЯ АДМИНОВ ===
-        // ADMIN_ID=123456,-100987654,...
+        // ADMIN_ID=123456,-100987654 (перечислить через запятую в .env)
         const rawAdminIds = (process.env.ADMIN_ID || '').split(',');
         const allowedIds = rawAdminIds.map(id => String(id).trim());
-        // adminUsers - только люди (для отправки логов в ЛС)
+        // adminUsers - только люди (исключаем каналы/чаты, начинающиеся с -100, для ЛС уведомлений)
         const adminUsers = allowedIds.filter(id => !id.startsWith('-100'));
+        
         const isAllowed = (id) => allowedIds.includes(String(id));
 
         const webAppUrl = 'https://feed.mettaneko.ru';
@@ -31,7 +32,7 @@ export default async function handler(req, res) {
             const chatId = query.message.chat.id;
             const data = query.data;
 
-            // --- История версий ---
+            // --- История версий (для обычных юзеров) ---
             if (data === 'version_history') {
                 const historyText = `
 📜 *История версий Oneshot Feed:*
@@ -41,9 +42,9 @@ export default async function handler(req, res) {
 *25.12.2* - Добавлена предложка и подписки.
 *25.12.3* - Оптимизация для Telegram Mini-apps.
 *25.12.4* - Защита от спама и чуть улучшенный интерфейс.
-*25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение при написании /start.
-*25.12.6R* - Фикс багов с кнопками стартового сообщения.
-*25.12.6X* - Добавление ~1193 новых видео по тематике, оптимизация ленты и попытки уменьшить повторы в ленте.
+*25.12.5* - Улучшено взаимодействие с плеером и добавлено стартовое сообщение.
+*25.12.6R* - Фикс багов с кнопками.
+*25.12.6X* - Добавление ~1200 видео, оптимизация ленты.
 *25.12.7* - Апдейт лог: [https://t.me/mettaneko/2849](https://t.me/mettaneko/2849)
 *25.12.8W* - Апдейт лог: [https://t.me/mettaneko/2861](https://t.me/mettaneko/2861)
 *25.12.9* - Апдейт лог: [https://t.me/mettaneko/2867](https://t.me/mettaneko/2867)
@@ -55,7 +56,8 @@ export default async function handler(req, res) {
 
             // --- Админские действия (CALLBACK) ---
             if (isAllowed(chatId)) {
-                // Удаление видео
+                
+                // Удаление видео по кнопке "🗑 Удалить"
                 if (data.startsWith('del_')) {
                     const vidId = data.split('del_')[1];
                     await answerCallback(token, callbackId, "⏳ Удаляю...");
@@ -72,16 +74,25 @@ export default async function handler(req, res) {
                         if (newVideos.length === initialLen) {
                             await sendMessage(token, chatId, `⚠️ Видео ${vidId} не найдено.`);
                         } else {
+                            // Очищаем старый список
                             await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                            
+                            // Заливаем новый, если есть что заливать
                             if (newVideos.length > 0) {
-                                const args = newVideos.map(v => JSON.stringify(v));
-                                await fetch(`${DB_URL}/`, {
-                                    method: 'POST',
-                                    headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
-                                    body: JSON.stringify(["RPUSH", "feed_videos", ...args])
-                            });
+                                // Разбиваем на батчи по 50 штук, чтобы не превысить лимит запроса
+                                const batchSize = 50;
+                                for (let i = 0; i < newVideos.length; i += batchSize) {
+                                    const batch = newVideos.slice(i, i + batchSize);
+                                    const args = batch.map(v => JSON.stringify(v));
+                                    await fetch(`${DB_URL}/`, {
+                                        method: 'POST',
+                                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(["RPUSH", "feed_videos", ...args])
+                                    });
+                                }
                             }
                             await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
+                            // Удаляем само сообщение с видео из чата бота
                             try {
                                 await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -107,7 +118,7 @@ export default async function handler(req, res) {
                     } catch (e) {}
                 }
 
-                // Управление темой
+                // Управление темой (Зима)
                 if (data === 'winter_on' || data === 'winter_reset') {
                     const active = data === 'winter_on';
                     const reset = data === 'winter_reset';
@@ -121,7 +132,7 @@ export default async function handler(req, res) {
                     } catch (e) {}
                 }
                 
-                // Подтверждение очистки
+                // Подтверждение полной очистки базы
                 if (data === 'confirm_clear') {
                      await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                      await answerCallback(token, callbackId, "База очищена");
@@ -140,14 +151,15 @@ export default async function handler(req, res) {
         const text = msg.text || msg.caption || '';
         const isChannel = String(chatId).startsWith('-100');
 
+        // Каналы игнорируем, если они не в списке админов
         if (isChannel && !isAllowed(chatId)) return res.status(200).json({ ok: true });
 
 
-        // === 3. ЛОГИКА ДЛЯ ЛИЧНЫХ СООБЩЕНИЙ ===
+        // === 3. ЛОГИКА (ЛИЧНЫЕ СООБЩЕНИЯ И АДМИН-КАНАЛЫ) ===
         if (!isChannel) {
             const user = msg.from || { id: chatId, username: 'Channel' };
 
-            // Сохраняем юзера
+            // Сохраняем ID юзера в базу (для рассылки и статистики)
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
                     await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
@@ -158,7 +170,7 @@ export default async function handler(req, res) {
             if (text.startsWith('/start')) {
                 const appLink = `https://t.me/${botUsername}/${appName}`;
 
-                // АДМИНСКОЕ МЕНЮ
+                // ЕСЛИ АДМИН
                 if (isAllowed(chatId)) {
                     await sendMessage(token, chatId, "👋 Привет, Админ! Управление ботом ниже.", {
                         keyboard: [
@@ -169,17 +181,17 @@ export default async function handler(req, res) {
                         resize_keyboard: true,
                         is_persistent: true
                     });
-                    // Ссылка на апп отдельным сообщением
+                    
                     await sendMessage(token, chatId, "Твой Web App:", {
                           inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
                     });
                 } else {
-                    // ОБЫЧНЫЙ ЮЗЕР
+                    // ЕСЛИ ОБЫЧНЫЙ ЮЗЕР
                     await sendMessage(token, chatId,
                         "👋 Привет! Добро пожаловать в Oneshot Feed.", {
                             inline_keyboard: [
                                 [{ text: "📱 Открыть ленту", url: appLink }],
-                                [{ text: "📜 История", callback_data: "version_history" }]
+                                [{ text: "📜 История версий", callback_data: "version_history" }]
                             ]
                         }
                     );
@@ -187,7 +199,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            // --- ОБРАБОТКА АДМИНСКИХ КНОПОК И КОМАНД ---
+            // --- КОМАНДЫ АДМИНА ---
             if (isAllowed(chatId)) {
                 
                 // 1. Статистика
@@ -198,13 +210,13 @@ export default async function handler(req, res) {
                         const vRes = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         const vData = await vRes.json();
                         await sendMessage(token, chatId, `📊 *Статистика:*\n\n👥 Пользователей: *${uData.result}*\n📹 Видео: *${vData.result}*`);
-                    } catch (e) { await sendMessage(token, chatId, "Ошибка статистики."); }
+                    } catch (e) { await sendMessage(token, chatId, "Ошибка получения статистики."); }
                     return res.status(200).json({ ok: true });
                 }
 
                 // 2. Рассылка
                 if (text === "📢 Рассылка") {
-                    await sendMessage(token, chatId, "Для рассылки отправь команду:\n`/broadcast Текст | Кнопка | Ссылка`", null, 'Markdown');
+                    await sendMessage(token, chatId, "Для рассылки отправь команду:\n`/broadcast Текст | Кнопка | Ссылка`\n\nПример:\n`/broadcast Привет всем! | Открыть | https://google.com`", null, 'Markdown');
                     return res.status(200).json({ ok: true });
                 }
 
@@ -230,10 +242,11 @@ export default async function handler(req, res) {
                     } catch (e) {}
 
                     let count = 0;
+                    // Рассылаем всем
                     for (const u of users) {
                         try { await sendMessage(token, u, bText, keyboard, 'HTML'); count++; } catch (e) {}
                     }
-                    await sendMessage(token, chatId, `Рассылка завершена: ${count} чел.`);
+                    await sendMessage(token, chatId, `✅ Рассылка завершена: получено ${count} чел.`);
                     return res.status(200).json({ ok: true });
                 }
 
@@ -247,27 +260,28 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // 4. Зима
+                // 4. Зимняя тема
                 if (text === "❄️ Зимняя тема") {
-                    await sendMessage(token, chatId, "Управление снегом:", {
+                    await sendMessage(token, chatId, "Управление снегом и темой:", {
                         inline_keyboard: [
-                            [{ text: "❄️ Включить", callback_data: "winter_on" }, { text: "🚫 Выключить", callback_data: "winter_reset" }]
+                            [{ text: "❄️ Включить везде", callback_data: "winter_on" }],
+                            [{ text: "🚫 Сбросить (выкл)", callback_data: "winter_reset" }]
                         ]
                     });
                     return res.status(200).json({ ok: true });
                 }
 
-                // 5. Очистка
+                // 5. Очистка базы
                 if (text === "🗑 Очистить базу") {
-                    await sendMessage(token, chatId, "Ты уверен? Это удалит ВСЕ видео.", {
+                    await sendMessage(token, chatId, "⚠️ Ты уверен? Это удалит ВСЕ видео из ленты.", {
                         inline_keyboard: [[{ text: "Да, удалить всё", callback_data: "confirm_clear" }]]
                     });
                      return res.status(200).json({ ok: true });
                 }
 
-                // 6. УПРАВЛЕНИЕ СТРИКОМ (НОВОЕ)
+                // 6. СБРОС СТРИКА (ПОЛНЫЙ)
                 if (text === "🥞 Сбросить стрик") {
-                     await sendMessage(token, chatId, "Отправь команду:\n`/resetstreak USER_ID`\n(ID пользователя можно узнать в статистике или переслав его сообщение боту @userinfobot)");
+                     await sendMessage(token, chatId, "Отправь команду:\n`/resetstreak USER_ID`\n(ID пользователя можно узнать, переслав его сообщение боту @userinfobot)");
                      return res.status(200).json({ ok: true });
                 }
                 
@@ -276,13 +290,18 @@ export default async function handler(req, res) {
                     if (!targetId) return sendMessage(token, chatId, "Укажи ID: /resetstreak 12345678");
 
                     try {
-                        // Сброс стрика в Redis
+                        // 1. Удаляем сам счетчик стрика
                         await fetch(`${DB_URL}/del/streak:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        // 2. Удаляем дату последнего выполнения (чтобы можно было начать заново)
                         await fetch(`${DB_URL}/del/last_complete:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                        // Опционально: очистить просмотры за сегодня
-                        // await fetch(`${DB_URL}/del/day:${targetId}:...`, ...);
                         
-                        await sendMessage(token, chatId, `✅ Стрик пользователя ${targetId} сброшен в 0.`);
+                        // 3. (Опционально) Пытаемся удалить сегодняшние просмотры, чтобы юзер мог набить 5/5 заново прямо сейчас.
+                        // Для этого нужно знать ключ, который генерируется как `streak_views:${userId}:${YYYY-MM-DD}`.
+                        // Здесь мы берем текущую дату сервера.
+                        const today = new Date().toISOString().split('T')[0];
+                        await fetch(`${DB_URL}/del/streak_views:${targetId}:${today}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+
+                        await sendMessage(token, chatId, `✅ Стрик пользователя ${targetId} полностью сброшен (включая прогресс за сегодня).`);
                     } catch (e) {
                         await sendMessage(token, chatId, `❌ Ошибка базы данных: ${e.message}`);
                     }
@@ -292,11 +311,11 @@ export default async function handler(req, res) {
         }
 
 
-        // === 4. АВТОПАРСИНГ (TIKTOK ONLY) ===
+        // === 4. АВТОПАРСИНГ TIKTOK ===
+        // Работает если админ кидает ссылку
         const extractedUrl = extractTikTokLink(msg);
         const isAddCommand = !isChannel && text.startsWith('/add');
         const isAutoParse = isAllowed(chatId) && extractedUrl;
-
 
         if (isAddCommand || isAutoParse) {
             const targetUrl = extractedUrl || (isAddCommand ? text.split(/\s+/).find(p => p.includes('http')) : null);
@@ -310,6 +329,7 @@ export default async function handler(req, res) {
 
             try {
                 let tikData = null;
+                // Используем TikWM API
                 try {
                     const apiRes = await fetch("https://www.tikwm.com/api/", {
                         method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -320,6 +340,7 @@ export default async function handler(req, res) {
                 } catch (e) { console.error("TikWM fail:", e); }
 
 
+                // Фильтр от слайдшоу
                 if (tikData && tikData.images && tikData.images.length > 0) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Это фото/слайд-шоу. Пропуск.");
                     return res.status(200).json({ ok: true });
@@ -335,6 +356,7 @@ export default async function handler(req, res) {
                 if (tikData) {
                     finalId = tikData.id;
                     finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
+                    // Берем ссылку на воспроизведение
                     finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                     finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
                 }
@@ -345,11 +367,12 @@ export default async function handler(req, res) {
                         id: finalId, 
                         videoUrl: finalVideoUrl, 
                         author: finalAuthor, 
-                        desc: 'on tiktok', 
+                        desc: tikData.title || 'on tiktok', 
                         cover: finalCover,
                         date: Date.now() 
                     };
                     
+                    // Сохраняем в Redis
                     await fetch(`${DB_URL}/`, {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
@@ -363,31 +386,32 @@ export default async function handler(req, res) {
                         else sourceName = title;
                     }
 
-
+                    // Ссылка для открытия конкретного видео
                     const directLink = `https://t.me/${botUsername}/${appName}?startapp=v_${newVideo.id}`;
+                    
                     const logCaption = `✅ <b>Видео сохранено!</b>\n\n📍 ${sourceName}\n👤 @${newVideo.author}\n🆔 <code>${newVideo.id}</code>\n🔗 <a href="${directLink}">Открыть в приложении</a>`;
-
 
                     const deleteKeyboard = {
                         inline_keyboard: [[{ text: "🗑 Удалить", callback_data: `del_${newVideo.id}` }]]
                     };
 
-
+                    // Отправляем всем админам лог с видео
                     for (const adminId of adminUsers) {
                         try {
                             await sendVideo(token, adminId, finalVideoUrl, logCaption, deleteKeyboard);
                         } catch (err) {
-                            await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен.`, deleteKeyboard, 'HTML');
+                            // Если видео слишком большое для отправки через бота, шлем текст
+                            await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен (лимит TG).`, deleteKeyboard, 'HTML');
                         }
                     }
                     
+                    // Подтверждение тому, кто скинул (если это не админ-чат)
                     if (!isChannel && !adminUsers.includes(String(chatId))) {
                         await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}`, null, 'HTML');
                     }
 
-
                 } else {
-                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (TikWM).");
+                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (TikWM вернул пустоту).");
                 }
             } catch (e) {
                 const errText = `⚠️ <b>Ошибка</b> (${isChannel ? 'Channel' : 'DM'}): ${e.message}`;
@@ -396,21 +420,25 @@ export default async function handler(req, res) {
         }
 
 
-        // === ПРЕДЛОЖКА ===
+        // === ПРЕДЛОЖКА (ДЛЯ ОБЫЧНЫХ ЮЗЕРОВ) ===
         if (!isChannel && !isAllowed(chatId) && chatId > 0) {
-            if (text.startsWith('/add') || text.startsWith('/clear')) return res.status(200).json({ ok: true });
+            // Игнорируем команды
+            if (text.startsWith('/')) return res.status(200).json({ ok: true });
+            
+            // Если юзер кидает ссылку
             if (text.includes('http')) {
                 const user = msg.from || { id: chatId };
                 const sender = user.username ? `@${user.username}` : `ID: ${user.id}`;
+                // Шлем админам
                 for (const adminId of adminUsers) {
-                    await sendMessage(token, adminId, `🚨 ПРЕДЛОЖКА ОТ ${sender}:\n${text}`, null, 'HTML');
+                    await sendMessage(token, adminId, `🚨 <b>ПРЕДЛОЖКА</b> от ${sender}:\n\n${text}`, null, 'HTML');
                 }
+                // Ответ юзеру
+                await sendMessage(token, chatId, "Спасибо! Ссылка отправлена админу на проверку.");
             }
         }
 
-
         return res.status(200).json({ ok: true });
-
 
     } catch (e) {
         console.error(e);
@@ -422,7 +450,7 @@ export default async function handler(req, res) {
 
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
-
+// Извлечение ссылки TikTok из текста/entities
 function extractTikTokLink(msg) {
     const text = msg.text || msg.caption || '';
     const entities = msg.entities || msg.caption_entities || [];
@@ -440,7 +468,7 @@ function extractTikTokLink(msg) {
     return null;
 }
 
-
+// Отправка текста
 async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true };
     if (keyboard) body.reply_markup = keyboard;
@@ -452,7 +480,7 @@ async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Ma
     } catch (e) {}
 }
 
-
+// Отправка видео
 async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, video: videoUrl, caption: caption, parse_mode: parseMode };
     if (keyboard) body.reply_markup = keyboard;
@@ -464,7 +492,7 @@ async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, pars
     if (!res.ok) throw new Error(`TG Video Error ${res.status}`);
 }
 
-
+// Ответ на коллбэк (чтобы часики пропали)
 async function answerCallback(token, callbackId, text = null) {
     const body = { callback_query_id: callbackId };
     if (text) body.text = text;

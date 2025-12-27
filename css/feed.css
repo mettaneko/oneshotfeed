@@ -10,7 +10,6 @@
 }
 .tiktok-feed::-webkit-scrollbar { display: none; }
 
-
 .video-slide {
     height: 100vh;
     width: 100vw;
@@ -24,7 +23,6 @@
     overflow: hidden;
 }
 
-
 /* Фон */
 .video-blur-bg {
     position: absolute;
@@ -36,7 +34,6 @@
     transform: scale(1.2);
     opacity: 0.8;
 }
-
 
 /* Видеоконтейнер */
 .video-wrapper {
@@ -53,7 +50,6 @@
     align-items: center;
 }
 
-
 /* Видео */
 .video-player {
     display: block;
@@ -65,7 +61,6 @@
     box-shadow: 0 0 100px rgba(0,0,0,0.8);
     pointer-events: auto;
 }
-
 
 /* Мобилка */
 @media (max-width: 768px) {
@@ -101,8 +96,7 @@
     .video-progress-fill { border-radius: 0 !important; }
 }
 
-
-/* Прогресс */
+/* Прогресс бар */
 .video-progress-container {
     position: absolute;
     right: 10px;
@@ -131,7 +125,6 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
-
 /* Глобальный интерфейс */
 .liquid-controls-container {
     position: fixed;
@@ -147,7 +140,6 @@
     max-width: 360px;
     transition: opacity 0.2s;
 }
-
 
 /* Инфо-капсула */
 .video-info-capsule {
@@ -174,6 +166,7 @@
     font-weight: 700;
     line-height: 1;
     letter-spacing: 0.3px;
+    /* Шрифт JetBrains Mono задается в style.css или script.js */
 }
 .video-desc {
     margin: 4px 0 0 0;
@@ -185,7 +178,6 @@
     overflow: hidden;
     font-weight: 500;
 }
-
 
 /* Панель кнопок */
 .glass-deck {
@@ -200,7 +192,6 @@
     min-width: 240px;
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
-
 
 /* Кнопки */
 .control-btn {
@@ -218,29 +209,12 @@
     color: #fff;
     background: rgba(255,255,255,0.1);
 }
-.control-btn.active { color: var(--accent-color); }
-
-
-.control-btn.btn-play {
-    width: 48px;
-    height: 48px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.05);
-    margin: 0 8px;
-}
-.control-btn.btn-play:hover {
-    background: rgba(255,255,255,0.15);
-    transform: scale(1.05);
-}
-
-
 .divider {
     width: 1px;
     height: 16px;
     background: rgba(255,255,255,0.1);
     margin: 0 2px;
 }
-
 
 /* Подписка */
 .subscribe-btn {
@@ -261,10 +235,7 @@
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     position: relative;
 }
-.subscribe-btn i {
-    position: absolute;
-    transition: all 0.3s;
-}
+.subscribe-btn i { position: absolute; transition: all 0.3s; }
 .subscribe-btn.subscribed {
     background: var(--accent-color);
     color: #000;
@@ -275,46 +246,6 @@
 .subscribe-btn .fa-check { opacity: 0; transform: scale(0); }
 .subscribe-btn.subscribed .fa-check { opacity: 1; transform: scale(1); }
 
-
-/* Громкость */
-.volume-control-wrapper {
-    display: flex;
-    align-items: center;
-    flex-direction: row-reverse;
-    gap: 8px;
-}
-.volume-slider-container {
-    width: 0;
-    height: 32px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 16px;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    transition: width 0.3s;
-    opacity: 0;
-}
-.volume-slider-container.active {
-    width: 80px;
-    opacity: 1;
-    padding: 0 10px;
-}
-input[type=range].volume-range {
-    -webkit-appearance: none;
-    width: 100%;
-    height: 3px;
-    background: rgba(255,255,255,0.3);
-    border-radius: 2px;
-}
-input[type=range].volume-range::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 10px;
-    height: 10px;
-    background: #fff;
-    border-radius: 50%;
-}
-
-
 /* Навигация */
 .feed-navigation {
     position: fixed;
@@ -323,6 +254,7 @@ input[type=range].volume-range::-webkit-slider-thumb {
     transform: translateX(-50%);
     z-index: 100;
     display: flex;
+    gap: 20px;
     padding: 4px;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(15px);
@@ -336,11 +268,12 @@ input[type=range].volume-range::-webkit-slider-thumb {
     font-family: var(--font-title);
     font-size: 0.95rem;
     font-weight: 700;
-    padding: 8px 24px;
+    padding: 8px 16px;
     cursor: pointer;
     transition: color 0.3s;
     z-index: 2;
     position: relative;
+    white-space: nowrap;
 }
 .nav-tab.active {
     color: #fff;
@@ -358,8 +291,7 @@ input[type=range].volume-range::-webkit-slider-thumb {
     width: 0;
 }
 
-
-/* Шторка звука */
+/* Оверлей звука */
 #audio-unlock-overlay {
     position: fixed;
     top: 0;
@@ -387,41 +319,19 @@ input[type=range].volume-range::-webkit-slider-thumb {
     align-items: center;
     gap: 15px;
 }
-.unlock-message i {
-    font-size: 2.5rem;
-    color: rgba(255,255,255,0.9);
-}
-.unlock-message p {
-    font-size: 1.1rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    margin: 0;
-}
+.unlock-message i { font-size: 2.5rem; color: rgba(255,255,255,0.9); }
+.unlock-message p { font-size: 1.1rem; font-weight: 600; margin: 0; }
 
-/* === ДОБАВЛЕНО, чтобы перемотка точно работала === */
-.video-wrapper,
-.video-progress-container,
-.video-progress-fill,
-.video-player {
-    pointer-events: auto;
-}
-
-/* На всякий случай выключаем перехват кликов для любых декоративных оверлеев */
-.video-overlay,
-.video-mask,
-.video-gradient {
-    pointer-events: none;
-}
-/* Форма предложки видео */
+/* Форма предложки */
 .suggest-form {
     position: fixed;
     bottom: 90px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 60;
+    z-index: 1001;
     width: 90%;
     max-width: 360px;
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 8px;
     padding: 10px 16px;
@@ -431,16 +341,13 @@ input[type=range].volume-range::-webkit-slider-thumb {
     backdrop-filter: blur(15px);
     box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
-
 .suggest-form-title {
     font-size: 0.9rem;
     font-weight: 600;
     color: rgba(255,255,255,0.8);
     text-align: center;
 }
-
-.suggest-input,
-.suggest-textarea {
+.suggest-input, .suggest-textarea {
     width: 100%;
     border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.15);
@@ -449,12 +356,7 @@ input[type=range].volume-range::-webkit-slider-thumb {
     font-size: 0.85rem;
     padding: 8px 10px;
 }
-
-.suggest-textarea {
-    resize: none;
-    min-height: 60px;
-}
-
+.suggest-textarea { resize: none; min-height: 60px; }
 .suggest-send-btn {
     width: 100%;
     border-radius: 999px;
@@ -464,320 +366,62 @@ input[type=range].volume-range::-webkit-slider-thumb {
     font-weight: 700;
     font-size: 0.9rem;
     text-align: center;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    transition: transform 0.15s ease;
 }
+.suggest-send-btn:active { transform: scale(0.97); }
 
-.suggest-send-btn:active {
-    transform: scale(0.97);
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-}
-
-@media (max-width: 768px) {
-    .suggest-form {
-        bottom: 96px;
-        max-width: 420px;
-    }
-}
-/* Кнопка предложки визуально как остальные */
-.control-btn.btn-suggest i {
-    font-size: 0.9rem;
-}
-
-/* Форма предложки видео */
-.suggest-form {
-    position: fixed;
-    bottom: 90px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 60;
-    width: 90%;
-    max-width: 360px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(15px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-
-.suggest-form-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255,255,255,0.8);
-    text-align: center;
-}
-
-.suggest-input,
-.suggest-textarea {
-    width: 100%;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(0,0,0,0.4);
-    color: #fff;
-    font-size: 0.85rem;
-    padding: 8px 10px;
-}
-
-.suggest-textarea {
-    resize: none;
-    min-height: 60px;
-}
-
-.suggest-send-btn {
-    width: 100%;
-    border-radius: 999px;
-    padding: 8px 0;
-    background: var(--accent-color);
-    color: #000;
-    font-weight: 700;
-    font-size: 0.9rem;
-    text-align: center;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.suggest-send-btn:active {
-    transform: scale(0.97);
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-}
-
-@media (max-width: 768px) {
-    .suggest-form {
-        bottom: 96px;
-        max-width: 420px;
-    }
-}
-/* Кнопка предложки визуально как остальные */
-.control-btn.btn-suggest i {
-    font-size: 0.9rem;
-}
-
-/* Форма предложки видео */
-.suggest-form {
-    position: fixed;
-    bottom: 90px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 60;
-    width: 90%;
-    max-width: 360px;
-    display: none; /* скрыта по умолчанию */
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 20px;
-    border: 1px solid rgba(255,255,255,0.1);
-    backdrop-filter: blur(15px);
-    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-
-.suggest-form-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255,255,255,0.8);
-    text-align: center;
-}
-
-.suggest-input,
-.suggest-textarea {
-    width: 100%;
-    border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(0,0,0,0.4);
-    color: #fff;
-    font-size: 0.85rem;
-    padding: 8px 10px;
-}
-
-.suggest-textarea {
-    resize: none;
-    min-height: 60px;
-}
-
-.suggest-send-btn {
-    width: 100%;
-    border-radius: 999px;
-    padding: 8px 0;
-    background: var(--accent-color);
-    color: #000;
-    font-weight: 700;
-    font-size: 0.9rem;
-    text-align: center;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.suggest-send-btn:active {
-    transform: scale(0.97);
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
-}
-
-@media (max-width: 768px) {
-    .suggest-form {
-        bottom: 96px;
-        max-width: 420px;
-    }
-}
-
-
-/* Уменьшаем боковые кнопки и прижимаем ниже */
-.side-buttons {
-    position: absolute;
-    right: 10px;
-    bottom: 100px; /* Было выше, опускаем ближе к тексту */
-    display: flex;
-    flex-direction: column;
-    gap: 15px; /* Чуть меньше отступ между кнопками */
-    z-index: 10;
-}
-
-.action-btn {
-    width: 40px;  /* Было 50px */
-    height: 40px; /* Было 50px */
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: white;
-    font-size: 18px; /* Иконки поменьше */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s;
-}
-
-.action-btn:active {
-    transform: scale(0.9);
-}
-
-/* Опускаем текст описания ниже, чтобы кнопки не наезжали, если они низко */
-.video-info {
-    bottom: 30px; /* Прижали ближе к футеру */
-    left: 15px;
-    right: 60px; /* Отступ справа, чтобы не перекрывать кнопки */
-}
-
-/* Плашка перенаправления на бота */
-.disable-banner {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(135deg, var(--accent-color), rgba(169,149,255,0.8));
-    color: #000;
-    padding: 12px 20px;
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    font-weight: 600;
-    transform: translateY(-100%);
-    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.disable-banner.show {
-    transform: translateY(0);
-}
-.disable-content {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    max-width: 400px;
-    text-align: center;
-    flex-wrap: wrap;
-}
-.disable-content i { font-size: 1.3rem; }
-.disable-btn {
-    background: rgba(0,0,0,0.2);
-    color: #000;
-    border: none;
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.disable-btn:hover { background: rgba(0,0,0,0.3); transform: scale(1.05); }
-
-/* Стили для навигации */
-.top-nav .tabs {
-    gap: 20px; /* Увеличим расстояние между кнопками */
-}
-
-.top-nav .tabs button {
-    padding: 10px 15px; /* Делаем кнопки шире */
-    height: auto;       /* Убираем фиксированную высоту */
-    white-space: nowrap; /* Гарантируем, что текст будет в одну строку */
-}
-/* --- МОДАЛЬНОЕ ОКНО НАСТРОЕК --- */
+/* === НАСТРОЙКИ (Bottom Sheet) === */
 .settings-modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.6);
-    backdrop-filter: blur(5px);
-    z-index: 10005;
-    display: flex; justify-content: center; align-items: center;
-    opacity: 0; transition: opacity 0.3s;
+    z-index: 9000; 
+    display: flex; align-items: flex-end; justify-content: center;
+    background: transparent; 
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
 }
-.settings-modal-overlay.show { opacity: 1; }
+.settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
 
 .settings-panel {
-    background: rgba(30, 30, 35, 0.95);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 20px;
-    width: 300px;
-    padding: 20px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-    transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: 100%; max-width: 100%;
+    height: 75vh; max-height: 75vh;
+    padding: 30px 24px 50px; 
+    transform: translateY(100%); 
+    transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+    background: rgba(0, 0, 0, 0.6); 
+    backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 32px 32px 0 0; 
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
+    color: #fff;
+    display: flex; flex-direction: column;
 }
-.settings-modal-overlay.show .settings-panel { transform: scale(1); }
+.settings-panel::before {
+    content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 5px; background: rgba(255,255,255,0.25); border-radius: 3px;
+}
+.settings-modal-overlay.show .settings-panel { transform: translateY(0); }
 
-.settings-header {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 20px; font-weight: bold; font-size: 1.2rem;
+.settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+.settings-header h2 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+.settings-header button { 
+    background: rgba(255,255,255,0.1); border: none; color: white; width: 34px; height: 34px; 
+    border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+    cursor: pointer; transition: background 0.2s; 
 }
-.settings-header button {
-    background: none; border: none; color: white; font-size: 1.1rem; cursor: pointer;
-}
+.setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+.setting-label { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.9); }
+.settings-footer { margin-top: auto; text-align: center; opacity: 0.5; font-size: 0.8rem; }
 
-.setting-item {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 15px;
-}
-.setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; }
+/* Ползунок громкости (тонкий) */
+.thin-range { -webkit-appearance: none; width: 110px !important; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; }
+.thin-range::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
 
-/* Switch Toggle */
-.switch { position: relative; display: inline-block; width: 50px; height: 26px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #ccc; transition: .4s; border-radius: 34px;
+/* Селект темы */
+.theme-select {
+    appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
+    border: 1px solid rgba(255,255,255,0.1); color: white; padding: 10px 36px 10px 14px;
+    border-radius: 12px; font-size: 0.95rem; font-weight: 500; cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+    background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
 }
-.slider:before {
-    position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px;
-    background-color: white; transition: .4s; border-radius: 50%;
-}
-input:checked + .slider { background-color: #2196F3; }
-input:checked + .slider:before { transform: translateX(24px); }
-
-.settings-footer {
-    margin-top: 20px; text-align: center; font-size: 0.7rem; color: rgba(255,255,255,0.4);
-}
-
-/* Зимний баннер */
-.winter-banner {
-    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(100px);
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-    padding: 12px 20px; border-radius: 16px; width: 90%; max-width: 340px;
-    display: flex; align-items: center; gap: 15px; color: white;
-    box-shadow: 0 5px 20px rgba(137, 207, 240, 0.5);
-    z-index: 10002; opacity: 0; transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.winter-banner.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-.winter-accept-btn {
-    margin-left: auto; background: rgba(255,255,255,0.25); border: none;
-    color: white; padding: 6px 14px; border-radius: 8px; font-weight: bold; cursor: pointer;
-}
+.theme-select option { background: #1e1e23; color: white; }
