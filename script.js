@@ -17,20 +17,16 @@
         } catch { return null; }
     }
 
-    // Создаем плашку стрика ПОД навигацией
     function ensureBadge() {
         let el = document.getElementById('streak-badge-container');
         if (el) return el;
 
-        // Ищем навигацию, чтобы вставить ПОД ней
         const navBar = document.getElementById('top-nav-bar');
         if (!navBar) return null;
 
         el = document.createElement('div');
         el.id = 'streak-badge-container';
-        el.className = 'streak-capsule hidden'; // Скрыт пока не загрузится
-
-        // Вставляем сразу после навигации
+        el.className = 'streak-capsule hidden'; 
         navBar.parentNode.insertBefore(el, navBar.nextSibling);
 
         return el;
@@ -47,11 +43,12 @@
 
         el.classList.remove('hidden');
 
-        // Логика текста: если выполнено, убираем счетчик "X/5"
         if (isCompleted) {
+            // Только блины + сияние
             el.textContent = `${streak} 🥞`;
-            el.classList.add('glowing'); // Добавляем сияние
+            el.classList.add('glowing'); 
         } else {
+            // Блины + прогресс (без сияния)
             el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
             el.classList.remove('glowing');
         }
@@ -238,7 +235,6 @@ function triggerConfetti() {
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        /* Подключаем JetBrains Mono */
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
 
         .feed-navigation { gap: 20px; }
@@ -249,45 +245,53 @@ function injectNewStyles() {
         }
         #top-nav-bar.hidden-by-toast { transform: translateX(-50%) translateY(-150%); opacity: 0; pointer-events: none; }
         
-        /* === НОВЫЙ СТИЛЬ СТРИКА (КАПСУЛА) === */
+        /* === КАПСУЛА СТРИКА === */
         .streak-capsule {
             position: fixed;
-            top: 70px; /* Сразу под навбаром */
+            top: 85px; /* Увеличил отступ от верха (было 70px) */
             left: 50%;
             transform: translateX(-50%);
             z-index: 99;
             
-            background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.5); /* Чуть темнее фон для контраста */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
             
-            padding: 6px 14px;
+            /* Тонкая рамка */
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            
+            padding: 6px 16px;
             border-radius: 20px;
             
+            /* Цвет текста - БЛИННЫЙ (Золотой) */
             color: #ffca28;
-            font-family: 'JetBrains Mono', monospace; /* Шрифт стрика */
-            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace; 
+            font-size: 0.9rem;
             font-weight: 700;
             
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
         .streak-capsule.hidden { opacity: 0; pointer-events: none; }
         
-        /* Сияние (Glow) */
+        /* СИЯНИЕ ТЕКСТА (только текст светится) */
         .streak-capsule.glowing {
-            border-color: rgba(255, 202, 40, 0.5);
-            box-shadow: 0 0 15px rgba(255, 202, 40, 0.4), 
-                        inset 0 0 10px rgba(255, 202, 40, 0.1);
-            text-shadow: 0 0 10px rgba(255, 200, 40, 0.6);
-            color: #fff; /* Белый текст на фоне золотого сияния выглядит лучше */
+            color: #ffeb3b; /* Более яркий желтый при сиянии */
+            border-color: rgba(255, 215, 0, 0.4); /* Золотистая рамка */
+            
+            /* Текстовое свечение */
+            text-shadow: 
+                0 0 5px rgba(255, 202, 40, 0.8),
+                0 0 10px rgba(255, 202, 40, 0.5),
+                0 0 20px rgba(255, 140, 0, 0.4);
+                
+            /* Легкая пульсация рамки (опционально) */
+            box-shadow: 0 0 15px rgba(255, 202, 40, 0.2); 
         }
 
-        /* Шрифт автора */
         .author-name {
             font-family: 'JetBrains Mono', monospace !important;
             font-weight: 700;
@@ -296,7 +300,6 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* Уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%); padding: 12px 24px; z-index: 2000; opacity: 0;
@@ -311,7 +314,6 @@ function injectNewStyles() {
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 
-        /* Настройки */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9000; 

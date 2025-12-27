@@ -164,14 +164,14 @@ export default async function handler(req, res) {
                         keyboard: [
                             [{ text: "📊 Статистика" }, { text: "📢 Рассылка" }],
                             [{ text: "🔧 Тех. работы" }, { text: "❄️ Зимняя тема" }],
-                            [{ text: "🗑 Очистить базу" }] 
+                            [{ text: "🥞 Сбросить стрик" }, { text: "🗑 Очистить базу" }] 
                         ],
                         resize_keyboard: true,
                         is_persistent: true
                     });
                     // Ссылка на апп отдельным сообщением
                     await sendMessage(token, chatId, "Твой Web App:", {
-                         inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
+                          inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
                     });
                 } else {
                     // ОБЫЧНЫЙ ЮЗЕР
@@ -264,6 +264,30 @@ export default async function handler(req, res) {
                     });
                      return res.status(200).json({ ok: true });
                 }
+
+                // 6. УПРАВЛЕНИЕ СТРИКОМ (НОВОЕ)
+                if (text === "🥞 Сбросить стрик") {
+                     await sendMessage(token, chatId, "Отправь команду:\n`/resetstreak USER_ID`\n(ID пользователя можно узнать в статистике или переслав его сообщение боту @userinfobot)");
+                     return res.status(200).json({ ok: true });
+                }
+                
+                if (text.startsWith('/resetstreak')) {
+                    const targetId = text.split(' ')[1];
+                    if (!targetId) return sendMessage(token, chatId, "Укажи ID: /resetstreak 12345678");
+
+                    try {
+                        // Сброс стрика в Redis
+                        await fetch(`${DB_URL}/del/streak:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        await fetch(`${DB_URL}/del/last_complete:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        // Опционально: очистить просмотры за сегодня
+                        // await fetch(`${DB_URL}/del/day:${targetId}:...`, ...);
+                        
+                        await sendMessage(token, chatId, `✅ Стрик пользователя ${targetId} сброшен в 0.`);
+                    } catch (e) {
+                        await sendMessage(token, chatId, `❌ Ошибка базы данных: ${e.message}`);
+                    }
+                    return res.status(200).json({ ok: true });
+                }
             }
         }
 
@@ -272,6 +296,7 @@ export default async function handler(req, res) {
         const extractedUrl = extractTikTokLink(msg);
         const isAddCommand = !isChannel && text.startsWith('/add');
         const isAutoParse = isAllowed(chatId) && extractedUrl;
+
 
         if (isAddCommand || isAutoParse) {
             const targetUrl = extractedUrl || (isAddCommand ? text.split(/\s+/).find(p => p.includes('http')) : null);
@@ -294,15 +319,18 @@ export default async function handler(req, res) {
                     if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                 } catch (e) { console.error("TikWM fail:", e); }
 
+
                 if (tikData && tikData.images && tikData.images.length > 0) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Это фото/слайд-шоу. Пропуск.");
                     return res.status(200).json({ ok: true });
                 }
 
+
                 let finalVideoUrl = null;
                 let finalCover = null;
                 let finalId = null;
                 let finalAuthor = 'unknown';
+
 
                 if (tikData) {
                     finalId = tikData.id;
@@ -310,6 +338,7 @@ export default async function handler(req, res) {
                     finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                     finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
                 }
+
 
                 if (finalVideoUrl && finalId) {
                     const newVideo = { 
@@ -334,24 +363,28 @@ export default async function handler(req, res) {
                         else sourceName = title;
                     }
 
+
                     const directLink = `https://t.me/${botUsername}/${appName}?startapp=v_${newVideo.id}`;
                     const logCaption = `✅ <b>Видео сохранено!</b>\n\n📍 ${sourceName}\n👤 @${newVideo.author}\n🆔 <code>${newVideo.id}</code>\n🔗 <a href="${directLink}">Открыть в приложении</a>`;
+
 
                     const deleteKeyboard = {
                         inline_keyboard: [[{ text: "🗑 Удалить", callback_data: `del_${newVideo.id}` }]]
                     };
 
+
                     for (const adminId of adminUsers) {
                         try {
-                             await sendVideo(token, adminId, finalVideoUrl, logCaption, deleteKeyboard);
+                            await sendVideo(token, adminId, finalVideoUrl, logCaption, deleteKeyboard);
                         } catch (err) {
-                             await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен.`, deleteKeyboard, 'HTML');
+                            await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен.`, deleteKeyboard, 'HTML');
                         }
                     }
                     
                     if (!isChannel && !adminUsers.includes(String(chatId))) {
                         await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}`, null, 'HTML');
                     }
+
 
                 } else {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (TikWM).");
@@ -361,6 +394,7 @@ export default async function handler(req, res) {
                 for (const adminId of adminUsers) await sendMessage(token, adminId, errText, null, 'HTML');
             }
         }
+
 
         // === ПРЕДЛОЖКА ===
         if (!isChannel && !isAllowed(chatId) && chatId > 0) {
@@ -374,7 +408,9 @@ export default async function handler(req, res) {
             }
         }
 
+
         return res.status(200).json({ ok: true });
+
 
     } catch (e) {
         console.error(e);
@@ -383,7 +419,9 @@ export default async function handler(req, res) {
 }
 
 
+
 // === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
+
 
 function extractTikTokLink(msg) {
     const text = msg.text || msg.caption || '';
@@ -402,6 +440,7 @@ function extractTikTokLink(msg) {
     return null;
 }
 
+
 async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true };
     if (keyboard) body.reply_markup = keyboard;
@@ -413,6 +452,7 @@ async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Ma
     } catch (e) {}
 }
 
+
 async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, video: videoUrl, caption: caption, parse_mode: parseMode };
     if (keyboard) body.reply_markup = keyboard;
@@ -423,6 +463,7 @@ async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, pars
     });
     if (!res.ok) throw new Error(`TG Video Error ${res.status}`);
 }
+
 
 async function answerCallback(token, callbackId, text = null) {
     const body = { callback_query_id: callbackId };
