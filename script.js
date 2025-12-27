@@ -105,11 +105,11 @@ function triggerConfetti() {
 }
 
 
-// === СТИЛИ (НОВЫЙ ДИЗАЙН BOTTOM SHEET) ===
+// === СТИЛИ (ОБНОВЛЕН ДИЗАЙН НАСТРОЕК) ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        /* Навигация и прочее (оставляем как было) */
+        /* Навигация */
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
         #top-nav-bar {
@@ -135,51 +135,35 @@ function injectNewStyles() {
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 
-        /* === НОВЫЙ ДИЗАЙН НАСТРОЕК (BOTTOM SHEET) === */
+        /* === НАСТРОЙКИ (ПАРЯЩЕЕ СТЕКЛО) === */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 9000; 
-            display: flex; align-items: flex-end; /* Прижимаем к низу */
-            justify-content: center;
+            background: transparent; /* Убрали затемнение */
+            z-index: 9000; 
+            display: flex; align-items: center; justify-content: center;
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
+            backdrop-filter: blur(5px); /* Легкий блюр всего фона */
+            -webkit-backdrop-filter: blur(5px);
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
 
         .settings-panel {
-            width: 100%; /* На всю ширину */
-            max-width: 600px; /* Ограничение для десктопа */
-            max-height: 75vh; /* Оставляем верхнюю четверть пустой */
-            padding: 30px 24px 40px; /* Отступы внутри */
+            width: 90%; max-width: 360px;
+            padding: 24px 20px;
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             
-            /* Анимация выезда снизу */
-            transform: translateY(100%); 
-            transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
-            
-            /* Стеклянный стиль */
-            background: rgba(20, 20, 20, 0.95); /* Чуть темнее фон для читаемости */
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            
-            /* Границы и тени */
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px 24px 0 0; /* Закругляем только верх */
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+            /* Единый стиль с уведомлениями */
+            background: rgba(0, 0, 0, 0.65); 
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border-radius: 30px; /* Круглые края везде */
             color: #fff;
-            
-            display: flex; flex-direction: column;
-            overflow-y: auto; /* Если контента много, будет скролл */
         }
-
-        /* Полосочка-индикатор сверху (drag handle) */
-        .settings-panel::before {
-            content: ''; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-            width: 40px; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px;
-        }
-
-        .settings-modal-overlay.show .settings-panel { transform: translateY(0); }
+        .settings-modal-overlay.show .settings-panel { transform: scale(1); }
         
-        /* Стили внутренностей настроек */
-        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        .settings-header h2 { font-size: 1.4rem; font-weight: 700; margin: 0; }
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .settings-header h2 { font-size: 1.2rem; font-weight: 700; margin: 0; }
         
         .settings-header button { 
             background: rgba(255,255,255,0.1); border: none; color: white; width: 32px; height: 32px; 
@@ -188,22 +172,22 @@ function injectNewStyles() {
         }
         .settings-header button:active { background: rgba(255,255,255,0.2); }
 
-        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-        .setting-label { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.9); }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
 
-        .thin-range { -webkit-appearance: none; width: 100px !important; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; }
-        .thin-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        .thin-range { -webkit-appearance: none; width: 100px !important; height: 5px; background: rgba(255,255,255,0.2); border-radius: 3px; outline: none; }
+        .thin-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
 
         .theme-select {
             appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
-            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 10px 36px 10px 14px;
-            border-radius: 12px; font-size: 0.95rem; font-weight: 500;
+            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 8px 30px 8px 12px;
+            border-radius: 12px; font-size: 0.9rem; font-weight: 500; cursor: pointer;
             background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-            background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
+            background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto;
         }
+        .theme-select option { background: #1e1e23; color: white; }
 
-        /* Баннер зимней темы */
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
         .btn-accept { background: white; color: black; }
@@ -220,7 +204,7 @@ let savedVol = localStorage.getItem('niko_volume');
 let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
-let allVideos = []; // Хранит ВСЕ видео, включая секретные
+let allVideos = []; 
 
 
 // === DOM ===
@@ -313,7 +297,7 @@ const overlayEl = document.getElementById('audio-unlock-overlay');
 if (overlayEl) { overlayEl.addEventListener('click', unlockAudioContext); overlayEl.addEventListener('touchstart', unlockAudioContext); }
 
 
-// === NAVIGATION (С ФИЛЬТРАЦИЕЙ СЕКРЕТНЫХ) ===
+// === NAVIGATION ===
 function updateInd(tab) {
     if (!tab) return;
     indicator.style.width = `${tab.offsetWidth}px`;
@@ -475,16 +459,29 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === SETTINGS UI ===
+// === SETTINGS UI (С ПАУЗОЙ) ===
 if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        
+        // Пауза видео при открытии
+        const activeVid = document.querySelector('.video-slide.active-slide .video-player');
+        const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
+        if (activeVid) activeVid.pause();
+        if (activeBg) activeBg.pause();
+
         settingsModal.style.display = 'flex';
         setTimeout(() => settingsModal.classList.add('show'), 10);
     });
 }
 if(closeSettingsBtn && settingsModal) {
     closeSettingsBtn.addEventListener('click', () => {
+        // Плей видео при закрытии
+        const activeVid = document.querySelector('.video-slide.active-slide .video-player');
+        const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
+        if (activeVid) activeVid.play().catch(()=>{});
+        if (activeBg) activeBg.play().catch(()=>{});
+
         settingsModal.classList.remove('show');
         setTimeout(() => settingsModal.style.display = 'none', 300);
     });
@@ -671,18 +668,13 @@ window.addEventListener('load', async () => {
     checkThemes();
     updateInd(tabForYou);
 
-    // --- DEEP LINKING ---
     let targetId = null;
-    
-    // 1. Проверяем startapp из параметров TG Web App (t.me/bot/app?startapp=v_123)
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
         const param = tg.initDataUnsafe.start_param; 
         if (param.startsWith('v_')) {
             targetId = param.replace('v_', '');
         }
     }
-    
-    // 2. Проверяем хэш
     if (!targetId && window.location.hash.includes('video=')) {
         targetId = window.location.hash.split('video=')[1];
     }
@@ -693,7 +685,6 @@ window.addEventListener('load', async () => {
         if (targetVideo) {
             const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId) && !v.isSecret));
             feedToRender = [targetVideo, ...others];
-            console.log("Deep linked to video:", targetId);
         } else {
             feedToRender = shuffle(allVideos.filter(v => !v.isSecret));
         }
