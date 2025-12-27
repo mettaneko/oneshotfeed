@@ -105,7 +105,7 @@ function triggerConfetti() {
 }
 
 
-// === СТИЛИ (BOTTOM SHEET / ШТОРКА СНИЗУ) ===
+// === СТИЛИ (ФОН ПАНЕЛИ КАК У КАПСУЛ) ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -154,29 +154,27 @@ function injectNewStyles() {
         .settings-panel {
             width: 100%; 
             max-width: 100%;
-            /* Высота авто, но не больше 70%, чтобы оставить место сверху */
             height: auto;
             max-height: 70vh;
             
-            padding: 30px 24px 50px; /* Большой паддинг снизу */
+            padding: 30px 24px 50px; 
             
-            /* Выезд снизу */
             transform: translateY(100%); 
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
             
-            /* Стеклянный стиль */
-            background: rgba(18, 18, 18, 0.95); 
+            /* СТИЛЬ КАК У КАПСУЛ */
+            background: rgba(0, 0, 0, 0.6); 
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
             
-            /* Границы и тени */
-            border-top: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 32px 32px 0 0; /* Закругляем ТОЛЬКО ВЕРХ */
-            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6);
+            border-radius: 32px 32px 0 0; 
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
             color: #fff;
             
             display: flex; flex-direction: column;
         }
         
-        /* Полоска-индикатор ("ручка") */
+        /* Полоска-индикатор */
         .settings-panel::before {
             content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
             width: 40px; height: 5px; background: rgba(255,255,255,0.25); border-radius: 3px;
