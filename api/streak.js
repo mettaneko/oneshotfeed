@@ -1,181 +1,118 @@
-// streak.js
+export default async function handler(req, res) {
+    // Настраиваем CORS, чтобы фронтенд мог обращаться к API
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-(function() {
-    // Безопасные константы
-    const STREAK_STORAGE_KEY = 'pancake_streak_v1';
-    const STREAK_TZ = 'Europe/Moscow';
-    const DAILY_TARGET = 5;
-    const PROGRESS_THRESHOLD = 0.30;
+    if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // Глобальный объект (делаем его доступным везде)
-    window.PancakeStreak = {
-        state: {
-            todayKey: null,
-            todayVideoIds: [],
-            todayCompleted: false,
-            lastCompleteKey: null,
-            streak: 0
-        },
+    // Используем твои переменные окружения
+    const KV_URL = process.env.KV_REST_API_URL;
+    const KV_TOKEN = process.env.KV_REST_API_TOKEN;
 
-        // Инициализация
-        init: function() {
-            try {
-                this.loadState();
-                this.ensureToday();
-                // Ждем загрузки DOM, если он еще не готов
-                if (document.readyState === 'loading') {
-                    document.addEventListener('DOMContentLoaded', () => this.renderBadge());
-                } else {
-                    this.renderBadge();
-                }
-                console.log('🥞 PancakeStreak initialized');
-            } catch (e) {
-                console.error('Streak init failed:', e);
-            }
-        },
+    if (!KV_URL || !KV_TOKEN) {
+        console.error("Missing KV env vars");
+        return res.status(500).json({ error: 'Server Error: Database config missing' });
+    }
 
-        // Получение даты (YYYY-MM-DD)
-        dateKeyAt: function(ms) {
-            if (!ms) ms = Date.now();
-            try {
-                const fmt = new Intl.DateTimeFormat('en-CA', {
-                    timeZone: STREAK_TZ,
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                });
-                return fmt.format(new Date(ms));
-            } catch (e) {
-                // Фоллбэк, если Intl упал (старые браузеры)
-                return new Date(ms).toISOString().split('T')[0];
-            }
-        },
-
-        // Загрузка из LocalStorage
-        loadState: function() {
-            try {
-                const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    // Простая валидация структуры
-                    if (parsed && typeof parsed === 'object') {
-                        this.state = { ...this.state, ...parsed };
-                    }
-                }
-            } catch (e) {
-                console.warn('Could not load streak state:', e);
-            }
-        },
-
-        // Сохранение
-        saveState: function() {
-            try {
-                localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(this.state));
-            } catch (e) {
-                console.warn('Could not save streak state:', e);
-            }
-        },
-
-        // Проверка смены дня
-        ensureToday: function() {
-            const today = this.dateKeyAt();
-            if (this.state.todayKey !== today) {
-                this.state.todayKey = today;
-                this.state.todayVideoIds = [];
-                this.state.todayCompleted = false;
-                this.saveState();
-            }
-        },
-
-        // Отрисовка бейджа
-        renderBadge: function() {
-            const el = document.getElementById('streak-badge');
-            if (!el) return;
-            // Защита от undefined
-            const currentCount = this.state.todayVideoIds ? this.state.todayVideoIds.length : 0;
-            const currentStreak = this.state.streak || 0;
-            el.textContent = `${currentStreak} 🥞 · ${currentCount}/${DAILY_TARGET}`;
-        },
-
-        // Отметка выполнения дня
-        markTodayCompleted: function() {
-            if (this.state.todayCompleted) return;
-
-            const yesterday = this.dateKeyAt(Date.now() - 24 * 60 * 60 * 1000);
-
-            if (this.state.lastCompleteKey === yesterday) {
-                this.state.streak = (this.state.streak || 0) + 1;
-            } else {
-                this.state.streak = 1;
-            }
-
-            this.state.lastCompleteKey = this.state.todayKey;
-            this.state.todayCompleted = true;
-            
-            this.saveState();
-            this.renderBadge();
-
-            // Попытка показать уведомление (если функция есть в window)
-            if (window.showCustomNotification) {
-                window.showCustomNotification(`Блинный день засчитан! Стрик: ${this.state.streak} 🥞`, { showConfetti: true });
-            }
-        },
-
-        // Трекинг просмотра
-        trackView: function(videoId) {
-            if (!videoId) return;
-            
-            this.ensureToday();
-
-            // Приводим ID к строке для надежности
-            const strId = String(videoId);
-
-            if (!this.state.todayVideoIds.includes(strId)) {
-                this.state.todayVideoIds.push(strId);
-                this.saveState();
-                this.renderBadge();
-                
-                if (this.state.todayVideoIds.length >= DAILY_TARGET) {
-                    this.markTodayCompleted();
-                }
-            }
-        },
-
-        // Прикрепление к видео-элементу
-        attachToVideo: function(videoElement, videoId) {
-            // Защита от дурака
-            if (!videoElement || !videoId) return;
-            if (videoElement._streakAttached) return; 
-            
-            const _self = this; // Сохраняем контекст
-            videoElement._streakAttached = true;
-            let counted = false;
-
-            const checkProgress = function() {
-                if (counted) return;
-                // Проверка на валидность duration
-                if (!videoElement.duration || !isFinite(videoElement.duration) || videoElement.duration <= 0) return;
-
-                const progress = videoElement.currentTime / videoElement.duration;
-                
-                if (progress >= PROGRESS_THRESHOLD) {
-                    _self.trackView(videoId);
-                    counted = true;
-                    videoElement.removeEventListener('timeupdate', checkProgress);
-                }
-            };
-
-            videoElement.addEventListener('timeupdate', checkProgress);
-            videoElement.addEventListener('ended', function() {
-                 if (!counted) {
-                     _self.trackView(videoId);
-                     counted = true;
-                 }
-            });
+    // Хелпер для запросов к Upstash REST API (чтобы не тянуть тяжелые библиотеки)
+    async function redisCmd(command, ...args) {
+        const path = [command, ...args.map(a => encodeURIComponent(String(a)))].join('/');
+        const url = `${KV_URL}/${path}`;
+        
+        const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${KV_TOKEN}` }
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Upstash error: ${response.statusText}`);
         }
+        
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        return data.result;
+    }
+
+    const TARGET = 5;
+    
+    // Получаем текущую дату по Москве (YYYY-MM-DD)
+    const getMoscowDate = (offsetMs = 0) => {
+        return new Date(Date.now() + offsetMs).toLocaleDateString('en-CA', { 
+            timeZone: 'Europe/Moscow' 
+        });
     };
 
-    // Запускаем
-    window.PancakeStreak.init();
+    const today = getMoscowDate();
+    const yesterday = getMoscowDate(-86400000); // -24 часа
 
-})();
+    try {
+        // === GET: Получить текущий статус стрика ===
+        if (req.method === 'GET') {
+            const { userId } = req.query;
+            if (!userId) return res.status(400).json({ error: 'Missing userId' });
+
+            const [streakRaw, todayCountRaw, lastDate] = await Promise.all([
+                redisCmd('GET', `streak:${userId}`),
+                redisCmd('SCARD', `day:${userId}:${today}`),
+                redisCmd('GET', `last_complete:${userId}`)
+            ]);
+
+            return res.json({
+                streak: Number(streakRaw) || 0,
+                todayCount: Number(todayCountRaw) || 0,
+                todayCompleted: lastDate === today,
+                target: TARGET
+            });
+        }
+
+        // === POST: Засчитать просмотр ===
+        if (req.method === 'POST') {
+            const { userId, videoId } = req.body;
+            if (!userId || !videoId) return res.status(400).json({ error: 'Missing data' });
+
+            // 1. Добавляем видео в сет просмотров за сегодня (автоматически убирает дубли)
+            await redisCmd('SADD', `day:${userId}:${today}`, videoId);
+            // Ставим таймер удаления на 48 часов, чтобы не засорять базу
+            await redisCmd('EXPIRE', `day:${userId}:${today}`, 172800);
+
+            // 2. Получаем актуальные данные
+            const todayCount = Number(await redisCmd('SCARD', `day:${userId}:${today}`)) || 0;
+            let streak = Number(await redisCmd('GET', `streak:${userId}`)) || 0;
+            const lastDate = await redisCmd('GET', `last_complete:${userId}`);
+
+            let newCompleted = false;
+
+            // 3. Логика обновления стрика
+            // Если цель достигнута И сегодня еще не было засчитано
+            if (todayCount >= TARGET && lastDate !== today) {
+                if (lastDate === yesterday) {
+                    // Если вчера тоже выполнили -> увеличиваем стрик
+                    streak++;
+                    await redisCmd('INCR', `streak:${userId}`);
+                } else {
+                    // Если пропустили день -> сброс на 1
+                    streak = 1;
+                    await redisCmd('SET', `streak:${userId}`, 1);
+                }
+                
+                // Запоминаем, что сегодня выполнили
+                await redisCmd('SET', `last_complete:${userId}`, today);
+                newCompleted = true;
+            }
+
+            return res.json({
+                streak,
+                todayCount,
+                todayCompleted: newCompleted || lastDate === today,
+                target: TARGET,
+                newlyCompleted: newCompleted
+            });
+        }
+        
+        return res.status(405).json({ error: 'Method not allowed' });
+
+    } catch (error) {
+        console.error("Streak API Error:", error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+    }
+}

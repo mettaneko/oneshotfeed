@@ -1,5 +1,16 @@
 // script.js
 
+// === Хелпер для загрузки внешних скриптов ===
+function loadExternalScript(src) {
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+}
+
 // === БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ===
 (async function() {
     const API_BASE = 'https://feed.mettaneko.ru';
@@ -69,6 +80,9 @@ function showCustomNotification(message, options = {}) {
     }, 3500);
 }
 
+// Экспортируем в window, чтобы streak.js мог вызывать
+window.showCustomNotification = showCustomNotification; 
+
 
 function triggerConfetti() {
     const canvas = document.createElement('canvas');
@@ -109,7 +123,6 @@ function triggerConfetti() {
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        /* Навигация */
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
         #top-nav-bar {
@@ -120,7 +133,6 @@ function injectNewStyles() {
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
-        /* Уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%); padding: 12px 24px; z-index: 2000; opacity: 0;
@@ -135,7 +147,6 @@ function injectNewStyles() {
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 
-        /* === НАСТРОЙКИ (BOTTOM SHEET - ШТОРКА) === */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9000; 
@@ -148,7 +159,7 @@ function injectNewStyles() {
 
         .settings-panel {
             width: 100%; max-width: 100%;
-            height: 75vh; max-height: 75vh; /* 3/4 экрана */
+            height: 75vh; max-height: 75vh;
             padding: 30px 24px 50px; 
             transform: translateY(100%); 
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
@@ -186,10 +197,6 @@ function injectNewStyles() {
             background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
         }
         .theme-select option { background: #1e1e23; color: white; }
-        .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
-        .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
-        .btn-accept { background: white; color: black; }
-        .btn-decline { background: rgba(255,255,255,0.1); color: white; }
     `;
     document.head.appendChild(style);
 }
@@ -203,7 +210,7 @@ let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
 let allVideos = []; 
-let settingsWasPlaying = false; // Для логики паузы при настройках
+let settingsWasPlaying = false; 
 
 // === DOM ===
 const feedContainer = document.getElementById('feed');
@@ -391,9 +398,9 @@ function createSlide(data) {
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
     
-    // === PANCAKE STREAK ATTACHMENT ===
+    // === PANCAKE STREAK: Прикрепляем к видео ===
     if(window.PancakeStreak) {
-        PancakeStreak.attachToVideo(vid, data.id);
+        window.PancakeStreak.attachToVideo(vid, data.id);
     }
     
     vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
@@ -463,12 +470,11 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === SETTINGS UI (С УМНОЙ ПАУЗОЙ) ===
+// === SETTINGS UI ===
 if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         
-        // Логика авто-паузы: запоминаем, играло ли видео
         const activeVid = document.querySelector('.video-slide.active-slide .video-player');
         const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
         
@@ -483,7 +489,6 @@ if(uiSettingsBtn && settingsModal) {
 }
 if(closeSettingsBtn && settingsModal) {
     closeSettingsBtn.addEventListener('click', () => {
-        // Логика авто-плей: возобновляем только если играло ДО открытия
         const activeVid = document.querySelector('.video-slide.active-slide .video-player');
         const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
         
@@ -672,6 +677,15 @@ if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.ta
 // === INIT ===
 window.addEventListener('load', async () => {
     injectNewStyles();
+    
+    // === ДИНАМИЧЕСКАЯ ЗАГРУЗКА STREAK.JS ===
+    try {
+        await loadExternalScript('/streak.js');
+        if (window.PancakeStreak) await window.PancakeStreak.init();
+    } catch (e) {
+        console.warn('streak.js failed to load', e);
+    }
+
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
     await syncSubs();
