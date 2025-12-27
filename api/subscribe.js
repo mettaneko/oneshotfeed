@@ -1,35 +1,50 @@
-export default async function handler(req, res) {
-  // CORS (разрешаем запросы с GitHub Pages)
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+// api/subscribe.js
+import { createClient } from '@vercel/kv';
 
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+export const config = { runtime: 'edge' };
 
-  const { userId, author, action } = req.body;
-  
-  // Автоматические переменные от Upstash
-  const URL = process.env.KV_REST_API_URL;
-  const TOKEN = process.env.KV_REST_API_TOKEN;
+const redis = createClient({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
-  if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
+export default async function handler(req) {
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   try {
-    const key = `subs:${userId}`;
-    const command = action === 'add' ? 'sadd' : 'srem'; // sadd = добавить, srem = удалить
+    const { userId, author, action } = await req.json();
+    if (!userId || !author) return new Response('Missing data', { status: 400 });
 
-    // Шлем запрос в базу
-    const dbRes = await fetch(`${URL}/${command}/${key}/${author}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` }
-    });
+    const userKey = `user:${userId}`;
+
+    // 1. Получаем текущий список подписок (как строку)
+    const currentSubsRaw = await redis.hget(userKey, 'subs');
     
-    const data = await dbRes.json();
-    if (data.error) throw new Error(data.error);
+    // 2. Парсим или создаем пустой массив
+    let subs = [];
+    if (currentSubsRaw) {
+        try {
+            subs = typeof currentSubsRaw === 'string' ? JSON.parse(currentSubsRaw) : currentSubsRaw;
+        } catch(e) { subs = []; } // Если ошибка парсинга
+    }
 
-    res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'DB Error' });
+    // 3. Изменяем массив
+    if (action === 'add') {
+      if (!subs.includes(author)) {
+        subs.push(author);
+      }
+    } else if (action === 'remove') {
+      subs = subs.filter(s => s !== author);
+    }
+
+    // 4. Записываем обратно как строку
+    await redis.hset(userKey, { subs: JSON.stringify(subs) });
+
+    return new Response(JSON.stringify({ success: true, subs }), { 
+      headers: { 'Content-Type': 'application/json' } 
+    });
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 }

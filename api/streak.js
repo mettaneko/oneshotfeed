@@ -1,106 +1,82 @@
-export default async function handler(req, res) {
-    // Настраиваем CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+// api/streak.js
+import { createClient } from '@vercel/kv';
 
-    if (req.method === 'OPTIONS') return res.status(200).end();
+export const config = { runtime: 'edge' };
 
-    // Используем переменные окружения Vercel
-    const KV_URL = process.env.KV_REST_API_URL;
-    const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+const redis = createClient({
+  url: process.env.KV_REST_API_URL,
+  token: process.env.KV_REST_API_TOKEN,
+});
 
-    if (!KV_URL || !KV_TOKEN) {
-        return res.status(500).json({ error: 'Server Error: Database config missing' });
-    }
+export default async function handler(req) {
+  const url = new URL(req.url);
+  const userId = url.searchParams.get('userId'); 
 
-    // Хелпер для запросов к Redis
-    async function redisCmd(command, ...args) {
-        const path = [command, ...args.map(a => encodeURIComponent(String(a)))].join('/');
-        const url = `${KV_URL}/${path}`;
-        
-        const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${KV_TOKEN}` }
-        });
-        
-        if (!response.ok) throw new Error(`Upstash error: ${response.statusText}`);
-        const data = await response.json();
-        if (data.error) throw new Error(data.error);
-        return data.result;
-    }
+  if (req.method === 'POST') {
+    const { userId: uid, videoId } = await req.json();
+    if (!uid) return new Response('No ID', { status: 400 });
 
-    const TARGET = 5;
+    const today = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
+
+    // 1. Просмотры считаем отдельно (они живут 24 часа и удаляются)
+    const viewKey = `day_views:${uid}:${today}`;
+    await redis.sadd(viewKey, videoId);
+    await redis.expire(viewKey, 86400);
+    const todayCount = await redis.scard(viewKey);
+
+    // 2. Работаем с профилем user:ID
+    const userKey = `user:${uid}`;
     
-    // Дата по Москве
-    const getMoscowDate = (offsetMs = 0) => {
-        return new Date(Date.now() + offsetMs).toLocaleDateString('en-CA', { 
-            timeZone: 'Europe/Moscow' 
-        });
-    };
+    // Получаем текущие данные
+    const userData = await redis.hmget(userKey, 'streak', 'last_complete');
+    let currentStreak = parseInt(userData[0] || 0);
+    const lastCompleteDate = userData[1];
 
-    const today = getMoscowDate();
-    const yesterday = getMoscowDate(-86400000);
+    let newlyCompleted = false;
 
-    try {
-        // === GET: Получить статус ===
-        if (req.method === 'GET') {
-            const { userId } = req.query;
-            if (!userId) return res.status(400).json({ error: 'Missing userId' });
-
-            const [streakRaw, todayCountRaw, lastDate] = await Promise.all([
-                redisCmd('GET', `streak:${userId}`),
-                redisCmd('SCARD', `day:${userId}:${today}`),
-                redisCmd('GET', `last_complete:${userId}`)
-            ]);
-
-            return res.json({
-                streak: Number(streakRaw) || 0,
-                todayCount: Number(todayCountRaw) || 0,
-                todayCompleted: lastDate === today,
-                target: TARGET
-            });
-        }
-
-        // === POST: Засчитать просмотр ===
-        if (req.method === 'POST') {
-            const { userId, videoId } = req.body;
-            if (!userId || !videoId) return res.status(400).json({ error: 'Missing data' });
-
-            await redisCmd('SADD', `day:${userId}:${today}`, videoId);
-            await redisCmd('EXPIRE', `day:${userId}:${today}`, 172800);
-
-            const todayCount = Number(await redisCmd('SCARD', `day:${userId}:${today}`)) || 0;
-            let streak = Number(await redisCmd('GET', `streak:${userId}`)) || 0;
-            const lastDate = await redisCmd('GET', `last_complete:${userId}`);
-
-            let newCompleted = false;
-
-            if (todayCount >= TARGET && lastDate !== today) {
-                if (lastDate === yesterday) {
-                    streak++;
-                    await redisCmd('INCR', `streak:${userId}`);
-                } else {
-                    streak = 1;
-                    await redisCmd('SET', `streak:${userId}`, 1);
-                }
-                
-                await redisCmd('SET', `last_complete:${userId}`, today);
-                newCompleted = true;
-            }
-
-            return res.json({
-                streak,
-                todayCount,
-                todayCompleted: newCompleted || lastDate === today,
-                target: TARGET,
-                newlyCompleted: newCompleted
-            });
+    if (todayCount >= 5) { // Цель 5
+      if (lastCompleteDate !== today) {
+        if (lastCompleteDate === yesterday) {
+          currentStreak += 1;
+        } else {
+          currentStreak = 1; // Обрыв серии
         }
         
-        return res.status(405).json({ error: 'Method not allowed' });
-
-    } catch (error) {
-        console.error("Streak API Error:", error);
-        return res.status(500).json({ error: error.message });
+        // Пишем в Hash
+        await redis.hset(userKey, {
+          streak: currentStreak,
+          last_complete: today
+        });
+        newlyCompleted = true;
+      }
     }
+
+    return new Response(JSON.stringify({
+      streak: currentStreak,
+      todayCount,
+      target: 5,
+      todayCompleted: (todayCount >= 5),
+      newlyCompleted
+    }));
+  }
+
+  // GET
+  if (req.method === 'GET' && userId) {
+    const today = new Date().toISOString().split('T')[0];
+    const todayCount = await redis.scard(`day_views:${userId}:${today}`);
+    
+    const userData = await redis.hmget(`user:${userId}`, 'streak', 'last_complete');
+    let currentStreak = parseInt(userData[0] || 0);
+    // Логику визуального сброса (если пропустил день) можно добавить тут
+    
+    return new Response(JSON.stringify({
+      streak: currentStreak,
+      todayCount,
+      target: 5,
+      todayCompleted: (todayCount >= 5)
+    }));
+  }
 }
