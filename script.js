@@ -1,15 +1,136 @@
 // script.js
 
-// === Хелпер для загрузки внешних скриптов ===
-function loadExternalScript(src) {
-    return new Promise((resolve, reject) => {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-    });
-}
+// ==========================================
+// 🥞 PANCAKE STREAK MODULE (Client Side)
+// ==========================================
+(function() {
+    const DAILY_TARGET = 5;
+    const PROGRESS_THRESHOLD = 0.30;
+
+    function getUserId() {
+        try {
+            // Пытаемся взять ID из Telegram
+            const tg = window.Telegram?.WebApp;
+            if (tg?.initDataUnsafe?.user?.id) {
+                return String(tg.initDataUnsafe.user.id);
+            }
+            return null;
+        } catch { return null; }
+    }
+
+    function ensureBadge() {
+        let el = document.getElementById('streak-badge');
+        if (el) return el;
+
+        const capsule = document.querySelector('.video-info-capsule');
+        if (!capsule) return null;
+
+        el = document.createElement('div');
+        el.id = 'streak-badge';
+        el.className = 'streak-badge';
+        Object.assign(el.style, {
+            margin: '4px 0',
+            fontSize: '0.85rem',
+            fontWeight: '700',
+            color: '#ffca28',
+            textShadow: '0 0 10px rgba(255, 200, 40, 0.3)',
+            display: 'block'
+        });
+        el.textContent = `... 🥞`;
+
+        const desc = capsule.querySelector('#ui-desc');
+        if (desc) capsule.insertBefore(el, desc);
+        else capsule.appendChild(el);
+
+        return el;
+    }
+
+    function render(data) {
+        const el = ensureBadge();
+        if (!el) return;
+        const streak = data?.streak || 0;
+        const todayCount = data?.todayCount || 0;
+        const target = data?.target || DAILY_TARGET;
+        
+        el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
+        
+        if (data?.todayCompleted) {
+            el.style.color = '#4caf50'; // Зеленый при выполнении
+        }
+    }
+
+    window.PancakeStreak = {
+        _userId: null,
+
+        async init() {
+            this._userId = getUserId();
+            ensureBadge();
+
+            if (!this._userId) {
+                console.log('🥞 Streak: Нет ID пользователя (открыто в браузере?)');
+                return;
+            }
+
+            try {
+                // Запрос к API за данными
+                const res = await fetch(`/api/streak?userId=${this._userId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    render(data);
+                }
+            } catch (e) {
+                console.warn('Streak init error:', e);
+            }
+        },
+
+        attachToVideo(videoEl, videoId) {
+            if (!videoEl || !videoId) return;
+            if (videoEl._pancakeAttached) return;
+            videoEl._pancakeAttached = true;
+            let sent = false;
+
+            const onTimeUpdate = async () => {
+                if (sent) return;
+                if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
+
+                const progress = videoEl.currentTime / videoEl.duration;
+                if (progress < PROGRESS_THRESHOLD) return;
+
+                if (!this._userId) {
+                    // Если юзера нет, просто перестаем следить
+                    sent = true; 
+                    videoEl.removeEventListener('timeupdate', onTimeUpdate);
+                    return;
+                }
+
+                sent = true;
+                videoEl.removeEventListener('timeupdate', onTimeUpdate);
+
+                try {
+                    const res = await fetch('/api/streak', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: this._userId, videoId: String(videoId) })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        render(data);
+                        if (data.newlyCompleted && window.showCustomNotification) {
+                            window.showCustomNotification(`Стрик обновлен! ${data.streak} 🥞`, { showConfetti: true });
+                        }
+                    }
+                } catch (e) { console.warn('Streak update error:', e); }
+            };
+
+            videoEl.addEventListener('timeupdate', onTimeUpdate);
+        }
+    };
+})();
+
+// ==========================================
+// 🚀 MAIN SCRIPT
+// ==========================================
 
 // === БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ===
 (async function() {
@@ -79,8 +200,7 @@ function showCustomNotification(message, options = {}) {
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3500);
 }
-
-// Экспортируем в window, чтобы streak.js мог вызывать
+// Экспорт для стрика
 window.showCustomNotification = showCustomNotification; 
 
 
@@ -398,8 +518,9 @@ function createSlide(data) {
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
     
-    // === PANCAKE STREAK: Прикрепляем к видео ===
-    if(window.PancakeStreak) {
+    // === PANCAKE STREAK (ATTACH) ===
+    // Поскольку модуль теперь внутри script.js, window.PancakeStreak гарантированно существует
+    if (window.PancakeStreak) {
         window.PancakeStreak.attachToVideo(vid, data.id);
     }
     
@@ -678,13 +799,8 @@ if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.ta
 window.addEventListener('load', async () => {
     injectNewStyles();
     
-    // === ДИНАМИЧЕСКАЯ ЗАГРУЗКА STREAK.JS ===
-    try {
-        await loadExternalScript('/streak.js');
-        if (window.PancakeStreak) await window.PancakeStreak.init();
-    } catch (e) {
-        console.warn('streak.js failed to load', e);
-    }
+    // Инициализируем стрик сразу (модуль уже загружен в начале файла)
+    if (window.PancakeStreak) await window.PancakeStreak.init();
 
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
