@@ -9,7 +9,6 @@
 
     function getUserId() {
         try {
-            // Пытаемся взять ID из Telegram
             const tg = window.Telegram?.WebApp;
             if (tg?.initDataUnsafe?.user?.id) {
                 return String(tg.initDataUnsafe.user.id);
@@ -18,29 +17,21 @@
         } catch { return null; }
     }
 
+    // Создаем плашку стрика ПОД навигацией
     function ensureBadge() {
-        let el = document.getElementById('streak-badge');
+        let el = document.getElementById('streak-badge-container');
         if (el) return el;
 
-        const capsule = document.querySelector('.video-info-capsule');
-        if (!capsule) return null;
+        // Ищем навигацию, чтобы вставить ПОД ней
+        const navBar = document.getElementById('top-nav-bar');
+        if (!navBar) return null;
 
         el = document.createElement('div');
-        el.id = 'streak-badge';
-        el.className = 'streak-badge';
-        Object.assign(el.style, {
-            margin: '4px 0',
-            fontSize: '0.85rem',
-            fontWeight: '700',
-            color: '#ffca28',
-            textShadow: '0 0 10px rgba(255, 200, 40, 0.3)',
-            display: 'block'
-        });
-        el.textContent = `... 🥞`;
+        el.id = 'streak-badge-container';
+        el.className = 'streak-capsule hidden'; // Скрыт пока не загрузится
 
-        const desc = capsule.querySelector('#ui-desc');
-        if (desc) capsule.insertBefore(el, desc);
-        else capsule.appendChild(el);
+        // Вставляем сразу после навигации
+        navBar.parentNode.insertBefore(el, navBar.nextSibling);
 
         return el;
     }
@@ -48,14 +39,21 @@
     function render(data) {
         const el = ensureBadge();
         if (!el) return;
+        
         const streak = data?.streak || 0;
         const todayCount = data?.todayCount || 0;
         const target = data?.target || DAILY_TARGET;
-        
-        el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
-        
-        if (data?.todayCompleted) {
-            el.style.color = '#4caf50'; // Зеленый при выполнении
+        const isCompleted = data?.todayCompleted || (todayCount >= target);
+
+        el.classList.remove('hidden');
+
+        // Логика текста: если выполнено, убираем счетчик "X/5"
+        if (isCompleted) {
+            el.textContent = `${streak} 🥞`;
+            el.classList.add('glowing'); // Добавляем сияние
+        } else {
+            el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
+            el.classList.remove('glowing');
         }
     }
 
@@ -67,12 +65,11 @@
             ensureBadge();
 
             if (!this._userId) {
-                console.log('🥞 Streak: Нет ID пользователя (открыто в браузере?)');
+                console.log('🥞 Streak: Нет ID (браузер)');
                 return;
             }
 
             try {
-                // Запрос к API за данными
                 const res = await fetch(`/api/streak?userId=${this._userId}`);
                 if (res.ok) {
                     const data = await res.json();
@@ -97,7 +94,6 @@
                 if (progress < PROGRESS_THRESHOLD) return;
 
                 if (!this._userId) {
-                    // Если юзера нет, просто перестаем следить
                     sent = true; 
                     videoEl.removeEventListener('timeupdate', onTimeUpdate);
                     return;
@@ -117,7 +113,7 @@
                         const data = await res.json();
                         render(data);
                         if (data.newlyCompleted && window.showCustomNotification) {
-                            window.showCustomNotification(`Стрик обновлен! ${data.streak} 🥞`, { showConfetti: true });
+                            window.showCustomNotification(`Цель дня выполнена! ${data.streak} 🥞`, { showConfetti: true });
                         }
                     }
                 } catch (e) { console.warn('Streak update error:', e); }
@@ -200,7 +196,6 @@ function showCustomNotification(message, options = {}) {
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3500);
 }
-// Экспорт для стрика
 window.showCustomNotification = showCustomNotification; 
 
 
@@ -243,6 +238,9 @@ function triggerConfetti() {
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
+        /* Подключаем JetBrains Mono */
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
+
         .feed-navigation { gap: 20px; }
         .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
         #top-nav-bar {
@@ -250,9 +248,55 @@ function injectNewStyles() {
             transition: transform 0.5s, opacity 0.5s; z-index: 100;
         }
         #top-nav-bar.hidden-by-toast { transform: translateX(-50%) translateY(-150%); opacity: 0; pointer-events: none; }
+        
+        /* === НОВЫЙ СТИЛЬ СТРИКА (КАПСУЛА) === */
+        .streak-capsule {
+            position: fixed;
+            top: 70px; /* Сразу под навбаром */
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99;
+            
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            
+            padding: 6px 14px;
+            border-radius: 20px;
+            
+            color: #ffca28;
+            font-family: 'JetBrains Mono', monospace; /* Шрифт стрика */
+            font-size: 0.85rem;
+            font-weight: 700;
+            
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .streak-capsule.hidden { opacity: 0; pointer-events: none; }
+        
+        /* Сияние (Glow) */
+        .streak-capsule.glowing {
+            border-color: rgba(255, 202, 40, 0.5);
+            box-shadow: 0 0 15px rgba(255, 202, 40, 0.4), 
+                        inset 0 0 10px rgba(255, 202, 40, 0.1);
+            text-shadow: 0 0 10px rgba(255, 200, 40, 0.6);
+            color: #fff; /* Белый текст на фоне золотого сияния выглядит лучше */
+        }
+
+        /* Шрифт автора */
+        .author-name {
+            font-family: 'JetBrains Mono', monospace !important;
+            font-weight: 700;
+        }
+
         .liquid-controls-container { z-index: 100; }
         .suggest-form { z-index: 1001; }
         
+        /* Уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
             transform: translateX(-50%) translateY(-150%); padding: 12px 24px; z-index: 2000; opacity: 0;
@@ -267,6 +311,7 @@ function injectNewStyles() {
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 
+        /* Настройки */
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9000; 
@@ -518,8 +563,7 @@ function createSlide(data) {
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
     
-    // === PANCAKE STREAK (ATTACH) ===
-    // Поскольку модуль теперь внутри script.js, window.PancakeStreak гарантированно существует
+    // === PANCAKE STREAK ATTACH ===
     if (window.PancakeStreak) {
         window.PancakeStreak.attachToVideo(vid, data.id);
     }
