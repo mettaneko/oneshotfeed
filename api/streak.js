@@ -1,143 +1,181 @@
 // streak.js
 
-const STREAK_STORAGE_KEY = 'pancake_streak_v1';
-const STREAK_TZ = 'Europe/Moscow';
-const DAILY_TARGET = 5;
-const PROGRESS_THRESHOLD = 0.30; // 30% видео надо посмотреть
+(function() {
+    // Безопасные константы
+    const STREAK_STORAGE_KEY = 'pancake_streak_v1';
+    const STREAK_TZ = 'Europe/Moscow';
+    const DAILY_TARGET = 5;
+    const PROGRESS_THRESHOLD = 0.30;
 
-const PancakeStreak = {
-    state: {
-        todayKey: null,
-        todayVideoIds: [],
-        todayCompleted: false,
-        lastCompleteKey: null,
-        streak: 0
-    },
+    // Глобальный объект (делаем его доступным везде)
+    window.PancakeStreak = {
+        state: {
+            todayKey: null,
+            todayVideoIds: [],
+            todayCompleted: false,
+            lastCompleteKey: null,
+            streak: 0
+        },
 
-    init() {
-        this.loadState();
-        this.ensureToday();
-        this.renderBadge();
-    },
+        // Инициализация
+        init: function() {
+            try {
+                this.loadState();
+                this.ensureToday();
+                // Ждем загрузки DOM, если он еще не готов
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => this.renderBadge());
+                } else {
+                    this.renderBadge();
+                }
+                console.log('🥞 PancakeStreak initialized');
+            } catch (e) {
+                console.error('Streak init failed:', e);
+            }
+        },
 
-    dateKeyAt(ms = Date.now()) {
-        // Формат YYYY-MM-DD в московском времени
-        const fmt = new Intl.DateTimeFormat('en-CA', {
-            timeZone: STREAK_TZ,
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        });
-        return fmt.format(new Date(ms));
-    },
+        // Получение даты (YYYY-MM-DD)
+        dateKeyAt: function(ms) {
+            if (!ms) ms = Date.now();
+            try {
+                const fmt = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: STREAK_TZ,
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+                return fmt.format(new Date(ms));
+            } catch (e) {
+                // Фоллбэк, если Intl упал (старые браузеры)
+                return new Date(ms).toISOString().split('T')[0];
+            }
+        },
 
-    loadState() {
-        try {
-            const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-            if (raw) this.state = JSON.parse(raw);
-        } catch (e) {}
-    },
+        // Загрузка из LocalStorage
+        loadState: function() {
+            try {
+                const raw = localStorage.getItem(STREAK_STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    // Простая валидация структуры
+                    if (parsed && typeof parsed === 'object') {
+                        this.state = { ...this.state, ...parsed };
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not load streak state:', e);
+            }
+        },
 
-    saveState() {
-        localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(this.state));
-    },
+        // Сохранение
+        saveState: function() {
+            try {
+                localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(this.state));
+            } catch (e) {
+                console.warn('Could not save streak state:', e);
+            }
+        },
 
-    ensureToday() {
-        const today = this.dateKeyAt();
-        if (this.state.todayKey !== today) {
-            this.state.todayKey = today;
-            this.state.todayVideoIds = []; // Сброс списка просмотренных сегодня
-            this.state.todayCompleted = false; // Сброс флага "день выполнен"
-            this.saveState();
-        }
-    },
+        // Проверка смены дня
+        ensureToday: function() {
+            const today = this.dateKeyAt();
+            if (this.state.todayKey !== today) {
+                this.state.todayKey = today;
+                this.state.todayVideoIds = [];
+                this.state.todayCompleted = false;
+                this.saveState();
+            }
+        },
 
-    renderBadge() {
-        const el = document.getElementById('streak-badge');
-        if (!el) return;
-        el.textContent = `${this.state.streak} 🥞 · ${this.state.todayVideoIds.length}/${DAILY_TARGET}`;
-    },
+        // Отрисовка бейджа
+        renderBadge: function() {
+            const el = document.getElementById('streak-badge');
+            if (!el) return;
+            // Защита от undefined
+            const currentCount = this.state.todayVideoIds ? this.state.todayVideoIds.length : 0;
+            const currentStreak = this.state.streak || 0;
+            el.textContent = `${currentStreak} 🥞 · ${currentCount}/${DAILY_TARGET}`;
+        },
 
-    markTodayCompleted() {
-        if (this.state.todayCompleted) return;
+        // Отметка выполнения дня
+        markTodayCompleted: function() {
+            if (this.state.todayCompleted) return;
 
-        // Проверяем, был ли вчерашний день засчитан для продолжения стрика
-        const yesterday = this.dateKeyAt(Date.now() - 24 * 60 * 60 * 1000);
+            const yesterday = this.dateKeyAt(Date.now() - 24 * 60 * 60 * 1000);
 
-        if (this.state.lastCompleteKey === yesterday) {
-            this.state.streak += 1;
-        } else {
-            this.state.streak = 1; // Сброс стрика, если пропустили день
-        }
+            if (this.state.lastCompleteKey === yesterday) {
+                this.state.streak = (this.state.streak || 0) + 1;
+            } else {
+                this.state.streak = 1;
+            }
 
-        this.state.lastCompleteKey = this.state.todayKey;
-        this.state.todayCompleted = true;
-        
-        this.saveState();
-        this.renderBadge();
-
-        // Показываем уведомление (используем глобальную функцию из script.js, если доступна)
-        if (typeof showCustomNotification === 'function') {
-            showCustomNotification(`Блинный день засчитан! Стрик: ${this.state.streak} 🥞`, { showConfetti: true });
-        }
-    },
-
-    trackView(videoId) {
-        if (!videoId) return;
-        
-        this.ensureToday();
-
-        // Если видео еще не засчитано сегодня
-        if (!this.state.todayVideoIds.includes(String(videoId))) {
-            this.state.todayVideoIds.push(String(videoId));
+            this.state.lastCompleteKey = this.state.todayKey;
+            this.state.todayCompleted = true;
+            
             this.saveState();
             this.renderBadge();
-            
-            // Проверка на выполнение цели дня
-            if (this.state.todayVideoIds.length >= DAILY_TARGET) {
-                this.markTodayCompleted();
+
+            // Попытка показать уведомление (если функция есть в window)
+            if (window.showCustomNotification) {
+                window.showCustomNotification(`Блинный день засчитан! Стрик: ${this.state.streak} 🥞`, { showConfetti: true });
             }
+        },
+
+        // Трекинг просмотра
+        trackView: function(videoId) {
+            if (!videoId) return;
+            
+            this.ensureToday();
+
+            // Приводим ID к строке для надежности
+            const strId = String(videoId);
+
+            if (!this.state.todayVideoIds.includes(strId)) {
+                this.state.todayVideoIds.push(strId);
+                this.saveState();
+                this.renderBadge();
+                
+                if (this.state.todayVideoIds.length >= DAILY_TARGET) {
+                    this.markTodayCompleted();
+                }
+            }
+        },
+
+        // Прикрепление к видео-элементу
+        attachToVideo: function(videoElement, videoId) {
+            // Защита от дурака
+            if (!videoElement || !videoId) return;
+            if (videoElement._streakAttached) return; 
+            
+            const _self = this; // Сохраняем контекст
+            videoElement._streakAttached = true;
+            let counted = false;
+
+            const checkProgress = function() {
+                if (counted) return;
+                // Проверка на валидность duration
+                if (!videoElement.duration || !isFinite(videoElement.duration) || videoElement.duration <= 0) return;
+
+                const progress = videoElement.currentTime / videoElement.duration;
+                
+                if (progress >= PROGRESS_THRESHOLD) {
+                    _self.trackView(videoId);
+                    counted = true;
+                    videoElement.removeEventListener('timeupdate', checkProgress);
+                }
+            };
+
+            videoElement.addEventListener('timeupdate', checkProgress);
+            videoElement.addEventListener('ended', function() {
+                 if (!counted) {
+                     _self.trackView(videoId);
+                     counted = true;
+                 }
+            });
         }
-    },
+    };
 
-    // Логика отслеживания прогресса видео
-    attachToVideo(videoElement, videoId) {
-        if (!videoElement || !videoId) return;
-        if (videoElement._streakAttached) return; // Чтобы не вешать листенеры дважды
-        
-        videoElement._streakAttached = true;
-        let counted = false;
+    // Запускаем
+    window.PancakeStreak.init();
 
-        const checkProgress = () => {
-            if (counted) return;
-            if (!videoElement.duration) return;
-
-            const progress = videoElement.currentTime / videoElement.duration;
-            
-            // Условие: Прогресс > 30% ИЛИ (видео короткое и почти конец)
-            // Дополнительно можно проверять 'ended', но для лупов это сложно.
-            // Поэтому 30% - надежный критерий вовлеченности.
-            if (progress >= PROGRESS_THRESHOLD) {
-                this.trackView(videoId);
-                counted = true;
-                // Можно отписаться, чтобы не грузить проц
-                videoElement.removeEventListener('timeupdate', checkProgress);
-            }
-        };
-
-        videoElement.addEventListener('timeupdate', checkProgress);
-        
-        // Также засчитываем, если видео закончилось (для очень коротких видео)
-        videoElement.addEventListener('ended', () => {
-             if (!counted) {
-                 this.trackView(videoId);
-                 counted = true;
-             }
-        });
-    }
-};
-
-// Авто-инициализация
-window.addEventListener('load', () => {
-    PancakeStreak.init();
-});
+})();
