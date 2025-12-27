@@ -1,10 +1,12 @@
-// bot.js
+// api/bot.js
+
+export const config = { runtime: 'edge' };
 
 export default async function handler(req, res) {
     try {
-        if (req.method !== 'POST') return res.status(200).send('OK');
+        if (req.method !== 'POST') return new Response('OK', { status: 200 });
 
-        const body = req.body;
+        const body = await req.json();
         const token = process.env.BOT_TOKEN;
 
         // === НАСТРОЙКИ ===
@@ -139,31 +141,40 @@ export default async function handler(req, res) {
                      await sendMessage(token, chatId, "🗑 База видео полностью очищена!", null, 'HTML');
                 }
             }
-            return res.status(200).json({ ok: true });
+            return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
         }
 
 
         // === 2. ПОДГОТОВКА ДАННЫХ СООБЩЕНИЯ ===
         const msg = body.message || body.channel_post;
-        if (!msg) return res.status(200).json({ ok: true });
+        if (!msg) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
 
         const chatId = msg.chat.id;
         const text = msg.text || msg.caption || '';
         const isChannel = String(chatId).startsWith('-100');
 
         // Каналы игнорируем, если они не в списке админов
-        if (isChannel && !isAllowed(chatId)) return res.status(200).json({ ok: true });
+        if (isChannel && !isAllowed(chatId)) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
 
 
         // === 3. ЛОГИКА (ЛИЧНЫЕ СООБЩЕНИЯ И АДМИН-КАНАЛЫ) ===
         if (!isChannel) {
-            const user = msg.from || { id: chatId, username: 'Channel' };
+            const user = msg.from || { id: chatId, username: 'Channel', first_name: 'Unknown' };
 
-            // Сохраняем ID юзера в базу (для рассылки и статистики)
+            // === NEW: СОХРАНЯЕМ ИМЯ ЮЗЕРА ===
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
+                    // Сохраняем ID в список всех юзеров (для рассылки)
                     await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                } catch (e) {}
+                    
+                    // Сохраняем маппинг ID -> Имя (для команды /users)
+                    const name = user.username ? `@${user.username}` : user.first_name;
+                    // HSET принимает пару: ключ, поле, значение
+                    // В REST API Vercel KV формат: HSET key field value
+                    await fetch(`${DB_URL}/hset/bot:usernames/${chatId}/${encodeURIComponent(name)}`, { 
+                        headers: { Authorization: `Bearer ${DB_TOKEN}` } 
+                    });
+                } catch (e) { console.error("Save user error", e); }
             }
 
             // --- /start ---
@@ -176,7 +187,8 @@ export default async function handler(req, res) {
                         keyboard: [
                             [{ text: "📊 Статистика" }, { text: "📢 Рассылка" }],
                             [{ text: "🔧 Тех. работы" }, { text: "❄️ Зимняя тема" }],
-                            [{ text: "🥞 Сбросить стрик" }, { text: "🗑 Очистить базу" }] 
+                            [{ text: "🥞 Сбросить стрик" }, { text: "👥 Пользователи" }], // Добавлена кнопка
+                            [{ text: "🗑 Очистить базу" }]
                         ],
                         resize_keyboard: true,
                         is_persistent: true
@@ -196,7 +208,7 @@ export default async function handler(req, res) {
                         }
                     );
                 }
-                return res.status(200).json({ ok: true });
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
             }
 
             // --- КОМАНДЫ АДМИНА ---
@@ -209,15 +221,20 @@ export default async function handler(req, res) {
                         const uData = await uRes.json();
                         const vRes = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         const vData = await vRes.json();
-                        await sendMessage(token, chatId, `📊 *Статистика:*\n\n👥 Пользователей: *${uData.result}*\n📹 Видео: *${vData.result}*`);
+                        
+                        // Получаем кол-во имен
+                        const nRes = await fetch(`${DB_URL}/hlen/bot:usernames`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const nData = await nRes.json();
+
+                        await sendMessage(token, chatId, `📊 *Статистика:*\n\n👥 Всего уникальных: *${uData.result}*\n📝 Известных имен: *${nData.result}*\n📹 Видео в базе: *${vData.result}*`);
                     } catch (e) { await sendMessage(token, chatId, "Ошибка получения статистики."); }
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 // 2. Рассылка
                 if (text === "📢 Рассылка") {
                     await sendMessage(token, chatId, "Для рассылки отправь команду:\n`/broadcast Текст | Кнопка | Ссылка`\n\nПример:\n`/broadcast Привет всем! | Открыть | https://google.com`", null, 'Markdown');
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 if (text.startsWith('/broadcast')) {
@@ -247,7 +264,50 @@ export default async function handler(req, res) {
                         try { await sendMessage(token, u, bText, keyboard, 'HTML'); count++; } catch (e) {}
                     }
                     await sendMessage(token, chatId, `✅ Рассылка завершена: получено ${count} чел.`);
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
+                }
+                
+                // === NEW: СПИСОК ЮЗЕРОВ ===
+                if (text === "👥 Пользователи" || text === '/users') {
+                    try {
+                        const resUsers = await fetch(`${DB_URL}/hgetall/bot:usernames`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const dataUsers = await resUsers.json();
+                        const allUsers = dataUsers.result; // Это объект { "123": "@name", "456": "Ivan" } или массив ["field", "value"...] в зависимости от версии API
+                        
+                        let message = "📋 <b>Список пользователей:</b>\n\n";
+                        let list = [];
+                        
+                        // Vercel KV REST API для HGETALL иногда возвращает плоский массив, а иногда объект.
+                        // Обработаем оба случая.
+                        if (Array.isArray(allUsers)) {
+                             for (let i = 0; i < allUsers.length; i += 2) {
+                                 list.push(`${allUsers[i+1]} (<code>${allUsers[i]}</code>)`);
+                             }
+                        } else if (typeof allUsers === 'object' && allUsers !== null) {
+                             for (const [id, name] of Object.entries(allUsers)) {
+                                 list.push(`${name} (<code>${id}</code>)`);
+                             }
+                        }
+
+                        if (list.length === 0) {
+                            await sendMessage(token, chatId, "База имен пока пуста.");
+                        } else {
+                            // Если список огромный, нужно резать или слать файлом.
+                            // Для простоты шлем частями по 4000 символов (лимит ТГ)
+                            const fullText = list.join('\n');
+                            
+                            if (fullText.length > 4000) {
+                                // Просто обрежем или попросим использовать CLI, тут простая реализация
+                                await sendMessage(token, chatId, message + fullText.substring(0, 3500) + "\n\n... (слишком много)", null, 'HTML');
+                            } else {
+                                await sendMessage(token, chatId, message + fullText, null, 'HTML');
+                            }
+                        }
+
+                    } catch(e) {
+                        await sendMessage(token, chatId, `Ошибка: ${e.message}`);
+                    }
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 // 3. Тех работы
@@ -257,7 +317,7 @@ export default async function handler(req, res) {
                             [{ text: "🟢 Включить", callback_data: "maint_on" }, { text: "🔴 Выключить", callback_data: "maint_off" }]
                         ]
                     });
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 // 4. Зимняя тема
@@ -268,7 +328,7 @@ export default async function handler(req, res) {
                             [{ text: "🚫 Сбросить (выкл)", callback_data: "winter_reset" }]
                         ]
                     });
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 // 5. Очистка базы
@@ -276,13 +336,13 @@ export default async function handler(req, res) {
                     await sendMessage(token, chatId, "⚠️ Ты уверен? Это удалит ВСЕ видео из ленты.", {
                         inline_keyboard: [[{ text: "Да, удалить всё", callback_data: "confirm_clear" }]]
                     });
-                     return res.status(200).json({ ok: true });
+                     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
                 // 6. СБРОС СТРИКА (ПОЛНЫЙ)
                 if (text === "🥞 Сбросить стрик") {
                      await sendMessage(token, chatId, "Отправь команду:\n`/resetstreak USER_ID`\n(ID пользователя можно узнать, переслав его сообщение боту @userinfobot)");
-                     return res.status(200).json({ ok: true });
+                     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
                 
                 if (text.startsWith('/resetstreak')) {
@@ -294,18 +354,20 @@ export default async function handler(req, res) {
                         await fetch(`${DB_URL}/del/streak:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         // 2. Удаляем дату последнего выполнения (чтобы можно было начать заново)
                         await fetch(`${DB_URL}/del/last_complete:${targetId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        // 2.1 Удаляем стрик из нового HASH профиля (если перешли на него)
+                        await fetch(`${DB_URL}/hdel/user:${targetId}/streak`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        await fetch(`${DB_URL}/hdel/user:${targetId}/last_complete`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         
-                        // 3. (Опционально) Пытаемся удалить сегодняшние просмотры, чтобы юзер мог набить 5/5 заново прямо сейчас.
-                        // Для этого нужно знать ключ, который генерируется как `streak_views:${userId}:${YYYY-MM-DD}`.
-                        // Здесь мы берем текущую дату сервера.
+                        // 3. (Опционально) Пытаемся удалить сегодняшние просмотры
                         const today = new Date().toISOString().split('T')[0];
                         await fetch(`${DB_URL}/del/streak_views:${targetId}:${today}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        await fetch(`${DB_URL}/del/day_views:${targetId}:${today}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } }); // Чистим и day_views
 
                         await sendMessage(token, chatId, `✅ Стрик пользователя ${targetId} полностью сброшен (включая прогресс за сегодня).`);
                     } catch (e) {
                         await sendMessage(token, chatId, `❌ Ошибка базы данных: ${e.message}`);
                     }
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
             }
         }
@@ -322,7 +384,7 @@ export default async function handler(req, res) {
 
             if (!targetUrl) {
                 if (isAddCommand) await sendMessage(token, chatId, "❌ Нет ссылки.");
-                return res.status(200).json({ ok: true });
+                return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
             }
 
             if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю...", null, 'HTML');
@@ -343,7 +405,7 @@ export default async function handler(req, res) {
                 // Фильтр от слайдшоу
                 if (tikData && tikData.images && tikData.images.length > 0) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Это фото/слайд-шоу. Пропуск.");
-                    return res.status(200).json({ ok: true });
+                    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
                 }
 
 
@@ -423,7 +485,7 @@ export default async function handler(req, res) {
         // === ПРЕДЛОЖКА (ДЛЯ ОБЫЧНЫХ ЮЗЕРОВ) ===
         if (!isChannel && !isAllowed(chatId) && chatId > 0) {
             // Игнорируем команды
-            if (text.startsWith('/')) return res.status(200).json({ ok: true });
+            if (text.startsWith('/')) return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
             
             // Если юзер кидает ссылку
             if (text.includes('http')) {
@@ -438,13 +500,14 @@ export default async function handler(req, res) {
             }
         }
 
-        return res.status(200).json({ ok: true });
+        return new Response(JSON.stringify({ ok: true }), { status: 200, headers: {'Content-Type': 'application/json'} });
 
     } catch (e) {
         console.error(e);
-        return res.status(500).json({ error: 'Bot Error' });
+        return new Response(JSON.stringify({ error: 'Bot Error' }), { status: 500, headers: {'Content-Type': 'application/json'} });
     }
 }
+
 
 
 
@@ -468,6 +531,7 @@ function extractTikTokLink(msg) {
     return null;
 }
 
+
 // Отправка текста
 async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, text, parse_mode: parseMode, disable_web_page_preview: true };
@@ -480,6 +544,7 @@ async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Ma
     } catch (e) {}
 }
 
+
 // Отправка видео
 async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, video: videoUrl, caption: caption, parse_mode: parseMode };
@@ -491,6 +556,7 @@ async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, pars
     });
     if (!res.ok) throw new Error(`TG Video Error ${res.status}`);
 }
+
 
 // Ответ на коллбэк (чтобы часики пропали)
 async function answerCallback(token, callbackId, text = null) {
