@@ -105,7 +105,7 @@ function triggerConfetti() {
 }
 
 
-// === СТИЛИ (ФОН ПАНЕЛИ КАК У КАПСУЛ) ===
+// === СТИЛИ (ФОН ПАНЕЛИ КАК У КАПСУЛ + ВЫСОТА 3/4) ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -154,8 +154,10 @@ function injectNewStyles() {
         .settings-panel {
             width: 100%; 
             max-width: 100%;
-            height: auto;
-            max-height: 70vh;
+            
+            /* === ВЫСОТА 3/4 ЭКРАНА === */
+            height: 75vh;
+            max-height: 75vh;
             
             padding: 30px 24px 50px; 
             
