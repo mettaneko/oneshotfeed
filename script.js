@@ -105,7 +105,7 @@ function triggerConfetti() {
 }
 
 
-// === СТИЛИ (ФОН ПАНЕЛИ КАК У КАПСУЛ + ВЫСОТА 3/4) ===
+// === СТИЛИ ===
 function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -139,68 +139,45 @@ function injectNewStyles() {
         .settings-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             z-index: 9000; 
-            
-            /* Позиционирование внизу */
             display: flex; align-items: flex-end; justify-content: center;
-            
-            /* Фон прозрачный, только блюр */
             background: transparent; 
             backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-            
             opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
         .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
 
         .settings-panel {
-            width: 100%; 
-            max-width: 100%;
-            
-            /* === ВЫСОТА 3/4 ЭКРАНА === */
-            height: 75vh;
-            max-height: 75vh;
-            
+            width: 100%; max-width: 100%;
+            height: 75vh; max-height: 75vh; /* 3/4 экрана */
             padding: 30px 24px 50px; 
-            
             transform: translateY(100%); 
             transition: transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
-            
-            /* СТИЛЬ КАК У КАПСУЛ */
             background: rgba(0, 0, 0, 0.6); 
             backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
             border-top: 1px solid rgba(255, 255, 255, 0.1);
-            
             border-radius: 32px 32px 0 0; 
             box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.4);
             color: #fff;
-            
             display: flex; flex-direction: column;
         }
-        
-        /* Полоска-индикатор */
         .settings-panel::before {
             content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
             width: 40px; height: 5px; background: rgba(255,255,255,0.25); border-radius: 3px;
         }
-
         .settings-modal-overlay.show .settings-panel { transform: translateY(0); }
-        
         .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .settings-header h2 { font-size: 1.4rem; font-weight: 700; margin: 0; }
-        
         .settings-header button { 
             background: rgba(255,255,255,0.1); border: none; color: white; width: 34px; height: 34px; 
             border-radius: 50%; display: flex; align-items: center; justify-content: center; 
             cursor: pointer; transition: background 0.2s; 
         }
         .settings-header button:active { background: rgba(255,255,255,0.2); }
-
         .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
         .setting-label { display: flex; align-items: center; gap: 12px; font-size: 1.05rem; font-weight: 500; color: rgba(255,255,255,0.9); }
         .settings-footer { display: none; }
-
         .thin-range { -webkit-appearance: none; width: 110px !important; height: 6px; background: rgba(255,255,255,0.15); border-radius: 3px; outline: none; }
         .thin-range::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
-
         .theme-select {
             appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
             border: 1px solid rgba(255,255,255,0.1); color: white; padding: 10px 36px 10px 14px;
@@ -209,7 +186,6 @@ function injectNewStyles() {
             background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
         }
         .theme-select option { background: #1e1e23; color: white; }
-
         .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
         .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
         .btn-accept { background: white; color: black; }
@@ -227,7 +203,7 @@ let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
 let allVideos = []; 
-
+let settingsWasPlaying = false; // Для логики паузы при настройках
 
 // === DOM ===
 const feedContainer = document.getElementById('feed');
@@ -414,6 +390,12 @@ function createSlide(data) {
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
+    
+    // === PANCAKE STREAK ATTACHMENT ===
+    if(window.PancakeStreak) {
+        PancakeStreak.attachToVideo(vid, data.id);
+    }
+    
     vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     let isDragging = false;
@@ -481,14 +463,17 @@ feedContainer.addEventListener('scroll', () => {
 });
 
 
-// === SETTINGS UI (С ПАУЗОЙ) ===
+// === SETTINGS UI (С УМНОЙ ПАУЗОЙ) ===
 if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         
-        // Пауза видео при открытии
+        // Логика авто-паузы: запоминаем, играло ли видео
         const activeVid = document.querySelector('.video-slide.active-slide .video-player');
         const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
+        
+        settingsWasPlaying = !!(activeVid && !activeVid.paused);
+
         if (activeVid) activeVid.pause();
         if (activeBg) activeBg.pause();
 
@@ -498,11 +483,14 @@ if(uiSettingsBtn && settingsModal) {
 }
 if(closeSettingsBtn && settingsModal) {
     closeSettingsBtn.addEventListener('click', () => {
-        // Плей видео при закрытии
+        // Логика авто-плей: возобновляем только если играло ДО открытия
         const activeVid = document.querySelector('.video-slide.active-slide .video-player');
         const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
-        if (activeVid) activeVid.play().catch(()=>{});
-        if (activeBg) activeBg.play().catch(()=>{});
+        
+        if (settingsWasPlaying) {
+            if (activeVid) activeVid.play().catch(()=>{});
+            if (activeBg) activeBg.play().catch(()=>{});
+        }
 
         settingsModal.classList.remove('show');
         setTimeout(() => settingsModal.style.display = 'none', 300);
