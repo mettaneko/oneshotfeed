@@ -8,7 +8,6 @@ export default async function handler(req, res) {
         const token = process.env.BOT_TOKEN;
 
         // === НАСТРОЙКИ ССЫЛОК ===
-        // Важно: убедитесь, что в BotFather создано Web App с коротким именем 'app' (или измените переменную appName)
         const botUsername = 'OneShotFeedBot'; 
         const appName = 'app'; 
 
@@ -54,59 +53,79 @@ export default async function handler(req, res) {
                 await answerCallback(token, callbackId);
             }
 
-            // --- Удаление видео (кнопка 🗑) ---
-            else if (data.startsWith('del_')) {
-                if (!isAllowed(chatId)) {
-                    await answerCallback(token, callbackId, "⛔️ Только для админов");
-                    return res.status(200).json({ ok: true });
+            // --- Админские действия (CALLBACK) ---
+            if (isAllowed(chatId)) {
+                // Удаление видео
+                if (data.startsWith('del_')) {
+                    const vidId = data.split('del_')[1];
+                    await answerCallback(token, callbackId, "⏳ Удаляю...");
+                    
+                    try {
+                        const getRes = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const getData = await getRes.json();
+                        let videos = getData.result || [];
+                        videos = videos.map(v => typeof v === 'string' ? JSON.parse(v) : v);
+                        
+                        const initialLen = videos.length;
+                        const newVideos = videos.filter(v => String(v.id) !== String(vidId));
+                        
+                        if (newVideos.length === initialLen) {
+                            await sendMessage(token, chatId, `⚠️ Видео ${vidId} не найдено.`);
+                        } else {
+                            await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                            if (newVideos.length > 0) {
+                                const args = newVideos.map(v => JSON.stringify(v));
+                                await fetch(`${DB_URL}/`, {
+                                    method: 'POST',
+                                    headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(["RPUSH", "feed_videos", ...args])
+                            });
+                            }
+                            await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
+                            try {
+                                await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ chat_id: chatId, message_id: query.message.message_id })
+                                });
+                            } catch(e) {}
+                        }
+                    } catch (e) {
+                        await sendMessage(token, chatId, `❌ Ошибка удаления: ${e.message}`);
+                    }
+                }
+
+                // Управление тех. работами
+                if (data === 'maint_on' || data === 'maint_off') {
+                    const status = data === 'maint_on' ? 'on' : 'off';
+                    try {
+                        await fetch(`${webAppUrl}/api/maintenance`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ adminId: query.from.id, status: status })
+                        });
+                        await answerCallback(token, callbackId, `Maintenance: ${status}`);
+                        await sendMessage(token, chatId, `✅ Тех. работы: ${status}`);
+                    } catch (e) {}
+                }
+
+                // Управление темой
+                if (data === 'winter_on' || data === 'winter_reset') {
+                    const active = data === 'winter_on';
+                    const reset = data === 'winter_reset';
+                    try {
+                        await fetch(`${webAppUrl}/api/theme`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ active, reset })
+                        });
+                        await answerCallback(token, callbackId, `Winter: ${active ? 'ON' : 'RESET'}`);
+                        await sendMessage(token, chatId, `❄️ Winter Theme: ${active ? 'Включена' : 'Сброшена'}`);
+                    } catch (e) {}
                 }
                 
-                const vidId = data.split('del_')[1];
-                await answerCallback(token, callbackId, "⏳ Удаляю...");
-                
-                try {
-                    // 1. Получаем все видео из базы
-                    const getRes = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                    const getData = await getRes.json();
-                    let videos = getData.result || [];
-                    
-                    // Парсим строки JSON в объекты
-                    videos = videos.map(v => typeof v === 'string' ? JSON.parse(v) : v);
-                    
-                    const initialLen = videos.length;
-                    // Фильтруем список, исключая удаляемое видео
-                    const newVideos = videos.filter(v => String(v.id) !== String(vidId));
-                    
-                    if (newVideos.length === initialLen) {
-                        await sendMessage(token, chatId, `⚠️ Видео ${vidId} не найдено (возможно уже удалено).`);
-                    } else {
-                        // 2. Очищаем старый список
-                        await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                        
-                        // 3. Заливаем обновленный список обратно
-                        if (newVideos.length > 0) {
-                            const args = newVideos.map(v => JSON.stringify(v));
-                            // Используем спред-оператор, но следим за лимитами (для небольших баз ок)
-                            await fetch(`${DB_URL}/`, {
-                                method: 'POST',
-                                headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
-                                body: JSON.stringify(["RPUSH", "feed_videos", ...args])
-                            });
-                        }
-                        
-                        await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
-                        
-                        // Удаляем сообщение с кнопкой удаления, чтобы не кликать лишний раз
-                        try {
-                            await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id: chatId, message_id: query.message.message_id })
-                            });
-                        } catch(e) {}
-                    }
-                } catch (e) {
-                    await sendMessage(token, chatId, `❌ Ошибка удаления: ${e.message}`);
+                // Подтверждение очистки
+                if (data === 'confirm_clear') {
+                     await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                     await answerCallback(token, callbackId, "База очищена");
+                     await sendMessage(token, chatId, "🗑 База видео полностью очищена!", null, 'HTML');
                 }
             }
             return res.status(200).json({ ok: true });
@@ -121,7 +140,6 @@ export default async function handler(req, res) {
         const text = msg.text || msg.caption || '';
         const isChannel = String(chatId).startsWith('-100');
 
-        // Если канал не в белом списке - игнор
         if (isChannel && !isAllowed(chatId)) return res.status(200).json({ ok: true });
 
 
@@ -129,7 +147,7 @@ export default async function handler(req, res) {
         if (!isChannel) {
             const user = msg.from || { id: chatId, username: 'Channel' };
 
-            // Сохраняем юзера для статистики
+            // Сохраняем юзера
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
                     await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
@@ -138,36 +156,58 @@ export default async function handler(req, res) {
 
             // --- /start ---
             if (text.startsWith('/start')) {
-                // Прямая ссылка на Mini App
                 const appLink = `https://t.me/${botUsername}/${appName}`;
-                
-                await sendMessage(token, chatId,
-                    "👋 Привет! Добро пожаловать в Oneshot Feed.", {
-                        inline_keyboard: [
-                            [{ text: "📱 Открыть ленту", url: appLink }],
-                            [{ text: "📜 История", callback_data: "version_history" }]
-                        ]
-                    }
-                );
+
+                // АДМИНСКОЕ МЕНЮ
+                if (isAllowed(chatId)) {
+                    await sendMessage(token, chatId, "👋 Привет, Админ! Управление ботом ниже.", {
+                        keyboard: [
+                            [{ text: "📊 Статистика" }, { text: "📢 Рассылка" }],
+                            [{ text: "🔧 Тех. работы" }, { text: "❄️ Зимняя тема" }],
+                            [{ text: "🗑 Очистить базу" }] 
+                        ],
+                        resize_keyboard: true,
+                        is_persistent: true
+                    });
+                    // Ссылка на апп отдельным сообщением
+                    await sendMessage(token, chatId, "Твой Web App:", {
+                         inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
+                    });
+                } else {
+                    // ОБЫЧНЫЙ ЮЗЕР
+                    await sendMessage(token, chatId,
+                        "👋 Привет! Добро пожаловать в Oneshot Feed.", {
+                            inline_keyboard: [
+                                [{ text: "📱 Открыть ленту", url: appLink }],
+                                [{ text: "📜 История", callback_data: "version_history" }]
+                            ]
+                        }
+                    );
+                }
                 return res.status(200).json({ ok: true });
             }
 
-            // --- Админские команды ---
+            // --- ОБРАБОТКА АДМИНСКИХ КНОПОК И КОМАНД ---
             if (isAllowed(chatId)) {
                 
-                // Статистика
-                if (text === '/stats') {
+                // 1. Статистика
+                if (text === "📊 Статистика" || text === '/stats') {
                     try {
                         const uRes = await fetch(`${DB_URL}/scard/all_bot_users`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         const uData = await uRes.json();
                         const vRes = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                         const vData = await vRes.json();
                         await sendMessage(token, chatId, `📊 *Статистика:*\n\n👥 Пользователей: *${uData.result}*\n📹 Видео: *${vData.result}*`);
-                    } catch (e) { await sendMessage(token, chatId, "Ошибка получения статистики."); }
+                    } catch (e) { await sendMessage(token, chatId, "Ошибка статистики."); }
                     return res.status(200).json({ ok: true });
                 }
 
-                // Рассылка
+                // 2. Рассылка
+                if (text === "📢 Рассылка") {
+                    await sendMessage(token, chatId, "Для рассылки отправь команду:\n`/broadcast Текст | Кнопка | Ссылка`", null, 'Markdown');
+                    return res.status(200).json({ ok: true });
+                }
+
                 if (text.startsWith('/broadcast')) {
                     const raw = text.replace('/broadcast', '').trim();
                     if (!raw) return sendMessage(token, chatId, "Формат: Текст | Кнопка | Ссылка");
@@ -197,39 +237,31 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // Maintenance
-                const maintenanceMatch = /\/maintenance (on|off)/.exec(text);
-                if (maintenanceMatch) {
-                    const status = maintenanceMatch[1];
-                    try {
-                        await fetch(`${webAppUrl}/api/maintenance`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ adminId: user.id, status: status })
-                        });
-                        await sendMessage(token, chatId, `✅ Maintenance: ${status}`);
-                    } catch (e) {}
-                    return res.status(200).json({ ok: true });
-                }
-                
-                // Winter Theme
-                if (text.startsWith('/winter')) {
-                    const act = text.split(' ')[1];
-                    let active = false, reset = false;
-                    if (act === 'on') active = true; else if (act === 'reset') { active = true; reset = true; }
-                    try {
-                        await fetch(`${webAppUrl}/api/theme`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ active, reset })
-                        });
-                        await sendMessage(token, chatId, `❄️ Winter: ${act}`);
-                    } catch (e) {}
+                // 3. Тех работы
+                if (text === "🔧 Тех. работы") {
+                    await sendMessage(token, chatId, "Управление режимом обслуживания:", {
+                        inline_keyboard: [
+                            [{ text: "🟢 Включить", callback_data: "maint_on" }, { text: "🔴 Выключить", callback_data: "maint_off" }]
+                        ]
+                    });
                     return res.status(200).json({ ok: true });
                 }
 
-                // Clear
-                if (text === '/clear') {
-                     await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                     await sendMessage(token, chatId, "🗑 База очищена!", null, 'HTML');
+                // 4. Зима
+                if (text === "❄️ Зимняя тема") {
+                    await sendMessage(token, chatId, "Управление снегом:", {
+                        inline_keyboard: [
+                            [{ text: "❄️ Включить", callback_data: "winter_on" }, { text: "🚫 Выключить", callback_data: "winter_reset" }]
+                        ]
+                    });
+                    return res.status(200).json({ ok: true });
+                }
+
+                // 5. Очистка
+                if (text === "🗑 Очистить базу") {
+                    await sendMessage(token, chatId, "Ты уверен? Это удалит ВСЕ видео.", {
+                        inline_keyboard: [[{ text: "Да, удалить всё", callback_data: "confirm_clear" }]]
+                    });
                      return res.status(200).json({ ok: true });
                 }
             }
@@ -262,7 +294,6 @@ export default async function handler(req, res) {
                     if (apiJson.code === 0 && apiJson.data) tikData = apiJson.data;
                 } catch (e) { console.error("TikWM fail:", e); }
 
-                // Фильтр слайд-шоу
                 if (tikData && tikData.images && tikData.images.length > 0) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Это фото/слайд-шоу. Пропуск.");
                     return res.status(200).json({ ok: true });
@@ -276,7 +307,6 @@ export default async function handler(req, res) {
                 if (tikData) {
                     finalId = tikData.id;
                     finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                    // Формируем вечную ссылку через прокси TikWM
                     finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
                     finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
                 }
@@ -291,14 +321,12 @@ export default async function handler(req, res) {
                         date: Date.now() 
                     };
                     
-                    // Сохраняем в базу
                     await fetch(`${DB_URL}/`, {
                         method: 'POST',
                         headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                     });
                     
-                    // --- Определяем источник ---
                     let sourceName = isChannel ? 'Канал' : 'ЛС Админа';
                     if (isChannel && msg.chat) {
                         const title = msg.chat.title || 'Channel';
@@ -306,42 +334,35 @@ export default async function handler(req, res) {
                         else sourceName = title;
                     }
 
-                    // *** ГЕНЕРАЦИЯ ССЫЛКИ Deep Link ***
-                    // Формат: https://t.me/OneShotFeedBot/app?startapp=v_12345
                     const directLink = `https://t.me/${botUsername}/${appName}?startapp=v_${newVideo.id}`;
-
                     const logCaption = `✅ <b>Видео сохранено!</b>\n\n📍 ${sourceName}\n👤 @${newVideo.author}\n🆔 <code>${newVideo.id}</code>\n🔗 <a href="${directLink}">Открыть в приложении</a>`;
 
-                    // Кнопка удаления для админа
                     const deleteKeyboard = {
                         inline_keyboard: [[{ text: "🗑 Удалить", callback_data: `del_${newVideo.id}` }]]
                     };
 
-                    // Отправляем лог с видео всем админам-людям
                     for (const adminId of adminUsers) {
                         try {
                              await sendVideo(token, adminId, finalVideoUrl, logCaption, deleteKeyboard);
                         } catch (err) {
-                             // Фолбэк на текст, если видео не отправилось
-                             await sendMessage(token, adminId, logCaption + `\n\n⚠️ Видео-файл не отправлен, но в базе сохранен.`, deleteKeyboard, 'HTML');
+                             await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен.`, deleteKeyboard, 'HTML');
                         }
                     }
                     
-                    // Подтверждение в ЛС, если парсил сам админ вручную
                     if (!isChannel && !adminUsers.includes(String(chatId))) {
                         await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}`, null, 'HTML');
                     }
 
                 } else {
-                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (пустой ответ TikWM).");
+                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (TikWM).");
                 }
             } catch (e) {
-                const errText = `⚠️ <b>Ошибка парсинга</b> (${isChannel ? 'Channel' : 'DM'}): ${e.message}`;
+                const errText = `⚠️ <b>Ошибка</b> (${isChannel ? 'Channel' : 'DM'}): ${e.message}`;
                 for (const adminId of adminUsers) await sendMessage(token, adminId, errText, null, 'HTML');
             }
         }
 
-        // === 5. ПРЕДЛОЖКА ОТ ЮЗЕРОВ ===
+        // === ПРЕДЛОЖКА ===
         if (!isChannel && !isAllowed(chatId) && chatId > 0) {
             if (text.startsWith('/add') || text.startsWith('/clear')) return res.status(200).json({ ok: true });
             if (text.includes('http')) {
