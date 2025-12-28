@@ -59,81 +59,78 @@
     }
 
     window.PancakeStreak = {
-        _userId: null,
-        
-        // Инициализация при загрузке страницы
-        async init() {
-            this._userId = getUserId();
-            ensureBadge();
+    _userId: null,
 
-            if (!this._userId) {
-                console.log('🥞 Streak: ID пользователя не найден (не в Telegram?)');
-                return;
-            }
-
-            try {
-                // Запрашиваем актуальное состояние с сервера
-                const res = await fetch(`${API_BASE}/api/streak?userId=${this._userId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    render(data);
-                }
-            } catch (e) {
-                console.warn('Streak init error:', e);
-            }
-        },
-
-        // Метод вызывается для каждого видео-слайда
-        attachToVideo(videoEl, videoId) {
-            if (!videoEl || !videoId) return;
-            if (videoEl._pancakeAttached) return; // Защита от повторного навешивания
-            videoEl._pancakeAttached = true;
-
-            let sent = false;
-
-            const onTimeUpdate = async () => {
-                if (sent) return;
-                // Проверяем валидность длительности видео
-                if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
-
-                const progress = videoEl.currentTime / videoEl.duration;
-                
-                // Если просмотрено больше порога (30%)
-                if (progress >= PROGRESS_THRESHOLD) {
-                    sent = true;
-                    videoEl.removeEventListener('timeupdate', onTimeUpdate); // Убираем слушатель
-
-                    if (!this._userId) return;
-
-                    try {
-                        // Отправляем данные на сервер
-                        const res = await fetch(`${API_BASE}/api/streak`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ 
-                                userId: this._userId, 
-                                videoId: String(videoId) 
-                            })
-                        });
-
-                        if (res.ok) {
-                            const data = await res.json();
-                            render(data);
-                            
-                            // Если только что выполнили цель — показываем конфетти
-                            if (data.newlyCompleted && window.showCustomNotification) {
-                                window.showCustomNotification(`Цель дня выполнена! Серия: ${data.streak} дн.`, { showConfetti: true });
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Streak update error:', e);
-                    }
-                }
-            };
-
-            videoEl.addEventListener('timeupdate', onTimeUpdate);
+    async init() {
+        this._userId = getUserId();
+        ensureBadge();
+        if (!this._userId) {
+            console.log('🥞 Streak: ID пользователя не найден');
+            return;
         }
-    };
+        try {
+            const res = await fetch(`${API_BASE}/api/streak?userId=${this._userId}`);
+            if (res.ok) {
+                const data = await res.json();
+                render(data);
+            }
+        } catch (e) {
+            console.warn('Streak init error:', e);
+        }
+    },
+
+    attachToVideo(videoEl, videoId) {
+        if (!videoEl || !videoId) return;
+        if (videoEl._pancakeAttached) return;
+        
+        videoEl._pancakeAttached = true;
+        let sent = false;
+
+        const onTimeUpdate = async () => {
+            if (sent) return;
+
+            // === ФИКС 1: Игнорируем, если слайд не активен (фон/скролл) ===
+            const slide = videoEl.closest('.video-slide');
+            if (!slide || !slide.classList.contains('active-slide')) return;
+
+            // === ФИКС 2: Проверяем валидность длительности ===
+            if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
+
+            // === ФИКС 3: Минимум 1 секунда просмотра (защита от мгновенных глюков) ===
+            if (videoEl.currentTime < 1) return;
+
+            const progress = videoEl.currentTime / videoEl.duration;
+
+            if (progress >= PROGRESS_THRESHOLD) {
+                sent = true;
+                videoEl.removeEventListener('timeupdate', onTimeUpdate);
+
+                if (!this._userId) return;
+
+                try {
+                    const res = await fetch(`${API_BASE}/api/streak`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ userId: this._userId, videoId: String(videoId) })
+                    });
+
+                    if (res.ok) {
+                        const data = await res.json();
+                        render(data);
+                        if (data.newlyCompleted && window.showCustomNotification) {
+                            window.showCustomNotification(`Цель дня выполнена! Серия: ${data.streak} дн.`, { showConfetti: true });
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Streak update error:', e);
+                }
+            }
+        };
+
+        videoEl.addEventListener('timeupdate', onTimeUpdate);
+    }
+};
+
 })();
 
 
