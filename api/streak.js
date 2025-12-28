@@ -240,7 +240,7 @@ export default async function handler(req) {
         newlyCompleted = true;
 
         // “уведомление тебе” (опционально)
-        notifyAdmin(`🥞 <New daily streak complete>: user ${uid}, streak = ${streak}`).catch(() => {});
+        // notifyAdmin(`🥞 <New daily streak complete>: user ${uid}, streak = ${streak}`).catch(() => {});
       }
 
       return new Response(JSON.stringify({
