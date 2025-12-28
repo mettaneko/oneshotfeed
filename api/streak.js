@@ -1,4 +1,3 @@
-// api/streak.js
 import { createClient } from '@vercel/kv';
 
 export const config = { runtime: 'edge' };
@@ -8,75 +7,148 @@ const redis = createClient({
   token: process.env.KV_REST_API_TOKEN,
 });
 
+function dayInTZ(tz, d = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+
+  const y = parts.find(p => p.type === 'year')?.value;
+  const m = parts.find(p => p.type === 'month')?.value;
+  const day = parts.find(p => p.type === 'day')?.value;
+
+  return `${y}-${m}-${day}`; // YYYY-MM-DD
+}
+
 export default async function handler(req) {
-  const url = new URL(req.url);
-  const userId = url.searchParams.get('userId'); 
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
 
-  if (req.method === 'POST') {
-    const { userId: uid, videoId } = await req.json();
-    if (!uid) return new Response('No ID', { status: 400 });
-
-    const today = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().split('T')[0];
-
-    // 1. Просмотры считаем отдельно (они живут 24 часа и удаляются)
-    const viewKey = `day_views:${uid}:${today}`;
-    await redis.sadd(viewKey, videoId);
-    await redis.expire(viewKey, 86400);
-    const todayCount = await redis.scard(viewKey);
-
-    // 2. Работаем с профилем user:ID
-    const userKey = `user:${uid}`;
-    
-    // Получаем текущие данные
-    const userData = await redis.hmget(userKey, 'streak', 'last_complete');
-    let currentStreak = parseInt(userData[0] || 0);
-    const lastCompleteDate = userData[1];
-
-    let newlyCompleted = false;
-
-    if (todayCount >= 5) { // Цель 5
-      if (lastCompleteDate !== today) {
-        if (lastCompleteDate === yesterday) {
-          currentStreak += 1;
-        } else {
-          currentStreak = 1; // Обрыв серии
-        }
-        
-        // Пишем в Hash
-        await redis.hset(userKey, {
-          streak: currentStreak,
-          last_complete: today
-        });
-        newlyCompleted = true;
-      }
-    }
-
-    return new Response(JSON.stringify({
-      streak: currentStreak,
-      todayCount,
-      target: 5,
-      todayCompleted: (todayCount >= 5),
-      newlyCompleted
-    }));
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  // GET
-  if (req.method === 'GET' && userId) {
-    const today = new Date().toISOString().split('T')[0];
-    const todayCount = await redis.scard(`day_views:${userId}:${today}`);
-    
-    const userData = await redis.hmget(`user:${userId}`, 'streak', 'last_complete');
-    let currentStreak = parseInt(userData[0] || 0);
-    // Логику визуального сброса (если пропустил день) можно добавить тут
-    
-    return new Response(JSON.stringify({
-      streak: currentStreak,
-      todayCount,
-      target: 5,
-      todayCompleted: (todayCount >= 5)
-    }));
+  try {
+    const tz = 'Europe/Moscow';
+
+    const url = new URL(req.url);
+    const userId = url.searchParams.get('userId');
+
+    const now = new Date();
+    const today = dayInTZ(tz, now);
+    const yesterday = dayInTZ(tz, new Date(now.getTime() - 24 * 60 * 60 * 1000));
+
+    const DAILY_TARGET = 5;
+
+    // ===== GET =====
+    if (req.method === 'GET') {
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Missing userId' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+      const viewKey = `day_views:${userId}:${today}`;
+      const userKey = `user:${userId}`;
+
+      const [todayCount, hmgetArr] = await Promise.all([
+        redis.scard(viewKey),
+        redis.hmget(userKey, 'streak', 'last_complete'),
+      ]);
+
+      const streakRaw = Array.isArray(hmgetArr) ? hmgetArr[0] : hmgetArr?.streak;
+      const lastComplete = Array.isArray(hmgetArr) ? hmgetArr[1] : hmgetArr?.last_complete;
+
+      let streak = parseInt(streakRaw || 0, 10);
+
+      // Визуально: если не было completion ни сегодня, ни вчера — показываем 0
+      if (lastComplete !== today && lastComplete !== yesterday) {
+        streak = 0;
+      }
+
+      return new Response(JSON.stringify({
+        streak,
+        todayCount,
+        target: DAILY_TARGET,
+        todayCompleted: (lastComplete === today),
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // ===== POST =====
+    if (req.method === 'POST') {
+      const body = await req.json();
+      const { userId: uid, videoId } = body || {};
+
+      if (!uid || !videoId) {
+        return new Response(JSON.stringify({ error: 'Missing data' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+      const viewKey = `day_views:${uid}:${today}`;
+      const userKey = `user:${uid}`;
+
+      // 1) Уникальный просмотр за день
+      await redis.sadd(viewKey, String(videoId));
+      await redis.expire(viewKey, 86400);
+
+      // 2) Кол-во просмотров сегодня
+      const todayCount = await redis.scard(viewKey);
+
+      // 3) Данные пользователя
+      const hmgetArr = await redis.hmget(userKey, 'streak', 'last_complete');
+      const streakRaw = Array.isArray(hmgetArr) ? hmgetArr[0] : hmgetArr?.streak;
+      const lastComplete = Array.isArray(hmgetArr) ? hmgetArr[1] : hmgetArr?.last_complete;
+
+      let streak = parseInt(streakRaw || 0, 10);
+      let newlyCompleted = false;
+
+      // 4) Засчитываем completion 1 раз в сутки
+      if (todayCount >= DAILY_TARGET && lastComplete !== today) {
+        if (lastComplete === yesterday) streak += 1;
+        else streak = 1;
+
+        await redis.hset(userKey, {
+          streak: String(streak),
+          last_complete: today,
+        });
+
+        newlyCompleted = true;
+      }
+
+      // Визуально: если цель не выполнена, а completion был давно — показываем 0
+      if (todayCount < DAILY_TARGET && lastComplete !== today && lastComplete !== yesterday) {
+        streak = 0;
+      }
+
+      return new Response(JSON.stringify({
+        streak,
+        todayCount,
+        target: DAILY_TARGET,
+        todayCompleted: (lastComplete === today) || (todayCount >= DAILY_TARGET),
+        newlyCompleted,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    return new Response('Method not allowed', { status: 405, headers: corsHeaders });
+  } catch (error) {
+    console.error('Streak API Error:', error);
+    return new Response(JSON.stringify({ error: 'Internal Server Error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
   }
 }

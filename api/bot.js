@@ -429,7 +429,7 @@ export default async function handler(req, res) {
                         id: finalId, 
                         videoUrl: finalVideoUrl, 
                         author: finalAuthor, 
-                        desc: tikData.title || 'on tiktok', 
+                        desc: 'on tiktok', 
                         cover: finalCover,
                         date: Date.now() 
                     };
