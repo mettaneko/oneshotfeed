@@ -425,3 +425,54 @@
     background-repeat: no-repeat; background-position: right 12px top 50%; background-size: 10px auto;
 }
 .theme-select option { background: #1e1e23; color: white; }
+/* === STREAK CAPSULE (same glass style as site) === */
+.streak-capsule {
+  position: fixed;
+  top: 78px;               /* чуть ниже навигации */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  padding: 8px 18px;
+  border-radius: 30px;
+
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+
+  color: rgba(255,255,255,0.9);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 0.9rem;
+
+  transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+}
+
+.streak-capsule.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(-6px);
+}
+
+/* “выполнено” — аккуратная подсветка акцентом */
+.streak-capsule.glowing {
+  color: var(--accent-color);
+  border-color: rgba(255, 255, 255, 0.18);
+  text-shadow: 0 0 10px rgba(169, 149, 255, 0.25);
+}
+
+@media (max-width: 768px) {
+  .streak-capsule {
+    top: 74px;
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+}
