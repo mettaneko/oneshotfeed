@@ -3,39 +3,29 @@
 // 🥞 PANCAKE STREAK MODULE (Client Side)
 // ==========================================
 (function() {
-    const DAILY_TARGET = 5;       // Цель: 5 видео
-    const PROGRESS_THRESHOLD = 0.30; // Засчитываем просмотр после 30% длительности
+    const DAILY_TARGET = 5;
+    const PROGRESS_THRESHOLD = 0.30;
 
-    // Получение ID пользователя из Telegram WebApp
     function getUserId() {
         try {
             const tg = window.Telegram?.WebApp;
-            if (tg?.initDataUnsafe?.user?.id) {
-                return String(tg.initDataUnsafe.user.id);
-            }
+            if (tg?.initDataUnsafe?.user?.id) return String(tg.initDataUnsafe.user.id);
             return null;
-        } catch {
-            return null;
-        }
+        } catch { return null; }
     }
 
-    // Создание или получение элемента интерфейса (таблетки)
     function ensureBadge() {
         let el = document.getElementById('streak-badge-container');
         if (el) return el;
-        
         const navBar = document.getElementById('top-nav-bar');
         if (!navBar) return null;
-
         el = document.createElement('div');
         el.id = 'streak-badge-container';
         el.className = 'streak-capsule hidden';
-        // Вставляем сразу после навигационной панели
         navBar.parentNode.insertBefore(el, navBar.nextSibling);
         return el;
     }
 
-    // Отрисовка данных в таблетке
     function render(data) {
         const el = ensureBadge();
         if (!el) return;
@@ -43,94 +33,157 @@
         const streak = data?.streak || 0;
         const todayCount = data?.todayCount || 0;
         const target = data?.target || DAILY_TARGET;
-        const isCompleted = data?.todayCompleted || (todayCount >= target);
+        const isCompleted = !!data?.todayCompleted || (todayCount >= target);
+        const isFrozen = !!data?.frozen; // Новое поле от API
 
-        el.classList.remove('hidden');
-        el.classList.remove('glowing');
+        // Сброс классов
+        el.classList.remove('hidden', 'glowing', 'completed', 'frozen');
 
-        if (isCompleted) {
-            // Цель выполнена: показываем только стрик и эффект свечения
+        if (isFrozen) {
+            // (2) Замороженный стрик: голубой
+            el.classList.add('frozen');
+            el.textContent = `${streak} 🧊`; // Можно иконку льда
+        } else if (isCompleted) {
+            // (3) Выполнено сегодня: жёлто-оранжевое свечение
+            el.classList.add('completed');
             el.textContent = `${streak} 🥞`;
-            el.classList.add('glowing');
         } else {
-            // В процессе: показываем прогресс (например, 2/5)
+            // Обычное состояние: прогресс
             el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
         }
     }
 
-    window.PancakeStreak = {
-    _userId: null,
+    // (2) Баннер разморозки
+    function showFreezeBanner(data) {
+        if (window.__freezeBannerShown) return; // Чтобы не спамить при каждом релоаде (по желанию)
+        window.__freezeBannerShown = true;
 
-    async init() {
-        this._userId = getUserId();
-        ensureBadge();
-        if (!this._userId) {
-            console.log('🥞 Streak: ID пользователя не найден');
-            return;
-        }
-        try {
-            const res = await fetch(`${API_BASE}/api/streak?userId=${this._userId}`);
-            if (res.ok) {
-                const data = await res.json();
-                render(data);
-            }
-        } catch (e) {
-            console.warn('Streak init error:', e);
-        }
-    },
+        if (document.getElementById('streak-freeze-banner')) return;
 
-    attachToVideo(videoEl, videoId) {
-        if (!videoEl || !videoId) return;
-        if (videoEl._pancakeAttached) return;
-        
-        videoEl._pancakeAttached = true;
-        let sent = false;
+        const banner = document.createElement('div');
+        banner.id = 'streak-freeze-banner';
+        banner.className = 'custom-toast-notification persistent-banner';
+        banner.innerHTML = `
+            <img src="assets/avatar.jpg" class="toast-avatar" alt="bot-avatar">
+            <div class="toast-message" style="display:flex; flex-direction:column; gap:4px; width:100%;">
+                <span style="font-weight:bold;">Ваш стрик заморожен</span>
+                <span style="font-size:0.85em; opacity:0.8;">Вы не были активны. Попробуем еще раз?</span>
+                <span style="font-size:0.8em; opacity:0.6;">Осталось разморозок: ${data.freezeRemaining}</span>
+                <div class="banner-actions">
+                    <button class="banner-btn btn-accept">Да</button>
+                    <button class="banner-btn btn-decline">Нет</button>
+                </div>
+            </div>
+        `;
 
-        const onTimeUpdate = async () => {
-            if (sent) return;
+        const navBar = document.getElementById('top-nav-bar');
+        if (navBar) navBar.classList.add('hidden-by-toast');
 
-            // === ФИКС 1: Игнорируем, если слайд не активен (фон/скролл) ===
-            const slide = videoEl.closest('.video-slide');
-            if (!slide || !slide.classList.contains('active-slide')) return;
+        document.body.appendChild(banner);
+        requestAnimationFrame(() => banner.classList.add('show'));
 
-            // === ФИКС 2: Проверяем валидность длительности ===
-            if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
+        banner.querySelector('.btn-decline').onclick = () => closeBanner();
+        banner.querySelector('.btn-accept').onclick = async () => {
+            const btn = banner.querySelector('.btn-accept');
+            btn.innerText = '...';
+            try {
+                const res = await fetch(`${API_BASE}/api/streak`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: window.PancakeStreak._userId, action: 'unfreeze' })
+                });
+                const ans = await res.json();
 
-            // === ФИКС 3: Минимум 1 секунда просмотра (защита от мгновенных глюков) ===
-            if (videoEl.currentTime < 1) return;
-
-            const progress = videoEl.currentTime / videoEl.duration;
-
-            if (progress >= PROGRESS_THRESHOLD) {
-                sent = true;
-                videoEl.removeEventListener('timeupdate', onTimeUpdate);
-
-                if (!this._userId) return;
-
-                try {
-                    const res = await fetch(`${API_BASE}/api/streak`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: this._userId, videoId: String(videoId) })
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        render(data);
-                        if (data.newlyCompleted && window.showCustomNotification) {
-                            window.showCustomNotification(`Цель дня выполнена! Серия: ${data.streak} дн.`, { showConfetti: true });
-                        }
-                    }
-                } catch (e) {
-                    console.warn('Streak update error:', e);
+                if (ans?.ok) {
+                    window.showCustomNotification?.('Стрик разморожен! 🔥', { showConfetti: true });
+                    // Обновляем UI с новыми данными
+                    const st = await fetch(`${API_BASE}/api/streak?userId=${window.PancakeStreak._userId}`).then(r => r.json());
+                    render(st);
+                } else {
+                    window.showCustomNotification?.('Не удалось разморозить.', { isError: true });
                 }
+            } catch {
+                window.showCustomNotification?.('Ошибка сети.', { isError: true });
+            } finally {
+                closeBanner();
             }
         };
 
-        videoEl.addEventListener('timeupdate', onTimeUpdate);
+        function closeBanner() {
+            banner.classList.remove('show');
+            if (navBar) navBar.classList.remove('hidden-by-toast');
+            setTimeout(() => banner.remove(), 350);
+        }
     }
-};
 
+    window.PancakeStreak = {
+        _userId: null,
+
+        async init() {
+            this._userId = getUserId();
+            ensureBadge();
+            if (!this._userId) {
+                console.log('🥞 Streak: ID пользователя не найден');
+                return;
+            }
+            try {
+                const res = await fetch(`${API_BASE}/api/streak?userId=${this._userId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    render(data);
+
+                    // Если заморожен и есть попытки — предлагаем разморозить
+                    if (data.frozen && (data.freezeRemaining > 0)) {
+                        showFreezeBanner(data);
+                    }
+                }
+            } catch (e) {
+                console.warn('Streak init error:', e);
+            }
+        },
+
+        attachToVideo(videoEl, videoId) {
+            if (!videoEl || !videoId) return;
+            if (videoEl._pancakeAttached) return;
+            videoEl._pancakeAttached = true;
+            let sent = false;
+
+            const onTimeUpdate = async () => {
+                if (sent) return;
+                const slide = videoEl.closest('.video-slide');
+                if (!slide || !slide.classList.contains('active-slide')) return;
+                if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
+                if (videoEl.currentTime < 1) return;
+
+                const progress = videoEl.currentTime / videoEl.duration;
+                if (progress >= PROGRESS_THRESHOLD) {
+                    sent = true;
+                    videoEl.removeEventListener('timeupdate', onTimeUpdate);
+                    if (!this._userId) return;
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/streak`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ userId: this._userId, videoId: String(videoId) })
+                        });
+
+                        if (res.ok) {
+                            const data = await res.json();
+                            render(data);
+                            // (1) Уведомление юзеру при новом стрике
+                            if (data.newlyCompleted && window.showCustomNotification) {
+                                window.showCustomNotification(`Цель дня выполнена! Серия: ${data.streak} дн.`, { showConfetti: true });
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Streak update error:', e);
+                    }
+                }
+            };
+            videoEl.addEventListener('timeupdate', onTimeUpdate);
+        }
+    };
 })();
 
 
@@ -373,6 +426,27 @@ function injectDynamicStyles() {
             font-weight: 700;
             font-size: 1rem;
         }
+            /* ... внутри injectDynamicStyles ... */
+
+/* (3) Выполнено: жёлто-оранжевое */
+.streak-capsule.completed {
+    color: #ffeb3b;
+    border-color: rgba(255, 180, 0, 0.35);
+    text-shadow:
+      0 0 6px rgba(255, 235, 59, 0.75),
+      0 0 14px rgba(255, 160, 0, 0.55),
+      0 0 24px rgba(255, 120, 0, 0.35);
+}
+
+/* (2) Заморожен: голубое */
+.streak-capsule.frozen {
+    color: #6ecbff;
+    border-color: rgba(110, 203, 255, 0.25);
+    text-shadow:
+      0 0 6px rgba(110, 203, 255, 0.75),
+      0 0 14px rgba(40, 150, 255, 0.45);
+}
+
     `;
     document.head.appendChild(style);
 }
