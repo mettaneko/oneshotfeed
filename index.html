@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>OneShot Feed</title>
-    
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/feed.css">
+    <meta name="referrer" content="no-referrer" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <meta name="referrer" content="no-referrer">
 </head>
 <body>
 
@@ -17,7 +16,7 @@
     <div id="audio-unlock-overlay">
         <div class="unlock-message">
             <i class="fas fa-volume-up"></i>
-            <p>Нажми, чтобы включить звук</p>
+            <p>Нажмите, чтобы начать просмотр</p>
         </div>
     </div>
 
@@ -31,11 +30,10 @@
     <!-- ЛЕНТА -->
     <div class="tiktok-feed" id="feed"></div>
 
-    <!-- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС (Плеер) -->
+    <!-- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС -->
     <div class="liquid-controls-container" id="global-ui">
-        <!-- Инфо о видео -->
         <div class="video-info-capsule">
-            <div class="author-row">
+            <div class="author-row" style="display:flex; justify-content:center; align-items:center; gap:6px; margin-bottom:4px;">
                 <h3 class="author-name" id="ui-author">@loading</h3>
                 <button class="subscribe-btn" id="ui-sub-btn">
                     <i class="fas fa-plus"></i><i class="fas fa-check"></i>
@@ -44,7 +42,6 @@
             <p class="video-desc" id="ui-desc">...</p>
         </div>
 
-        <!-- Кнопки управления -->
         <div class="glass-deck">
             <button class="control-btn btn-settings" id="ui-settings-btn"><i class="fas fa-cog"></i></button>
             <div class="divider"></div>
@@ -54,31 +51,22 @@
         </div>
     </div>
 
-    <!-- ФОРМА ПРЕДЛОЖКИ -->
-    <div class="suggest-form" id="suggest-form" style="display: none;">
-        <div class="suggest-form-title">Предложить видео</div>
-        <input id="sug-url" class="suggest-input" type="url" placeholder="Ссылка (TikTok/YouTube)">
-        <input id="sug-author" class="suggest-input" type="text" placeholder="Автор (необязательно)">
-        <textarea id="sug-desc" class="suggest-textarea" placeholder="Комментарий..."></textarea>
-        <button id="sug-send" class="suggest-send-btn">Отправить</button>
-    </div>
-
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК (Bottom Sheet) -->
-    <div class="settings-modal-overlay" id="settings-modal">
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК (Обновленная структура) -->
+    <div class="settings-modal-overlay" id="settings-modal" style="display: none;">
         <div class="settings-panel">
             <div class="settings-header">
-                <h2>Настройки</h2>
+                <span>Настройки</span>
                 <button id="close-settings"><i class="fas fa-times"></i></button>
             </div>
             
-            <!-- Громкость -->
+            <!-- Тонкая громкость -->
             <div class="setting-item">
                 <div class="setting-label"><i class="fas fa-volume-up"></i> Громкость</div>
                 <input type="range" class="volume-range thin-range" id="modal-vol-range" min="0" max="1" step="0.05" value="1">
             </div>
 
-            <!-- Тема -->
-            <div class="setting-item">
+            <!-- Выбор темы (Select) -->
+            <div class="setting-item" id="theme-setting-row">
                 <div class="setting-label"><i class="fas fa-palette"></i> Тема</div>
                 <select id="theme-select" class="theme-select">
                     <option value="default">👾 Стандартная</option>
@@ -87,12 +75,20 @@
             </div>
             
             <div class="settings-footer">
-                25.12.10T
+                OneShot Feed v0.9.6
             </div>
         </div>
     </div>
 
-    <!-- СКРИПТЫ -->
+    <!-- ФОРМА ПРЕДЛОЖКИ -->
+    <div class="suggest-form" id="suggest-form" style="display: none;">
+        <div class="suggest-form-title">Предложить видео</div>
+        <input id="sug-url" class="suggest-input" type="url" placeholder="Ссылка">
+        <input id="sug-author" class="suggest-input" type="text" placeholder="Автор">
+        <textarea id="sug-desc" class="suggest-textarea" placeholder="Описание"></textarea>
+        <button id="sug-send" class="suggest-send-btn">Отправить</button>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

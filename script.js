@@ -1,195 +1,4 @@
 // script.js
-// ==========================================
-// 🥞 PANCAKE STREAK MODULE (Client Side)
-// ==========================================
-(function() {
-    const DAILY_TARGET = 5;
-    const PROGRESS_THRESHOLD = 0.30;
-
-    function getUserId() {
-        try {
-            const tg = window.Telegram?.WebApp;
-            if (tg?.initDataUnsafe?.user?.id) return String(tg.initDataUnsafe.user.id);
-            return null;
-        } catch { return null; }
-    }
-
-    function ensureBadge() {
-        let el = document.getElementById('streak-badge-container');
-        if (el) return el;
-        const navBar = document.getElementById('top-nav-bar');
-        if (!navBar) return null;
-        el = document.createElement('div');
-        el.id = 'streak-badge-container';
-        el.className = 'streak-capsule hidden';
-        navBar.parentNode.insertBefore(el, navBar.nextSibling);
-        return el;
-    }
-
-    function render(data) {
-        const el = ensureBadge();
-        if (!el) return;
-
-        const streak = data?.streak || 0;
-        const todayCount = data?.todayCount || 0;
-        const target = data?.target || DAILY_TARGET;
-        const isCompleted = !!data?.todayCompleted || (todayCount >= target);
-        const isFrozen = !!data?.frozen; // Новое поле от API
-
-        // Сброс классов
-        el.classList.remove('hidden', 'glowing', 'completed', 'frozen');
-
-        if (isFrozen) {
-            // (2) Замороженный стрик: голубой
-            el.classList.add('frozen');
-            el.textContent = `${streak} 🧊`; // Можно иконку льда
-        } else if (isCompleted) {
-            // (3) Выполнено сегодня: жёлто-оранжевое свечение
-            el.classList.add('completed');
-            el.textContent = `${streak} 🥞`;
-        } else {
-            // Обычное состояние: прогресс
-            el.textContent = `${streak} 🥞 · ${todayCount}/${target}`;
-        }
-    }
-
-    // (2) Баннер разморозки
-    function showFreezeBanner(data) {
-        if (window.__freezeBannerShown) return; // Чтобы не спамить при каждом релоаде (по желанию)
-        window.__freezeBannerShown = true;
-
-        if (document.getElementById('streak-freeze-banner')) return;
-
-        const banner = document.createElement('div');
-        banner.id = 'streak-freeze-banner';
-        banner.className = 'custom-toast-notification persistent-banner';
-        banner.innerHTML = `
-            <img src="assets/avatar.jpg" class="toast-avatar" alt="bot-avatar">
-            <div class="toast-message" style="display:flex; flex-direction:column; gap:4px; width:100%;">
-                <span style="font-weight:bold;">Ваш стрик заморожен</span>
-                <span style="font-size:0.85em; opacity:0.8;">Вы не были активны. Попробуем еще раз?</span>
-                <span style="font-size:0.8em; opacity:0.6;">Осталось разморозок: ${data.freezeRemaining}</span>
-                <div class="banner-actions">
-                    <button class="banner-btn btn-accept">Да</button>
-                    <button class="banner-btn btn-decline">Нет</button>
-                </div>
-            </div>
-        `;
-
-        const navBar = document.getElementById('top-nav-bar');
-        if (navBar) navBar.classList.add('hidden-by-toast');
-
-        document.body.appendChild(banner);
-        requestAnimationFrame(() => banner.classList.add('show'));
-
-        banner.querySelector('.btn-decline').onclick = () => closeBanner();
-        banner.querySelector('.btn-accept').onclick = async () => {
-            const btn = banner.querySelector('.btn-accept');
-            btn.innerText = '...';
-            try {
-                const res = await fetch(`${API_BASE}/api/streak`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId: window.PancakeStreak._userId, action: 'unfreeze' })
-                });
-                const ans = await res.json();
-
-                if (ans?.ok) {
-                    window.showCustomNotification?.('Стрик разморожен! 🔥', { showConfetti: true });
-                    // Обновляем UI с новыми данными
-                    const st = await fetch(`${API_BASE}/api/streak?userId=${window.PancakeStreak._userId}`).then(r => r.json());
-                    render(st);
-                } else {
-                    window.showCustomNotification?.('Не удалось разморозить.', { isError: true });
-                }
-            } catch {
-                window.showCustomNotification?.('Ошибка сети.', { isError: true });
-            } finally {
-                closeBanner();
-            }
-        };
-
-        function closeBanner() {
-            banner.classList.remove('show');
-            if (navBar) navBar.classList.remove('hidden-by-toast');
-            setTimeout(() => banner.remove(), 350);
-        }
-    }
-
-    window.PancakeStreak = {
-        _userId: null,
-
-        async init() {
-            this._userId = getUserId();
-            ensureBadge();
-            if (!this._userId) {
-                console.log('🥞 Streak: ID пользователя не найден');
-                return;
-            }
-            try {
-                const res = await fetch(`${API_BASE}/api/streak?userId=${this._userId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    render(data);
-
-                    // Если заморожен и есть попытки — предлагаем разморозить
-                    if (data.frozen && (data.freezeRemaining > 0)) {
-                        showFreezeBanner(data);
-                    }
-                }
-            } catch (e) {
-                console.warn('Streak init error:', e);
-            }
-        },
-
-        attachToVideo(videoEl, videoId) {
-            if (!videoEl || !videoId) return;
-            if (videoEl._pancakeAttached) return;
-            videoEl._pancakeAttached = true;
-            let sent = false;
-
-            const onTimeUpdate = async () => {
-                if (sent) return;
-                const slide = videoEl.closest('.video-slide');
-                if (!slide || !slide.classList.contains('active-slide')) return;
-                if (!videoEl.duration || !isFinite(videoEl.duration) || videoEl.duration <= 0) return;
-                if (videoEl.currentTime < 1) return;
-
-                const progress = videoEl.currentTime / videoEl.duration;
-                if (progress >= PROGRESS_THRESHOLD) {
-                    sent = true;
-                    videoEl.removeEventListener('timeupdate', onTimeUpdate);
-                    if (!this._userId) return;
-
-                    try {
-                        const res = await fetch(`${API_BASE}/api/streak`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ userId: this._userId, videoId: String(videoId) })
-                        });
-
-                        if (res.ok) {
-                            const data = await res.json();
-                            render(data);
-                            // (1) Уведомление юзеру при новом стрике
-                            if (data.newlyCompleted && window.showCustomNotification) {
-                                window.showCustomNotification(`Цель дня выполнена! Серия: ${data.streak} дн.`, { showConfetti: true });
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('Streak update error:', e);
-                    }
-                }
-            };
-            videoEl.addEventListener('timeupdate', onTimeUpdate);
-        }
-    };
-})();
-
-
-// ==========================================
-// 🚀 MAIN SCRIPT
-// ==========================================
 
 // === БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ===
 (async function() {
@@ -208,7 +17,7 @@
                     try {
                         const payload = JSON.parse(atob(token));
                         if (Date.now() <= (payload.ts + SESSION_DURATION)) hasValidPass = true;
-                    } catch (e) { }
+                    } catch (e) { /* Игнор */ }
                 }
                 if (!hasValidPass && window.location.pathname !== '/maintenance.html') {
                     window.location.replace('/maintenance.html');
@@ -230,9 +39,6 @@ const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : 
 if (tg) {
     tg.expand();
     tg.ready();
-    // Красим хедер в черный, чтобы сливалось
-    tg.setHeaderColor('#000000');
-    tg.setBackgroundColor('#000000');
 }
 
 
@@ -243,9 +49,9 @@ function showCustomNotification(message, options = {}) {
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-    const avatarUrl = 'assets/avatar.jpg'; // Убедитесь, что путь верный
+    const avatarUrl = '/assets/avatar.jpg';
 
-    toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot"><span class="toast-message">${message}</span>`;
+    toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
     
     const navBar = document.getElementById('top-nav-bar');
@@ -262,7 +68,6 @@ function showCustomNotification(message, options = {}) {
         toast.addEventListener('transitionend', () => toast.remove());
     }, 3500);
 }
-window.showCustomNotification = showCustomNotification; 
 
 
 function triggerConfetti() {
@@ -272,9 +77,11 @@ function triggerConfetti() {
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+
     const confettiCount = 100;
     const confetti = [];
     const colors = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#ffeb3b', '#ffc107', '#ff9800'];
+
     for (let i = 0; i < confettiCount; i++) {
         confetti.push({
             x: Math.random() * canvas.width, y: canvas.height, r: Math.random() * 6 + 3,
@@ -285,88 +92,65 @@ function triggerConfetti() {
             speed: Math.random() * 12 + 8
         });
     }
-    let frame = 0; const gravity = 0.4;
+
+    let frame = 0;
+    const gravity = 0.4;
+
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         for (let i = 0; i < confetti.length; i++) {
             const c = confetti[i];
-            ctx.beginPath(); ctx.lineWidth = c.r; ctx.strokeStyle = c.color;
-            ctx.moveTo(c.x + c.tilt, c.y); ctx.lineTo(c.x, c.y + c.tilt + c.r); ctx.stroke();
-            c.tiltAngle += c.tiltAngleIncrement; c.y -= c.speed; c.x += Math.sin(c.angle) * c.speed / 2; c.speed -= gravity; c.tilt = Math.sin(c.tiltAngle) * 20;
+            ctx.beginPath();
+            ctx.lineWidth = c.r;
+            ctx.strokeStyle = c.color;
+            ctx.moveTo(c.x + c.tilt, c.y);
+            ctx.lineTo(c.x, c.y + c.tilt + c.r);
+            ctx.stroke();
+            c.tiltAngle += c.tiltAngleIncrement;
+            c.y -= c.speed;
+            c.x += Math.sin(c.angle) * c.speed / 2;
+            c.speed -= gravity;
+            c.tilt = Math.sin(c.tiltAngle) * 20;
         }
-        if (frame < 120 && confetti.some(c => c.y < canvas.height && c.y > -20)) { requestAnimationFrame(draw); frame++; } else { canvas.remove(); }
+        if (frame < 120 && confetti.some(c => c.y < canvas.height && c.y > -20)) {
+           requestAnimationFrame(draw);
+           frame++;
+        } else {
+           canvas.remove();
+        }
     }
     draw();
 }
 
+
 // === СТИЛИ ===
-// Генерируем только то, что нельзя перенести в CSS (динамические пути и т.д.)
-// Основные стили теперь в feed.css!
-function injectDynamicStyles() {
+function injectNewStyles() {
     const style = document.createElement('style');
     style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
+        /* Навигация */
+        .feed-navigation { gap: 20px; }
+        .feed-navigation .nav-tab { padding: 10px 15px; height: auto; white-space: nowrap; }
 
-        /* Скрываем навбар при уведомлении */
         #top-nav-bar {
-            transition: transform 0.5s, opacity 0.5s;
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s cubic-bezier(0.25, 0.1, 0.25, 1);
+            z-index: 100;
         }
-        #top-nav-bar.hidden-by-toast { transform: translateX(-50%) translateY(-200%); opacity: 0; pointer-events: none; }
-        
-        /* === КАПСУЛА СТРИКА === */
-        .streak-capsule {
-            position: fixed;
-            top: 85px; 
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 99;
-            
-            /* Фон (без подсветки блока) */
-            background: rgba(0, 0, 0, 0.5); 
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            
-            padding: 6px 16px;
-            border-radius: 20px;
-            
-            /* Текст - БЛИННЫЙ (Золотой) */
-            color: #ffca28;
-            font-family: 'JetBrains Mono', monospace; 
-            font-size: 0.9rem;
-            font-weight: 700;
-            
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-        .streak-capsule.hidden { opacity: 0; pointer-events: none; }
-        
-        /* СИЯНИЕ ТЕКСТА (только текст!) */
-        .streak-capsule.glowing {
-            color: #ffeb3b; 
-            border-color: rgba(255, 215, 0, 0.4); 
-            
-            /* Текстовое свечение */
-            text-shadow: 
-                0 0 5px rgba(255, 202, 40, 0.8),
-                0 0 10px rgba(255, 202, 40, 0.5),
-                0 0 20px rgba(255, 140, 0, 0.4);
+        #top-nav-bar.hidden-by-toast {
+            transform: translateX(-50%) translateY(-150%);
+            opacity: 0; pointer-events: none;
         }
 
-        /* Шрифт автора */
-        .author-name {
-            font-family: 'JetBrains Mono', monospace !important;
-            font-weight: 700;
-        }
+        .liquid-controls-container { z-index: 100; }
+        .suggest-form { z-index: 1001; }
         
-        /* Уведомления */
         .custom-toast-notification {
             position: fixed; top: 20px; left: 50%; min-width: 300px; max-width: 90%;
-            transform: translateX(-50%) translateY(-150%); padding: 12px 24px; z-index: 2000; opacity: 0;
-            transition: transform 0.5s, opacity 0.5s; display: flex; align-items: center; gap: 12px;
+            transform: translateX(-50%) translateY(-150%); padding: 12px 24px;
+            z-index: 2000; opacity: 0;
+            transition: transform 0.5s cubic-bezier(0.25, 0.1, 0.25, 1), opacity 0.5s;
+            display: flex; align-items: center; gap: 12px;
             background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
             border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
             border-radius: 30px; color: #fff; font-family: "Manrope", sans-serif;
@@ -375,78 +159,44 @@ function injectDynamicStyles() {
         .custom-toast-notification.error { background-color: rgba(217, 83, 79, 0.85); border-color: rgba(255, 80, 80, 0.3); }
         .toast-avatar { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
         .toast-message { font-weight: 500; font-size: 0.95rem; flex: 1; line-height: 1.3; }
-        
+
         .confetti-canvas { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
-
-        /* Баннер действий (кнопки да/нет) */
-        .banner-actions {
-            display: flex; gap: 10px; margin-top: 4px; width: 100%; justify-content: flex-end;
-        }
-        .banner-btn {
-            background: rgba(255,255,255,0.15); border: none; color: white;
-            padding: 4px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem;
-        }
-        .banner-btn:active { background: rgba(255,255,255,0.3); }
-        .btn-accept { background: rgba(100, 255, 100, 0.2); color: #aaffaa; }
         
-        /* Стили для формы предложки (как настройки) */
-        /* Используем классы settings-modal-overlay и settings-panel из feed.css, но для формы */
-        #suggest-form-modal .settings-panel {
-             height: auto; /* Авто-высота под контент */
-             max-height: 80vh;
-             padding-bottom: 30px;
+        /* Модалка настроек */
+        .settings-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 9000; display: flex; justify-content: center; align-items: center;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none;
         }
-        #suggest-form-modal textarea {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: white;
-            padding: 12px;
-            border-radius: 12px;
-            width: 100%;
-            resize: none;
-            font-family: inherit;
+        .settings-modal-overlay.show { opacity: 1; pointer-events: auto; }
+        .settings-panel {
+            width: 280px; padding: 24px 20px;
+            transform: scale(0.9); transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            border-radius: 30px; color: #fff;
         }
-        #suggest-form-modal input {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: white;
-            padding: 12px;
-            border-radius: 12px;
-            width: 100%;
-            margin-bottom: 12px;
-            font-family: inherit;
+        .settings-modal-overlay.show .settings-panel { transform: scale(1); }
+        .settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; font-weight: 700; font-size: 1.2rem; }
+        .settings-header button { background: rgba(255,255,255,0.1); border: none; color: white; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.2s; }
+        .settings-header button:active { background: rgba(255,255,255,0.2); }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .setting-label { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 500; color: rgba(255,255,255,0.9); }
+        .settings-footer { display: none; }
+        .thin-range { -webkit-appearance: none; width: 80px !important; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; outline: none; }
+        .thin-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: #fff; cursor: pointer; border: none; box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        .theme-select {
+            appearance: none; -webkit-appearance: none; background-color: rgba(255,255,255,0.08); 
+            border: 1px solid rgba(255,255,255,0.1); color: white; padding: 8px 32px 8px 12px;
+            border-radius: 10px; outline: none; font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat; background-position: right 10px top 50%; background-size: 10px auto;
         }
-        .suggest-send-btn {
-            margin-top: 15px;
-            width: 100%;
-            padding: 14px;
-            border-radius: 16px;
-            background: var(--accent-color);
-            color: #000;
-            font-weight: 700;
-            font-size: 1rem;
-        }
-            /* ... внутри injectDynamicStyles ... */
-
-/* (3) Выполнено: жёлто-оранжевое */
-.streak-capsule.completed {
-    color: #ffeb3b;
-    border-color: rgba(255, 180, 0, 0.35);
-    text-shadow:
-      0 0 6px rgba(255, 235, 59, 0.75),
-      0 0 14px rgba(255, 160, 0, 0.55),
-      0 0 24px rgba(255, 120, 0, 0.35);
-}
-
-/* (2) Заморожен: голубое */
-.streak-capsule.frozen {
-    color: #6ecbff;
-    border-color: rgba(110, 203, 255, 0.25);
-    text-shadow:
-      0 0 6px rgba(110, 203, 255, 0.75),
-      0 0 14px rgba(40, 150, 255, 0.45);
-}
-
+        .theme-select option { background: #1e1e23; color: white; }
+        .banner-actions { display: flex; gap: 10px; margin-top: 2px; }
+        .banner-btn { border: none; padding: 6px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
+        .btn-accept { background: white; color: black; }
+        .btn-decline { background: rgba(255,255,255,0.1); color: white; }
     `;
     document.head.appendChild(style);
 }
@@ -459,8 +209,8 @@ let savedVol = localStorage.getItem('niko_volume');
 let globalVolume = savedVol !== null ? parseFloat(savedVol) : 1.0;
 let currentTab = 'foryou';
 let currentActiveAuthor = null;
-let allVideos = []; 
-let settingsWasPlaying = false; 
+let allVideos = []; // Хранит ВСЕ видео, включая секретные
+
 
 // === DOM ===
 const feedContainer = document.getElementById('feed');
@@ -471,7 +221,6 @@ const uiAuthor = document.getElementById('ui-author');
 const uiDesc = document.getElementById('ui-desc');
 const uiSubBtn = document.getElementById('ui-sub-btn');
 
-// Кнопки и модалки
 const uiSettingsBtn = document.getElementById('ui-settings-btn');
 const settingsModal = document.getElementById('settings-modal');
 const closeSettingsBtn = document.getElementById('close-settings');
@@ -480,12 +229,11 @@ const themeSelect = document.getElementById('theme-select');
 
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
-
-// Предложка теперь тоже модалка
-// Создаем DOM для модалки предложки динамически или используем скрытый div, переделанный под шторку
-// В вашем HTML был блок .suggest-form, мы его обернем в логику шторки.
-
-
+const suggestForm = document.getElementById('suggest-form');
+const sugUrl = document.getElementById('sug-url');
+const sugAuthor = document.getElementById('sug-author');
+const sugDesc = document.getElementById('sug-desc');
+const sugBtn = document.getElementById('sug-send');
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx;
 
@@ -502,6 +250,7 @@ async function loadVideosOnce() {
         const res = await fetch(`${API_BASE}/api/get_feed`);
         if (res.ok) dbVideos = await res.json();
     } catch (e) { }
+    // Загружаем ВСЕ видео в память, фильтрация происходит при рендере
     allVideos = [...dbVideos, ...localVideos];
     if (allVideos.length === 0) console.warn('No videos found!');
 }
@@ -554,7 +303,7 @@ const overlayEl = document.getElementById('audio-unlock-overlay');
 if (overlayEl) { overlayEl.addEventListener('click', unlockAudioContext); overlayEl.addEventListener('touchstart', unlockAudioContext); }
 
 
-// === NAVIGATION ===
+// === NAVIGATION (С ФИЛЬТРАЦИЕЙ СЕКРЕТНЫХ) ===
 function updateInd(tab) {
     if (!tab) return;
     indicator.style.width = `${tab.offsetWidth}px`;
@@ -567,6 +316,8 @@ function switchToForYou() {
     tabForYou.classList.add('active');
     tabFollowing.classList.remove('active');
     updateInd(tabForYou);
+    
+    // ФИЛЬТР: Убираем секретные из общей ленты
     const publicVideos = allVideos.filter(v => !v.isSecret);
     renderFeed(shuffle([...publicVideos]).slice(0, 5));
 }
@@ -578,63 +329,42 @@ tabFollowing.addEventListener('click', () => {
     tabFollowing.classList.add('active');
     tabForYou.classList.remove('active');
     updateInd(tabFollowing);
+    
+    // ФИЛЬТР: Убираем секретные из подписок
     const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
     renderFeed(filtered.slice(0, 5));
 });
 
 
 // === UI UPDATES ===
-function updateSubBtnState() {
-    if (!currentActiveAuthor) return;
-    uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor));
-}
-
+function updateSubBtnState() { if (!currentActiveAuthor) return; uiSubBtn.classList.toggle('subscribed', subscribedAuthors.includes(currentActiveAuthor)); }
 function updateGlobalUI(videoData) {
     if (uiAuthor) uiAuthor.innerText = `@${videoData.author}`;
-    if (uiDesc) uiDesc.innerText = "on tiktok"; // <-- FIX: всегда так
+    if (uiDesc) uiDesc.innerText = videoData.desc;
     currentActiveAuthor = videoData.author;
     updateSubBtnState();
 }
-
 uiSubBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (!currentActiveAuthor) return;
-
     const isSub = subscribedAuthors.includes(currentActiveAuthor);
     const action = isSub ? 'remove' : 'add';
-
     if (action === 'add') subscribedAuthors.push(currentActiveAuthor);
     else subscribedAuthors = subscribedAuthors.filter(a => a !== currentActiveAuthor);
-
     updateSubBtnState();
-
     if (currentTab === 'following') {
         if (subscribedAuthors.length === 0) switchToForYou();
-        else {
-            const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
-            renderFeed(filtered.slice(0, 5));
-        }
+        else { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret); renderFeed(filtered.slice(0, 5)); }
     }
-
     if (tg?.initDataUnsafe?.user) {
-        try {
-            await fetch(`${API_BASE}/api/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action })
-            });
-        } catch (e) { }
-    } else {
-        localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors));
-    }
+        try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }); } catch (e) { }
+    } else { localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); }
 });
-
 function getActiveSlideData() {
     const slide = document.querySelector('.video-slide.active-slide');
     if (!slide) return null;
     try { return JSON.parse(slide.dataset.jsonData); } catch { return null; }
 }
-
 
 
 // === MEMORY & VIDEO LOGIC ===
@@ -646,7 +376,6 @@ function loadVideo(slide) {
     if (vid && !vid.getAttribute('src')) { vid.src = url; vid.load(); }
     if (bg && !bg.getAttribute('src')) { bg.src = url; bg.load(); }
 }
-
 function unloadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
@@ -654,17 +383,12 @@ function unloadVideo(slide) {
     if (vid && vid.getAttribute('src')) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
     if (bg && bg.getAttribute('src')) { bg.pause(); bg.removeAttribute('src'); bg.load(); }
 }
-
 function manageVideoMemory(activeSlide) {
     const allSlides = Array.from(document.querySelectorAll('.video-slide'));
     const activeIndex = allSlides.indexOf(activeSlide);
     if (activeIndex === -1) return;
-    allSlides.forEach((slide, index) => {
-        if (Math.abs(index - activeIndex) <= 2) loadVideo(slide);
-        else unloadVideo(slide);
-    });
+    allSlides.forEach((slide, index) => { if (Math.abs(index - activeIndex) <= 2) { loadVideo(slide); } else { unloadVideo(slide); } });
 }
-
 
 
 // === SLIDE CREATION ===
@@ -678,44 +402,18 @@ function createSlide(data) {
     const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
-
-    // === PANCAKE STREAK ATTACH ===
-    if (window.PancakeStreak) {
-        window.PancakeStreak.attachToVideo(vid, data.id);
-    }
-
-    vid.addEventListener('click', () => {
-        if (vid.paused) {
-            vid.play().catch(e => {});
-            bg.play().catch(() => {});
-        } else {
-            vid.pause();
-            bg.pause();
-        }
-    });
-
-    vid.addEventListener('timeupdate', () => {
-        if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`;
-    });
-
+    vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
+    vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     let isDragging = false;
-    const handle = (y) => {
-        const rect = bar.getBoundingClientRect();
-        if (vid.duration) {
-            vid.currentTime = Math.max(0, Math.min(1, 1 - (y - rect.top) / rect.height)) * vid.duration;
-        }
-    };
+    const handle = (y) => { const rect = bar.getBoundingClientRect(); if (vid.duration) { vid.currentTime = Math.max(0, Math.min(1, 1 - (y - rect.top) / rect.height)) * vid.duration; } };
     const start = (e) => { e.preventDefault(); isDragging = true; handle(e.touches ? e.touches[0].clientY : e.clientY); };
     const move = (e) => { if (isDragging) { e.preventDefault(); handle(e.touches ? e.touches[0].clientY : e.clientY); } };
     const end = () => isDragging = false;
-
     bar.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
     bar.addEventListener('touchstart', start); window.addEventListener('touchmove', move); window.addEventListener('touchend', end);
     bar.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); handle(e.clientY); });
-
     return slide;
 }
-
 
 
 const observer = new IntersectionObserver((entries) => {
@@ -724,258 +422,153 @@ const observer = new IntersectionObserver((entries) => {
         const vid = slide.querySelector('.video-player');
         const bg = slide.querySelector('.video-blur-bg');
         if (!vid || !bg) return;
-
         if (entry.isIntersecting) {
             document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
-
             try { updateGlobalUI(JSON.parse(slide.dataset.jsonData)); } catch (e) { }
             manageVideoMemory(slide);
-
-            if (hasInteracted) { vid.volume = globalVolume; vid.muted = (globalVolume === 0); }
-            else { vid.muted = true; }
-
+            if (hasInteracted) { vid.volume = globalVolume; vid.muted = (globalVolume === 0); } else { vid.muted = true; }
             requestAnimationFrame(() => {
                 if (vid.paused) {
                     const playPromise = vid.play();
                     if (playPromise !== undefined) {
-                        playPromise
-                            .then(() => { bg.play().catch(() => {}); })
-                            .catch(error => {
-                                vid.muted = true;
-                                vid.play().catch(e => {});
-                                bg.play().catch(() => {});
-                            });
+                        playPromise.then(() => { bg.play().catch(() => {}); }).catch(error => { vid.muted = true; vid.play().catch(e => {}); bg.play().catch(() => {}); });
                     }
                 }
             });
-        } else {
-            vid.pause();
-            bg.pause();
-        }
+        } else { vid.pause(); bg.pause(); }
     });
 }, { threshold: 0.6 });
 
 
-
 function renderFeed(videos, append = false) {
     if (!append) feedContainer.innerHTML = '';
-    videos.forEach(v => {
-        const s = createSlide(v);
-        feedContainer.appendChild(s);
-        observer.observe(s);
-    });
+    videos.forEach(v => { const s = createSlide(v); feedContainer.appendChild(s); observer.observe(s); });
 }
 
 
-
-// === SCROLL ===
+// === SCROLL (С ФИЛЬТРАЦИЕЙ СЕКРЕТНЫХ) ===
 let isFetching = false;
 feedContainer.addEventListener('scroll', () => {
     if (feedContainer.scrollHeight - (feedContainer.scrollTop + feedContainer.clientHeight) < 300) {
         if (isFetching) return;
         isFetching = true;
-
         setTimeout(() => {
             let nextBatch = [];
-
             if (currentTab === 'foryou') {
+                // Фильтруем секретные
                 const publicVideos = allVideos.filter(v => !v.isSecret);
                 nextBatch = shuffle([...publicVideos]).slice(0, 5);
-            } else if (subscribedAuthors.length) {
+            } else if (subscribedAuthors.length) { 
+                // Фильтруем секретные
                 const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
-                nextBatch = shuffle(filtered).slice(0, 5);
+                nextBatch = shuffle(filtered).slice(0, 5); 
             }
-
-            if (nextBatch.length > 0) renderFeed(nextBatch, true);
+            if (nextBatch.length > 0) { renderFeed(nextBatch, true); }
             isFetching = false;
         }, 500);
     }
 });
 
 
-
-// === MODAL UTILS ===
-function openModal(modalId) {
-    const m = document.getElementById(modalId);
-    if (!m) return;
-
-    const activeVid = document.querySelector('.video-slide.active-slide .video-player');
-    const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
-    settingsWasPlaying = !!(activeVid && !activeVid.paused);
-
-    if (activeVid) activeVid.pause();
-    if (activeBg) activeBg.pause();
-
-    m.style.display = 'flex';
-    setTimeout(() => m.classList.add('show'), 10);
-}
-
-function closeModal(modalId) {
-    const m = document.getElementById(modalId);
-    if (!m) return;
-
-    m.classList.remove('show');
-    setTimeout(() => {
-        m.style.display = 'none';
-
-        const activeVid = document.querySelector('.video-slide.active-slide .video-player');
-        const activeBg = document.querySelector('.video-slide.active-slide .video-blur-bg');
-
-        if (settingsWasPlaying) {
-            if (activeVid) activeVid.play().catch(()=>{});
-            if (activeBg) activeBg.play().catch(()=>{});
-        }
-    }, 300);
-}
-
-
-
 // === SETTINGS UI ===
-if (uiSettingsBtn && settingsModal) {
+if(uiSettingsBtn && settingsModal) {
     uiSettingsBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openModal('settings-modal');
+        settingsModal.style.display = 'flex';
+        setTimeout(() => settingsModal.classList.add('show'), 10);
     });
 }
-
-if (closeSettingsBtn && settingsModal) {
-    closeSettingsBtn.addEventListener('click', () => closeModal('settings-modal'));
+if(closeSettingsBtn && settingsModal) {
+    closeSettingsBtn.addEventListener('click', () => {
+        settingsModal.classList.remove('show');
+        setTimeout(() => settingsModal.style.display = 'none', 300);
+    });
     settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) closeModal('settings-modal');
+        if (e.target === settingsModal) closeSettingsBtn.click();
     });
 }
+const footer = document.querySelector('.settings-footer');
+if(footer) footer.style.display = 'none';
 
-if (modalVolRange) {
+
+if(modalVolRange) {
     modalVolRange.value = globalVolume;
     modalVolRange.addEventListener('input', (e) => {
         globalVolume = parseFloat(e.target.value);
         localStorage.setItem('niko_volume', globalVolume);
-
         const v = document.querySelector('.video-slide.active-slide .video-player');
         if (v) { v.volume = globalVolume; v.muted = (globalVolume === 0); }
     });
 }
 
 
-
-// === ПРЕДЛОЖКА (Новая - Шторка) ===
-function createSuggestModal() {
-    if (document.getElementById('suggest-form-modal')) return;
-
-    const modal = document.createElement('div');
-    modal.id = 'suggest-form-modal';
-    modal.className = 'settings-modal-overlay';
-    modal.innerHTML = `
-        <div class="settings-panel">
-            <div class="settings-header">
-                <h2>Предложить видео</h2>
-                <button id="close-suggest"><i class="fas fa-times"></i></button>
-            </div>
-            <div style="padding-bottom: 20px;">
-                <input id="sug-url" type="url" placeholder="Ссылка на видео (TikTok/YouTube)">
-                <input id="sug-author" type="text" placeholder="Автор (необязательно)">
-                <textarea id="sug-desc" placeholder="Комментарий или описание..." rows="3"></textarea>
-                <button id="sug-send" class="suggest-send-btn">Отправить</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    document.getElementById('close-suggest').addEventListener('click', () => closeModal('suggest-form-modal'));
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal('suggest-form-modal'); });
-
-    document.getElementById('sug-send').addEventListener('click', async () => {
-        const urlInput = document.getElementById('sug-url');
-        const authorInput = document.getElementById('sug-author');
-        const descInput = document.getElementById('sug-desc');
-        const btn = document.getElementById('sug-send');
-
-        const url = urlInput.value.trim();
-        const author = authorInput.value.trim();
-        const desc = descInput.value.trim();
-
-        if (!url) { showCustomNotification('Нужна ссылка!', { isError: true }); return; }
-
-        const originalText = btn.innerText;
-        btn.innerText = 'Отправка...';
-        btn.disabled = true;
-
+// === ACTIONS (SHARE/SUGGEST) ===
+if (uiSuggestBtn && suggestForm) {
+    uiSuggestBtn.addEventListener('click', (e) => { e.stopPropagation(); suggestForm.style.display = (suggestForm.style.display === 'flex') ? 'none' : 'flex'; });
+}
+if (sugBtn) {
+    sugBtn.addEventListener('click', async () => {
+        const url = sugUrl.value.trim();
+        const author = sugAuthor.value.trim();
+        const desc = sugDesc.value.trim();
+        if (!url) { showCustomNotification('Вставьте ссылку!', { isError: true }); return; }
+        const originalText = sugBtn.innerText;
+        sugBtn.innerText = '...';
+        sugBtn.disabled = true;
         try {
-            const res = await fetch(`${API_BASE}/api/suggest`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user })
-            });
-
+            const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) });
             if (res.ok) {
-                showCustomNotification('Спасибо за видео!', { showConfetti: true });
-                urlInput.value = ''; authorInput.value = ''; descInput.value = '';
-                closeModal('suggest-form-modal');
+                sugBtn.innerText = 'Отправлено!';
+                sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
+                showCustomNotification('Спасибо за предложенное видео!', { showConfetti: true });
+                setTimeout(() => { suggestForm.style.display = 'none'; sugBtn.innerText = originalText; sugBtn.disabled = false; }, 1000);
             } else {
-                showCustomNotification('Ошибка сервера.', { isError: true });
+                showCustomNotification('Ошибка API.', { isError: true });
+                sugBtn.innerText = originalText;
+                sugBtn.disabled = false;
             }
         } catch (e) {
             showCustomNotification('Ошибка сети.', { isError: true });
-        } finally {
-            btn.innerText = originalText;
-            btn.disabled = false;
+            sugBtn.innerText = originalText;
+            sugBtn.disabled = false;
         }
     });
 }
 
-createSuggestModal();
-
-if (uiSuggestBtn) {
-    uiSuggestBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const oldForm = document.getElementById('suggest-form');
-        if (oldForm) oldForm.style.display = 'none';
-        openModal('suggest-form-modal');
-    });
-}
-
-
-
-// === SHARE ===
 if (uiShareBtn) {
     uiShareBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const data = getActiveSlideData();
         if (!data) return;
-
+        
         if (!tg?.initDataUnsafe?.user) {
-            navigator.clipboard.writeText(data.videoUrl)
-                .then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); })
-                .catch(() => {});
+            navigator.clipboard.writeText(data.videoUrl).then(() => { showCustomNotification('Ссылка скопирована!', { showConfetti: true }); }).catch(() => {});
             return;
         }
-
+        
         try {
-            await fetch(`${API_BASE}/api/share`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+            await fetch(`${API_BASE}/api/share`, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ 
                     id: data.id,
-                    videoUrl: data.videoUrl,
-                    author: data.author,
-                    desc: "on tiktok", // <-- FIX: всегда так
-                    user: tg.initDataUnsafe.user
-                })
+                    videoUrl: data.videoUrl, 
+                    author: data.author, 
+                    desc: data.desc, 
+                    user: tg.initDataUnsafe.user 
+                }) 
             });
             showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
-        } catch (e) {
-            showCustomNotification('Ошибка сети.', { isError: true });
-        }
+        } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
     });
 }
-
 
 
 // === МЕНЕДЖЕР ТЕМ ===
 function loadThemeScript(url, callback) {
     if (document.querySelector(`script[src="${url}"]`)) {
-        if (callback) callback();
+        if(callback) callback();
         return;
     }
     const script = document.createElement('script');
@@ -1016,38 +609,31 @@ async function checkThemes() {
         if (savedTheme) {
             applyTheme(savedTheme);
             if (savedTheme !== 'winter') {
-                if (parseInt(lastSeenVersion) !== data.version) showWinterBanner(data.version);
+                 if (parseInt(lastSeenVersion) !== data.version) showWinterBanner(data.version);
             }
-        } else {
-            showWinterBanner(data.version);
-        }
-    } catch (e) {
-        console.error('Theme check failed', e);
-    }
+        } else { showWinterBanner(data.version); }
+
+    } catch (e) { console.error('Theme check failed', e); }
 }
 
 function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
-
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
-    const avatarUrl = 'assets/avatar.jpg';
-
+    const avatarUrl = '/assets/avatar.jpg';
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
-        <div class="toast-message" style="display:flex; flex-direction:column; gap:4px; width:100%;">
+        <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
             <span style="font-weight:bold;">Включить снег?</span>
-            <span style="font-size:0.8em; opacity:0.8;">Новый год близко!</span>
-            <div class="banner-actions">
-                <button class="banner-btn btn-accept">Да</button>
-                <button class="banner-btn btn-decline">Нет</button>
-            </div>
+            <span style="font-size:0.8em; opacity:0.8;">Новый год близко же!</span>
+        </div>
+        <div class="banner-actions">
+            <button class="banner-btn btn-accept">Да</button>
+            <button class="banner-btn btn-decline">Нет</button>
         </div>
     `;
-
     const navBar = document.getElementById('top-nav-bar');
     if (navBar) navBar.classList.add('hidden-by-toast');
-
     document.body.appendChild(banner);
     requestAnimationFrame(() => banner.classList.add('show'));
 
@@ -1059,7 +645,7 @@ function showWinterBanner(version) {
     };
 
     banner.querySelector('.btn-decline').onclick = () => {
-        localStorage.setItem('winter_theme_seen_version', version);
+        localStorage.setItem('winter_theme_seen_version', version); 
         closeBanner();
     };
 
@@ -1070,61 +656,50 @@ function showWinterBanner(version) {
     }
 }
 
-if (themeSelect) {
-    themeSelect.addEventListener('change', (e) => applyTheme(e.target.value));
-}
-
-
-
-// === СТИЛИ ===
-function injectDynamicStyles() {
-    const style = document.createElement('style');
-    style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap');
-
-        #streak-badge-container {
-            font-family: 'JetBrains Mono', monospace;
-        }
-    `;
-    document.head.appendChild(style);
-}
-
+if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.target.value)); }
 
 
 // === INIT ===
 window.addEventListener('load', async () => {
-    injectDynamicStyles();
-
-    if (window.PancakeStreak) await window.PancakeStreak.init();
-
+    injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
-    await loadVideosOnce();
+    await loadVideosOnce(); 
     await syncSubs();
     checkThemes();
     updateInd(tabForYou);
 
+    // --- DEEP LINKING ---
     let targetId = null;
-
+    
+    // 1. Проверяем startapp из параметров TG Web App (t.me/bot/app?startapp=v_123)
     if (tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param) {
-        const param = tg.initDataUnsafe.start_param;
-        if (param.startsWith('v_')) targetId = param.replace('v_', '');
+        const param = tg.initDataUnsafe.start_param; 
+        if (param.startsWith('v_')) {
+            targetId = param.replace('v_', '');
+        }
     }
-
+    
+    // 2. Проверяем хэш
     if (!targetId && window.location.hash.includes('video=')) {
         targetId = window.location.hash.split('video=')[1];
     }
 
     let feedToRender = [];
-
     if (targetId) {
+        // Ищем видео в общем массиве (даже если оно секретное)
         const targetVideo = allVideos.find(v => String(v.id) === String(targetId));
         if (targetVideo) {
+            // Если нашли - ставим его первым
+            // А остальные фильтруем (убираем секретные)
             const others = shuffle(allVideos.filter(v => String(v.id) !== String(targetId) && !v.isSecret));
             feedToRender = [targetVideo, ...others];
+            console.log("Deep linked to video:", targetId);
         } else {
+            // Не нашли целевое видео - показываем публичную ленту
             feedToRender = shuffle(allVideos.filter(v => !v.isSecret));
         }
     } else {
+        // Обычный вход - показываем только публичные видео
         feedToRender = shuffle(allVideos.filter(v => !v.isSecret));
     }
 
