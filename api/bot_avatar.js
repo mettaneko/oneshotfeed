@@ -1,4 +1,3 @@
-
 let cachedFileId = null;
 let cachedImageBase64 = null;
 let cachedContentType = 'image/jpeg';
@@ -29,10 +28,10 @@ export default async function handler(req, res) {
     const currentFileId = photo.big_file_id;
 
     if (cachedFileId === currentFileId && cachedImageBase64) {
-      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Content-Type', cachedContentType);
       res.setHeader('Content-Disposition', 'inline');
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
-      return res.status(200).send(buffer);
+      return res.status(200).send(Buffer.from(cachedImageBase64, 'base64'));
     }
 
     const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${currentFileId}`);
@@ -53,8 +52,9 @@ export default async function handler(req, res) {
     cachedContentType = contentType;
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=1800');
-    return res.send(buffer);
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+    return res.status(200).send(buffer);
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
