@@ -1,64 +1,61 @@
-import os
-import httpx
-from fastapi import FastAPI, Response
 
-app = FastAPI()
+let cachedFileId = null;
+let cachedImageBase64 = null;
+let cachedContentType = 'image/jpeg';
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+export default async function handler(req, res) {
+  const token = process.env.BOT_TOKEN;
 
-AVATAR_CACHE = {
-    "file_id": None,
-    "image_bytes": None,
+  if (!token) {
+    return res.status(500).json({ error: 'BOT_TOKEN is not defined in environment variables' });
+  }
+
+  try {
+    const meRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+    const meData = await meRes.json();
+    if (!meData.ok) {
+      return res.status(500).json({ error: 'Failed to fetch bot info', details: meData });
+    }
+    const botId = meData.result.id;
+
+    const chatRes = await fetch(`https://api.telegram.org/bot${token}/getChat?chat_id=${botId}`);
+    const chatData = await chatRes.json();
+
+    const photo = chatData.result?.photo;
+    if (!photo) {
+      return res.status(404).json({ error: 'Bot avatar not found' });
+    }
+
+    const currentFileId = photo.big_file_id;
+
+    if (cachedFileId === currentFileId && cachedImageBase64) {
+      res.setHeader('Content-Type', cachedContentType);
+      res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
+      return res.send(Buffer.from(cachedImageBase64, 'base64'));
+    }
+
+    const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${currentFileId}`);
+    const fileData = await fileRes.json();
+    const filePath = fileData.result?.file_path;
+
+    if (!filePath) {
+      return res.status(404).json({ error: 'File path not found' });
+    }
+
+    const imgRes = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+    const arrayBuffer = await imgRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+
+    cachedFileId = currentFileId;
+    cachedImageBase64 = buffer.toString('base64');
+    cachedContentType = contentType;
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=1800');
+    return res.send(buffer);
+
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 }
-
-
-@app.get("/api/bot-avatar")
-async def get_bot_avatar():
-    if not BOT_TOKEN:
-        return Response(status_code=500, content="BOT_TOKEN is not set")
-
-    async with httpx.AsyncClient() as client:
-        me_res = await client.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getMe")
-        bot_id = me_res.json().get("result", {}).get("id")
-
-        chat_res = await client.get(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getChat",
-            params={"chat_id": bot_id},
-        )
-        photo = chat_res.json().get("result", {}).get("photo")
-
-        if not photo:
-            return Response(
-                status_code=404, content="Bot has no profile picture"
-            )
-
-        current_file_id = photo["big_file_id"]
-
-        # 3. Если аватарка не менялась и лежит в кэше — отдаём сразу
-        if (
-            AVATAR_CACHE["file_id"] == current_file_id
-            and AVATAR_CACHE["image_bytes"]
-        ):
-            return Response(
-                content=AVATAR_CACHE["image_bytes"],
-                media_type="image/jpeg",
-                headers={"Cache-Control": "public, max-age=1800"},  # Кэш браузера 30 мин
-            )
-
-        file_res = await client.get(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
-            params={"file_id": current_file_id},
-        )
-        file_path = file_res.json().get("result", {}).get("file_path")
-
-        img_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}"
-        img_res = await client.get(img_url)
-
-        AVATAR_CACHE["file_id"] = current_file_id
-        AVATAR_CACHE["image_bytes"] = img_res.content
-
-        return Response(
-            content=img_res.content,
-            media_type="image/jpeg",
-            headers={"Cache-Control": "public, max-age=1800"},
-        )
