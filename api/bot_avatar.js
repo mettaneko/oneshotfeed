@@ -29,9 +29,10 @@ export default async function handler(req, res) {
     const currentFileId = photo.big_file_id;
 
     if (cachedFileId === currentFileId && cachedImageBase64) {
-      res.setHeader('Content-Type', cachedContentType);
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Content-Disposition', 'inline');
       res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=43200');
-      return res.send(Buffer.from(cachedImageBase64, 'base64'));
+      return res.status(200).send(buffer);
     }
 
     const fileRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${currentFileId}`);
