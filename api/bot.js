@@ -26,13 +26,15 @@ export default async function handler(req, res) {
             const callbackId = query.id;
             const chatId = query.message.chat.id;
             const data = query.data;
-            
+        
             if (data === 'run_migrate_auto' || data === 'next_auto_batch') {
                 if (String(chatId) !== String(ownerId)) return;
 
+                let messageId = query.message ? query.message.message_id : null;
+
                 if (data === 'run_migrate_auto') {
                     await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                    await answerCallback(token, callbackId, "🚀 Запуск авто-режима...");
+                    await answerCallback(token, callbackId, "🚀 Авто-режим запущен!");
                 } else {
                     await answerCallback(token, callbackId);
                 }
@@ -50,46 +52,52 @@ export default async function handler(req, res) {
                     if (!result.ok) throw new Error(result.error || 'Unknown error');
 
                     const isDone = result.remaining === 0;
-                    let text = `⚙️ <b>Реставрация базы:</b>\n\n`;
-                    text += `✅ Обработано в этой пачке: <b>${result.processed}</b> (${result.restoredNames.join(', ') || 'нет'})\n`;
-                    text += `⚠️ Ошибок / удалено: <b>${result.failed}</b>\n`;
-                    text += `⏳ Осталось немигрированных: <b>${result.remaining}</b> из ${result.total}\n`;
+                    let text = `⚙️ <b>Реставрация базы (Автоматически):</b>\n\n`;
+                    text += `✅ Восстановлено: <b>+${result.processed}</b> (${result.restoredNames.length ? result.restoredNames.join(', ') : 'нет'})\n`;
+                    text += `⚠️ Удалено из TT: <b>${result.failed}</b>\n`;
+                    text += `⏳ Осталось немигрированных: <b>${result.remaining}</b> из ${result.total}\n\n`;
+                    text += `<i>Бот продолжает работу сам, ничего нажимать не нужно...</i>`;
 
-                    if (isDone) {
-                        text += `\n🎉 <b>Все видео полностью перенесены!</b>`;
-                        await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                        await sendMessage(token, chatId, text, null, 'HTML');
-                    } else {
-                        const keyboard = {
-                            inline_keyboard: [
-                                [{ text: "▶️ Следующая пачка (Авто)", callback_data: "next_auto_batch" }],
-                                [{ text: "⏹ Остановить", callback_data: "stop_migrate" }]
-                            ]
-                        };
-                        
-                        await sendMessage(token, chatId, text, keyboard, 'HTML');
+                    const keyboard = isDone ? null : {
+                        inline_keyboard: [[{ text: "⏹ Остановить", callback_data: "stop_migrate" }]]
+                    };
+
+                    if (messageId) {
+                        await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                chat_id: chatId,
+                                message_id: messageId,
+                                text: isDone ? "🎉 <b>Все видео успешно перенесены!</b>" : text,
+                                parse_mode: 'HTML',
+                                reply_markup: keyboard
+                            })
+                        });
                     }
+
+                    if (!isDone) {
+                        fetch(`${webAppUrl}/api/bot`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                callback_query: {
+                                    id: 'auto_' + Date.now(),
+                                    from: { id: ownerId },
+                                    message: { chat: { id: ownerId }, message_id: messageId },
+                                    data: 'next_auto_batch'
+                                }
+                            })
+                        }).catch(() => {});
+                    } else {
+                        await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                    }
+
                 } catch (e) {
-                    await sendMessage(token, chatId, `❌ Сбой пачки: ${e.message}`, {
-                        inline_keyboard: [[{ text: "Попробовать снова", callback_data: "next_auto_batch" }]]
+                    await sendMessage(token, chatId, `❌ Сбой цикла: ${e.message}. Нажмите продолжить:`, {
+                        inline_keyboard: [[{ text: "▶️ Продолжить", callback_data: "run_migrate_auto" }]]
                     });
                 }
-                return res.status(200).json({ ok: true });
-            }
-
-            if (data === 'stop_migrate') {
-                if (String(chatId) !== String(ownerId)) return;
-                await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                await answerCallback(token, callbackId, "⏹ Остановлено");
-                await sendMessage(token, chatId, "🛑 Авто-режим остановлен.");
-                return res.status(200).json({ ok: true });
-            }
-            
-            if (data === 'stop_migrate') {
-                if (String(chatId) !== String(ownerId)) return;
-                await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                await answerCallback(token, callbackId, "⏹ Остановлено");
-                await sendMessage(token, chatId, "🛑 Авто-режим реставрации приостановлен.");
                 return res.status(200).json({ ok: true });
             }
             if (data === 'version_history') {
