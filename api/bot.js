@@ -281,7 +281,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю...", null, 'HTML');
+            if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю в хранилище Telegram...", null, 'HTML');
 
             try {
                 let tikData = null;
@@ -299,25 +299,52 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                let finalVideoUrl = null;
-                let finalCover = null;
-                let finalId = null;
-                let finalAuthor = 'unknown';
+                if (tikData && tikData.play) {
+                    const finalId = tikData.id;
+                    const finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
+                    const tempVideoUrl = tikData.play.startsWith('http') ? tikData.play : `https://www.tikwm.com${tikData.play}`;
+                    const storageChannelId = process.env.STORAGE_CHANNEL_ID;
 
-                if (tikData) {
-                    finalId = tikData.id;
-                    finalAuthor = tikData.author ? tikData.author.unique_id : 'unknown';
-                    finalVideoUrl = `https://www.tikwm.com/video/media/play/${finalId}.mp4`;
-                    finalCover = `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`;
-                }
+                    if (!storageChannelId) {
+                        throw new Error("Не задана переменная STORAGE_CHANNEL_ID в Vercel!");
+                    }
 
-                if (finalVideoUrl && finalId) {
+                    // 1. Отправляем временный url видео в приватный канал-хранилище
+                    const tgUploadRes = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: storageChannelId,
+                            video: tempVideoUrl,
+                            caption: `TikTok: https://www.tiktok.com/@${finalAuthor}/video/${finalId}`
+                        })
+                    });
+                    const tgUploadData = await tgUploadRes.json();
+
+                    if (!tgUploadData.ok || !tgUploadData.result.video) {
+                        throw new Error(`Ошибка загрузки в Telegram: ${tgUploadData.description || 'Unknown error'}`);
+                    }
+
+                    const videoObj = tgUploadData.result.video;
+                    const fileId = videoObj.file_id;
+
+                    // 2. Получаем прямой путь к файлу на серверах Telegram
+                    const fileInfoRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
+                    const fileInfo = await fileInfoRes.json();
+
+                    let permanentVideoUrl = tempVideoUrl;
+                    if (fileInfo.ok && fileInfo.result.file_path) {
+                        permanentVideoUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.result.file_path}`;
+                    }
+
+                    // 3. Сохраняем в Redis
                     const newVideo = { 
                         id: finalId, 
-                        videoUrl: finalVideoUrl, 
+                        tg_file_id: fileId,
+                        videoUrl: permanentVideoUrl, 
                         author: finalAuthor, 
-                        desc: 'on tiktok', 
-                        cover: finalCover,
+                        desc: tikData.title || 'on tiktok', 
+                        cover: `https://www.tikwm.com/video/media/hdcover/${finalId}.jpg`,
                         date: Date.now() 
                     };
                     
@@ -335,7 +362,7 @@ export default async function handler(req, res) {
                     }
 
                     const directLink = `https://t.me/${botUsername}/${appName}?startapp=v_${newVideo.id}`;
-                    const logCaption = `✅ <b>Видео сохранено!</b>\n\n📍 ${sourceName}\n👤 @${newVideo.author}\n🆔 <code>${newVideo.id}</code>\n🔗 <a href="${directLink}">Открыть в приложении</a>`;
+                    const logCaption = `✅ <b>Видео сохранено навсегда!</b>\n\n📍 ${sourceName}\n👤 @${newVideo.author}\n🆔 <code>${newVideo.id}</code>\n🔗 <a href="${directLink}">Открыть в приложении</a>`;
 
                     const deleteKeyboard = {
                         inline_keyboard: [[{ text: "🗑 Удалить", callback_data: `del_${newVideo.id}` }]]
@@ -343,21 +370,21 @@ export default async function handler(req, res) {
 
                     for (const adminId of adminUsers) {
                         try {
-                             await sendVideo(token, adminId, finalVideoUrl, logCaption, deleteKeyboard);
+                             await sendVideo(token, adminId, fileId, logCaption, deleteKeyboard);
                         } catch (err) {
-                             await sendMessage(token, adminId, logCaption + `\n\n⚠️ Файл не отправлен.`, deleteKeyboard, 'HTML');
+                             await sendMessage(token, adminId, logCaption + `\n\n⚠️ Лог отправлен текстом.`, deleteKeyboard, 'HTML');
                         }
                     }
                     
                     if (!isChannel && !adminUsers.includes(String(chatId))) {
-                        await sendMessage(token, chatId, `✅ Сохранено!\n👤 @${newVideo.author}`, null, 'HTML');
+                        await sendMessage(token, chatId, `✅ Сохранено в хранилище!\n👤 @${newVideo.author}`, null, 'HTML');
                     }
 
                 } else {
-                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось спарсить (TikWM).");
+                    if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось получить видео (TikWM).");
                 }
             } catch (e) {
-                const errText = `⚠️ <b>Ошибка</b> (${isChannel ? 'Channel' : 'DM'}): ${e.message}`;
+                const errText = `⚠️ <b>Ошибка парсинга</b>: ${e.message}`;
                 for (const adminId of adminUsers) await sendMessage(token, adminId, errText, null, 'HTML');
             }
         }
@@ -413,8 +440,8 @@ async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Ma
     } catch (e) {}
 }
 
-async function sendVideo(token, chatId, videoUrl, caption, keyboard = null, parseMode = 'Markdown') {
-    const body = { chat_id: chatId, video: videoUrl, caption: caption, parse_mode: parseMode };
+async function sendVideo(token, chatId, video, caption, keyboard = null, parseMode = 'HTML') {
+    const body = { chat_id: chatId, video: video, caption: caption, parse_mode: parseMode };
     if (keyboard) body.reply_markup = keyboard;
     
     const res = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
