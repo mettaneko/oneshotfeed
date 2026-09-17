@@ -124,11 +124,14 @@ export default async function handler(req, res) {
         }).length;
 
         const ownerId = process.env.OWNER_ID || '5710960426';
-        if (totalRemaining % 5 === 0 || totalRemaining === 0) {
+        if (processed > 0 || failed > 0 || totalRemaining === 0) {
             const text = totalRemaining === 0 
-                ? `🎉 <b>Миграция полностью завершена!</b> Все 2733 видео перенесены.`
-                : `📊 <b>Прогресс миграции:</b>\nОсталось: <b>${totalRemaining}</b> из ${list.length}`;
-                
+                ? `🎉 <b>Миграция полностью завершена!</b> Все видео перенесены.`
+                : `📊 <b>Прогресс миграции:</b>\n` +
+                  `✅ Обработано: <b>+${processed}</b> (${restoredNames.length ? restoredNames.join(', ') : 'нет'})\n` +
+                  `⚠️ Удалено/ошибок: <b>${failed}</b>\n` +
+                  `⏳ Осталось: <b>${totalRemaining}</b> из ${list.length}`;
+
             await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
