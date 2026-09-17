@@ -8,22 +8,10 @@ export default async function handler(req, res) {
     const DB_URL = process.env.KV_REST_API_URL;
     const DB_TOKEN = process.env.KV_REST_API_TOKEN;
     const storageChannelId = process.env.STORAGE_CHANNEL_ID;
-    const ownerId = process.env.OWNER_ID || '5710960426';
     const webAppUrl = 'https://feed.mettaneko.ru';
 
     if (!token || !DB_URL || !DB_TOKEN || !storageChannelId) {
         return res.status(500).json({ error: 'Config missing' });
-    }
-
-    const isAuto = req.query.auto === 'true';
-    if (isAuto) {
-        const flagRes = await fetch(`${DB_URL}/get/migrate_auto_running`, {
-            headers: { Authorization: `Bearer ${DB_TOKEN}` }
-        });
-        const flagData = await flagRes.json();
-        if (flagData.result !== 'true') {
-            return res.status(200).json({ status: 'stopped_by_user' });
-        }
     }
 
     const BATCH_SIZE = 5;
@@ -37,6 +25,7 @@ export default async function handler(req, res) {
 
         let processed = 0;
         let failed = 0;
+        const restoredNames = [];
 
         for (let index = 0; index < list.length; index++) {
             if (processed >= BATCH_SIZE) break;
@@ -98,12 +87,10 @@ export default async function handler(req, res) {
                         tg_file_id: fileId,
                         date: item.date || Date.now()
                     };
+
                     await fetch(`${DB_URL}/pipeline`, {
                         method: 'POST',
-                        headers: { 
-                            Authorization: `Bearer ${DB_TOKEN}`, 
-                            'Content-Type': 'application/json' 
-                        },
+                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
                         body: JSON.stringify([
                             ["LSET", "feed_videos", index, JSON.stringify(updatedItem)]
                         ])
@@ -111,6 +98,7 @@ export default async function handler(req, res) {
 
                     list[index] = updatedItem;
                     processed++;
+                    restoredNames.push(`@${author}`);
                 } else {
                     failed++;
                 }
@@ -118,53 +106,22 @@ export default async function handler(req, res) {
                 failed++;
             }
 
-            await new Promise(r => setTimeout(r, 400));
+            await new Promise(r => setTimeout(r, 300));
         }
 
-        // Подсчёт остатка в реальном времени
         const totalRemaining = list.filter(v => {
             const parsed = typeof v === 'string' ? JSON.parse(v) : v;
             return !parsed.tg_file_id || (parsed.videoUrl && parsed.videoUrl.includes('api.telegram.org'));
         }).length;
 
-        let sessionCount = processed;
-        try {
-            const incRes = await fetch(`${DB_URL}/incrby/migrate_session_count/${processed}`, {
-                headers: { Authorization: `Bearer ${DB_TOKEN}` }
-            });
-            const incData = await incRes.json();
-            sessionCount = incData.result || processed;
-        } catch (e) {}
-
-        const isDone = totalRemaining === 0;
-        if (sessionCount % 25 === 0 || isDone || !isAuto) {
-            let report = `⚙️ <b>Реставрация в процессе (Авто):</b>\n\n`;
-            report += `🔄 Восстановлено в этой сессии: <b>${sessionCount}</b>\n`;
-            report += `⏳ Осталось немигрированных: <b>${totalRemaining}</b> из ${list.length}\n`;
-
-            if (isDone) {
-                report += `\n🎉 <b>Все видео полностью отреставрированы и защищены!</b>`;
-                await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-            }
-
-            const kb = isDone ? null : {
-                inline_keyboard: [
-                    [{ text: "⏹ Остановить авто-режим", callback_data: "stop_migrate" }]
-                ]
-            };
-
-            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chat_id: ownerId, text: report, parse_mode: 'HTML', reply_markup: kb })
-            });
-        }
-
-        if (isAuto && !isDone) {
-            fetch(`${webAppUrl}/api/migrate?auto=true`).catch(() => {});
-        }
-
-        return res.status(200).json({ success: true, processed, totalRemaining });
+        return res.status(200).json({
+            ok: true,
+            processed,
+            failed,
+            remaining: totalRemaining,
+            total: list.length,
+            restoredNames
+        });
 
     } catch (e) {
         return res.status(500).json({ error: e.message });
