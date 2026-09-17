@@ -27,32 +27,61 @@ export default async function handler(req, res) {
             const chatId = query.message.chat.id;
             const data = query.data;
             
-            if (data === 'run_migrate_batch') {
-                if (String(chatId) !== String(ownerId)) {
-                    return await answerCallback(token, callbackId, "⛔️ Только для владельца!");
+            if (data === 'run_migrate_auto' || data === 'next_auto_batch') {
+                if (String(chatId) !== String(ownerId)) return;
+
+                if (data === 'run_migrate_auto') {
+                    await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                    await answerCallback(token, callbackId, "🚀 Запуск авто-режима...");
+                } else {
+                    await answerCallback(token, callbackId);
                 }
-                await answerCallback(token, callbackId, "⏳ Запускаю следующую пачку...");
+
+                const checkStatus = await fetch(`${DB_URL}/get/migrate_auto_running`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                const statusJson = await checkStatus.json();
+                if (statusJson.result !== 'true') {
+                    return res.status(200).json({ ok: true });
+                }
+
                 try {
-                    await fetch(`${webAppUrl}/api/migrate`);
+                    const migRes = await fetch(`${webAppUrl}/api/migrate`);
+                    const result = await migRes.json();
+
+                    if (!result.ok) throw new Error(result.error || 'Unknown error');
+
+                    const isDone = result.remaining === 0;
+                    let text = `⚙️ <b>Реставрация базы:</b>\n\n`;
+                    text += `✅ Обработано в этой пачке: <b>${result.processed}</b> (${result.restoredNames.join(', ') || 'нет'})\n`;
+                    text += `⚠️ Ошибок / удалено: <b>${result.failed}</b>\n`;
+                    text += `⏳ Осталось немигрированных: <b>${result.remaining}</b> из ${result.total}\n`;
+
+                    if (isDone) {
+                        text += `\n🎉 <b>Все видео полностью перенесены!</b>`;
+                        await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        await sendMessage(token, chatId, text, null, 'HTML');
+                    } else {
+                        const keyboard = {
+                            inline_keyboard: [
+                                [{ text: "▶️ Следующая пачка (Авто)", callback_data: "next_auto_batch" }],
+                                [{ text: "⏹ Остановить", callback_data: "stop_migrate" }]
+                            ]
+                        };
+                        
+                        await sendMessage(token, chatId, text, keyboard, 'HTML');
+                    }
                 } catch (e) {
-                    await sendMessage(token, chatId, `❌ Ошибка: ${e.message}`);
+                    await sendMessage(token, chatId, `❌ Сбой пачки: ${e.message}`, {
+                        inline_keyboard: [[{ text: "Попробовать снова", callback_data: "next_auto_batch" }]]
+                    });
                 }
                 return res.status(200).json({ ok: true });
             }
 
-            if (data === 'run_migrate_auto') {
+            if (data === 'stop_migrate') {
                 if (String(chatId) !== String(ownerId)) return;
-                await answerCallback(token, callbackId, "🚀 Авто-режим запущен!");
-                
-
-                await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                await fetch(`${DB_URL}/set/migrate_session_count/0`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
-                
-                await sendMessage(token, chatId, "🤖 <b>Авто-реставрация запущена!</b>\nБот сам восстановит базу пачками и будет присылать промежуточные отчеты.", {
-                    inline_keyboard: [[{ text: "⏹ Остановить", callback_data: "stop_migrate" }]]
-                }, 'HTML');
-            
-                fetch(`${webAppUrl}/api/migrate?auto=true`).catch(() => {});
+                await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                await answerCallback(token, callbackId, "⏹ Остановлено");
+                await sendMessage(token, chatId, "🛑 Авто-режим остановлен.");
                 return res.status(200).json({ ok: true });
             }
             
