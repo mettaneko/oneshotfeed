@@ -93,17 +93,23 @@ export default async function handler(req, res) {
                         id: String(videoId),
                         videoUrl: safeVideoUrl,
                         author: author,
-                        desc: 'on tiktok', 
+                        desc: 'on tiktok',
                         cover: item.cover,
                         tg_file_id: fileId,
                         date: item.date || Date.now()
                     };
-                    await fetch(`${DB_URL}/`, {
+                    await fetch(`${DB_URL}/pipeline`, {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify(["LSET", "feed_videos", index, JSON.stringify(updatedItem)])
+                        headers: { 
+                            Authorization: `Bearer ${DB_TOKEN}`, 
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify([
+                            ["LSET", "feed_videos", index, JSON.stringify(updatedItem)]
+                        ])
                     });
 
+                    list[index] = updatedItem;
                     processed++;
                 } else {
                     failed++;
@@ -115,6 +121,7 @@ export default async function handler(req, res) {
             await new Promise(r => setTimeout(r, 400));
         }
 
+        // Подсчёт остатка в реальном времени
         const totalRemaining = list.filter(v => {
             const parsed = typeof v === 'string' ? JSON.parse(v) : v;
             return !parsed.tg_file_id || (parsed.videoUrl && parsed.videoUrl.includes('api.telegram.org'));
@@ -130,7 +137,7 @@ export default async function handler(req, res) {
         } catch (e) {}
 
         const isDone = totalRemaining === 0;
-        if (sessionCount % 5 === 0 || isDone || !isAuto) {
+        if (sessionCount % 25 === 0 || isDone || !isAuto) {
             let report = `⚙️ <b>Реставрация в процессе (Авто):</b>\n\n`;
             report += `🔄 Восстановлено в этой сессии: <b>${sessionCount}</b>\n`;
             report += `⏳ Осталось немигрированных: <b>${totalRemaining}</b> из ${list.length}\n`;
