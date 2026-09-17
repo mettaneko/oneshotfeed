@@ -123,6 +123,22 @@ export default async function handler(req, res) {
             return !parsed.deleted && (!parsed.tg_file_id || (parsed.videoUrl && parsed.videoUrl.includes('api.telegram.org')));
         }).length;
 
+        const ownerId = process.env.OWNER_ID || '5710960426';
+        if (totalRemaining % 5 === 0 || totalRemaining === 0) {
+            const text = totalRemaining === 0 
+                ? `🎉 <b>Миграция полностью завершена!</b> Все 2733 видео перенесены.`
+                : `📊 <b>Прогресс миграции:</b>\nОсталось: <b>${totalRemaining}</b> из ${list.length}`;
+                
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: ownerId,
+                    text: text,
+                    parse_mode: 'HTML'
+                })
+            }).catch(() => {});
+        }
         return res.status(200).json({
             ok: true,
             processed,
