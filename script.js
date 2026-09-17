@@ -49,7 +49,7 @@ function showCustomNotification(message, options = {}) {
 
     const toast = document.createElement('div');
     toast.className = 'custom-toast-notification';
-    const avatarUrl = '/assets/avatar.jpg';
+    const avatarUrl = 'https://t.me/i/userpic/640/OneShotFeedBot.jpg';
 
     toast.innerHTML = `<img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar"><span class="toast-message">${message}</span>`;
     if (isError) toast.classList.add('error');
@@ -623,7 +623,7 @@ function showWinterBanner(version) {
     if (document.querySelector('.persistent-banner')) return;
     const banner = document.createElement('div');
     banner.className = 'custom-toast-notification persistent-banner';
-    const avatarUrl = '/assets/avatar.jpg';
+    const avatarUrl = 'https://t.me/i/userpic/640/OneShotFeedBot.jpg';
     banner.innerHTML = `
         <img src="${avatarUrl}" class="toast-avatar" alt="bot-avatar">
         <div class="toast-message" style="display:flex; flex-direction:column; gap:2px;">
