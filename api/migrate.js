@@ -94,10 +94,14 @@ export default async function handler(req, res) {
                         tg_file_id: fileId,
                         date: item.date || Date.now()
                     };
-                    await fetch(`${DB_URL}/lset/feed_videos/${index}/${encodeURIComponent(JSON.stringify(updatedItem))}`, {
-                        headers: { Authorization: `Bearer ${DB_TOKEN}` }
+                    await fetch(`${DB_URL}/`, {
+                        method: 'POST',
+                        headers: { 
+                            Authorization: `Bearer ${DB_TOKEN}`, 
+                            'Content-Type': 'application/json' 
+                        },
+                        body: JSON.stringify(["LSET", "feed_videos", index, JSON.stringify(updatedItem)])
                     });
-
                     processed++;
                     restoredDetails.push(`• <code>${videoId}</code> (@${author})`);
                 } else {
