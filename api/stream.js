@@ -28,14 +28,13 @@ export default async function handler(req, res) {
             return res.status(videoStream.status).send('Failed to fetch from Telegram CDN');
         }
 
-        // 2. Проставляем заголовки для плавного воспроизведения и перемотки
         res.setHeader('Content-Type', videoStream.headers.get('content-type') || 'video/mp4');
         const contentLength = videoStream.headers.get('content-length');
         if (contentLength) {
             res.setHeader('Content-Length', contentLength);
         }
         res.setHeader('Accept-Ranges', 'bytes');
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // кэш на 24 часа
+        res.setHeader('Cache-Control', 'public, max-age=86400');
 
         const arrayBuffer = await videoStream.arrayBuffer();
         return res.status(200).send(Buffer.from(arrayBuffer));
