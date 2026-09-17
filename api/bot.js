@@ -26,7 +26,7 @@ export default async function handler(req, res) {
             const callbackId = query.id;
             const chatId = query.message.chat.id;
             const data = query.data;
-
+            
             if (data === 'run_migrate_batch') {
                 if (String(chatId) !== String(ownerId)) {
                     return await answerCallback(token, callbackId, "⛔️ Только для владельца!");
@@ -40,6 +40,29 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
+            if (data === 'run_migrate_auto') {
+                if (String(chatId) !== String(ownerId)) return;
+                await answerCallback(token, callbackId, "🚀 Авто-режим запущен!");
+                
+
+                await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                await fetch(`${DB_URL}/set/migrate_session_count/0`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                
+                await sendMessage(token, chatId, "🤖 <b>Авто-реставрация запущена!</b>\nБот сам восстановит базу пачками и будет присылать промежуточные отчеты.", {
+                    inline_keyboard: [[{ text: "⏹ Остановить", callback_data: "stop_migrate" }]]
+                }, 'HTML');
+            
+                fetch(`${webAppUrl}/api/migrate?auto=true`).catch(() => {});
+                return res.status(200).json({ ok: true });
+            }
+            
+            if (data === 'stop_migrate') {
+                if (String(chatId) !== String(ownerId)) return;
+                await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                await answerCallback(token, callbackId, "⏹ Остановлено");
+                await sendMessage(token, chatId, "🛑 Авто-режим реставрации приостановлен.");
+                return res.status(200).json({ ok: true });
+            }
             if (data === 'version_history') {
                 const historyText = `
 📜 *История версий Oneshot Feed:*
@@ -158,17 +181,14 @@ export default async function handler(req, res) {
                 const appLink = `https://t.me/${botUsername}/${appName}`;
 
                 if (isAllowed(chatId)) {
-                    await sendMessage(token, chatId, "👋 Привет, Админ! Управление ботом ниже.", {
+                    await sendMessage(token, chatId, "👋 Привет! Добро пожаловать в Oneshot Feed. У тебя есть административные права.", {
                         keyboard: [
                             [{ text: "📊 Статистика" }, { text: "📢 Рассылка" }],
                             [{ text: "🔧 Тех. работы" }, { text: "❄️ Зимняя тема" }],
-                            [{ text: "🔄 Реставрация базы" }, { text: "🗑 Очистить базу" }] 
+                            [{ text: "🔄 Реставрация базы" }] 
                         ],
                         resize_keyboard: true,
                         is_persistent: true
-                    });
-                    await sendMessage(token, chatId, "Твой Web App:", {
-                         inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
                     });
                 } else {
                     await sendMessage(token, chatId,
@@ -184,12 +204,12 @@ export default async function handler(req, res) {
             }
 
             if ((text === '/migrate' || text === '🔄 Реставрация базы') && String(chatId) === String(ownerId)) {
-                await sendMessage(token, chatId, "⏳ Начинаю реставрацию базы...", null, 'HTML');
-                try {
-                    await fetch(`${webAppUrl}/api/migrate`);
-                } catch (e) {
-                    await sendMessage(token, chatId, `❌ Ошибка вызова миграции: ${e.message}`);
-                }
+                await sendMessage(token, chatId, "Выберите режим реставрации:", {
+                    inline_keyboard: [
+                        [{ text: "🚀 Запустить АВТО-режим", callback_data: "run_migrate_auto" }],
+                        [{ text: "▶️ Восстановить разово 5 шт.", callback_data: "run_migrate_batch" }]
+                    ]
+                });
                 return res.status(200).json({ ok: true });
             }
 
