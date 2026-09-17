@@ -1,4 +1,4 @@
-// bot.js
+// api/bot.js
 
 export default async function handler(req, res) {
     try {
@@ -7,31 +7,39 @@ export default async function handler(req, res) {
         const body = req.body;
         const token = process.env.BOT_TOKEN;
 
-        // === НАСТРОЙКИ ССЫЛОК ===
         const botUsername = 'OneShotFeedBot'; 
         const appName = 'app'; 
-
-        // === КОНФИГУРАЦИЯ АДМИНОВ ===
-        // ADMIN_ID=123456,-100987654,...
+        
+        const ownerId = process.env.OWNER_ID || '5710960426';
         const rawAdminIds = (process.env.ADMIN_ID || '').split(',');
         const allowedIds = rawAdminIds.map(id => String(id).trim());
-        // adminUsers - только люди (для отправки логов в ЛС)
         const adminUsers = allowedIds.filter(id => !id.startsWith('-100'));
-        const isAllowed = (id) => allowedIds.includes(String(id));
+        const isAllowed = (id) => allowedIds.includes(String(id)) || String(id) === String(ownerId);
 
         const webAppUrl = 'https://feed.mettaneko.ru';
         const DB_URL = process.env.KV_REST_API_URL;
         const DB_TOKEN = process.env.KV_REST_API_TOKEN;
 
 
-        // === 1. ОБРАБОТКА CALLBACK (КНОПКИ) ===
         if (body.callback_query) {
             const query = body.callback_query;
             const callbackId = query.id;
             const chatId = query.message.chat.id;
             const data = query.data;
 
-            // --- История версий ---
+            if (data === 'run_migrate_batch') {
+                if (String(chatId) !== String(ownerId)) {
+                    return await answerCallback(token, callbackId, "⛔️ Только для владельца!");
+                }
+                await answerCallback(token, callbackId, "⏳ Запускаю следующую пачку...");
+                try {
+                    await fetch(`${webAppUrl}/api/migrate`);
+                } catch (e) {
+                    await sendMessage(token, chatId, `❌ Ошибка: ${e.message}`);
+                }
+                return res.status(200).json({ ok: true });
+            }
+
             if (data === 'version_history') {
                 const historyText = `
 📜 *История версий Oneshot Feed:*
@@ -53,9 +61,7 @@ export default async function handler(req, res) {
                 await answerCallback(token, callbackId);
             }
 
-            // --- Админские действия (CALLBACK) ---
             if (isAllowed(chatId)) {
-                // Удаление видео
                 if (data.startsWith('del_')) {
                     const vidId = data.split('del_')[1];
                     await answerCallback(token, callbackId, "⏳ Удаляю...");
@@ -79,7 +85,7 @@ export default async function handler(req, res) {
                                     method: 'POST',
                                     headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
                                     body: JSON.stringify(["RPUSH", "feed_videos", ...args])
-                            });
+                                });
                             }
                             await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
                             try {
@@ -94,7 +100,6 @@ export default async function handler(req, res) {
                     }
                 }
 
-                // Управление тех. работами
                 if (data === 'maint_on' || data === 'maint_off') {
                     const status = data === 'maint_on' ? 'on' : 'off';
                     try {
@@ -106,8 +111,7 @@ export default async function handler(req, res) {
                         await sendMessage(token, chatId, `✅ Тех. работы: ${status}`);
                     } catch (e) {}
                 }
-
-                // Управление темой
+                
                 if (data === 'winter_on' || data === 'winter_reset') {
                     const active = data === 'winter_on';
                     const reset = data === 'winter_reset';
@@ -121,7 +125,6 @@ export default async function handler(req, res) {
                     } catch (e) {}
                 }
                 
-                // Подтверждение очистки
                 if (data === 'confirm_clear') {
                      await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                      await answerCallback(token, callbackId, "База очищена");
@@ -132,7 +135,6 @@ export default async function handler(req, res) {
         }
 
 
-        // === 2. ПОДГОТОВКА ДАННЫХ СООБЩЕНИЯ ===
         const msg = body.message || body.channel_post;
         if (!msg) return res.status(200).json({ ok: true });
 
@@ -143,38 +145,32 @@ export default async function handler(req, res) {
         if (isChannel && !isAllowed(chatId)) return res.status(200).json({ ok: true });
 
 
-        // === 3. ЛОГИКА ДЛЯ ЛИЧНЫХ СООБЩЕНИЙ ===
         if (!isChannel) {
-            const user = msg.from || { id: chatId, username: 'Channel' };
 
-            // Сохраняем юзера
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
                     await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
                 } catch (e) {}
             }
 
-            // --- /start ---
+
             if (text.startsWith('/start')) {
                 const appLink = `https://t.me/${botUsername}/${appName}`;
 
-                // АДМИНСКОЕ МЕНЮ
                 if (isAllowed(chatId)) {
                     await sendMessage(token, chatId, "👋 Привет, Админ! Управление ботом ниже.", {
                         keyboard: [
                             [{ text: "📊 Статистика" }, { text: "📢 Рассылка" }],
                             [{ text: "🔧 Тех. работы" }, { text: "❄️ Зимняя тема" }],
-                            [{ text: "🗑 Очистить базу" }] 
+                            [{ text: "🔄 Реставрация базы" }, { text: "🗑 Очистить базу" }] 
                         ],
                         resize_keyboard: true,
                         is_persistent: true
                     });
-                    // Ссылка на апп отдельным сообщением
                     await sendMessage(token, chatId, "Твой Web App:", {
                          inline_keyboard: [[{ text: "📱 Открыть ленту", url: appLink }]]
                     });
                 } else {
-                    // ОБЫЧНЫЙ ЮЗЕР
                     await sendMessage(token, chatId,
                         "👋 Привет! Добро пожаловать в Oneshot Feed.", {
                             inline_keyboard: [
@@ -187,10 +183,17 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            // --- ОБРАБОТКА АДМИНСКИХ КНОПОК И КОМАНД ---
+            if ((text === '/migrate' || text === '🔄 Реставрация базы') && String(chatId) === String(ownerId)) {
+                await sendMessage(token, chatId, "⏳ Начинаю реставрацию базы...", null, 'HTML');
+                try {
+                    await fetch(`${webAppUrl}/api/migrate`);
+                } catch (e) {
+                    await sendMessage(token, chatId, `❌ Ошибка вызова миграции: ${e.message}`);
+                }
+                return res.status(200).json({ ok: true });
+            }
+
             if (isAllowed(chatId)) {
-                
-                // 1. Статистика
                 if (text === "📊 Статистика" || text === '/stats') {
                     try {
                         const uRes = await fetch(`${DB_URL}/scard/all_bot_users`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
@@ -202,7 +205,6 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // 2. Рассылка
                 if (text === "📢 Рассылка") {
                     await sendMessage(token, chatId, "Для рассылки отправь команду:\n`/broadcast Текст | Кнопка | Ссылка`", null, 'Markdown');
                     return res.status(200).json({ ok: true });
@@ -237,7 +239,6 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // 3. Тех работы
                 if (text === "🔧 Тех. работы") {
                     await sendMessage(token, chatId, "Управление режимом обслуживания:", {
                         inline_keyboard: [
@@ -247,7 +248,6 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // 4. Зима
                 if (text === "❄️ Зимняя тема") {
                     await sendMessage(token, chatId, "Управление снегом:", {
                         inline_keyboard: [
@@ -257,7 +257,6 @@ export default async function handler(req, res) {
                     return res.status(200).json({ ok: true });
                 }
 
-                // 5. Очистка
                 if (text === "🗑 Очистить базу") {
                     await sendMessage(token, chatId, "Ты уверен? Это удалит ВСЕ видео.", {
                         inline_keyboard: [[{ text: "Да, удалить всё", callback_data: "confirm_clear" }]]
@@ -267,8 +266,6 @@ export default async function handler(req, res) {
             }
         }
 
-
-        // === 4. АВТОПАРСИНГ (TIKTOK ONLY) ===
         const extractedUrl = extractTikTokLink(msg);
         const isAddCommand = !isChannel && text.startsWith('/add');
         const isAutoParse = isAllowed(chatId) && extractedUrl;
@@ -281,7 +278,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ ok: true });
             }
 
-            if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю в хранилище Telegram...", null, 'HTML');
+            if (!isChannel) await sendMessage(token, chatId, "⏳ Загружаю в хранилище...", null, 'HTML');
 
             try {
                 let tikData = null;
@@ -309,7 +306,6 @@ export default async function handler(req, res) {
                         throw new Error("Не задана переменная STORAGE_CHANNEL_ID в Vercel!");
                     }
 
-                    // 1. Отправляем временный url видео в приватный канал-хранилище
                     const tgUploadRes = await fetch(`https://api.telegram.org/bot${token}/sendVideo`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -322,13 +318,11 @@ export default async function handler(req, res) {
                     const tgUploadData = await tgUploadRes.json();
 
                     if (!tgUploadData.ok || !tgUploadData.result.video) {
-                        throw new Error(`Ошибка загрузки в Telegram: ${tgUploadData.description || 'Unknown error'}`);
+                        throw new Error(`Ошибка загрузки в канал: ${tgUploadData.description || 'Unknown error'}`);
                     }
 
-                    const videoObj = tgUploadData.result.video;
-                    const fileId = videoObj.file_id;
+                    const fileId = tgUploadData.result.video.file_id;
 
-                    // 2. Получаем прямой путь к файлу на серверах Telegram
                     const fileInfoRes = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`);
                     const fileInfo = await fileInfoRes.json();
 
@@ -337,9 +331,8 @@ export default async function handler(req, res) {
                         permanentVideoUrl = `https://api.telegram.org/file/bot${token}/${fileInfo.result.file_path}`;
                     }
 
-                    // 3. Сохраняем в Redis
                     const newVideo = { 
-                        id: finalId, 
+                        id: String(finalId), 
                         tg_file_id: fileId,
                         videoUrl: permanentVideoUrl, 
                         author: finalAuthor, 
@@ -370,7 +363,7 @@ export default async function handler(req, res) {
 
                     for (const adminId of adminUsers) {
                         try {
-                             await sendVideo(token, adminId, fileId, logCaption, deleteKeyboard);
+                             await sendVideo(token, adminId, fileId, logCaption, deleteKeyboard, 'HTML');
                         } catch (err) {
                              await sendMessage(token, adminId, logCaption + `\n\n⚠️ Лог отправлен текстом.`, deleteKeyboard, 'HTML');
                         }
@@ -384,7 +377,7 @@ export default async function handler(req, res) {
                     if (!isChannel) await sendMessage(token, chatId, "❌ Не удалось получить видео (TikWM).");
                 }
             } catch (e) {
-                const errText = `⚠️ <b>Ошибка парсинга</b>: ${e.message}`;
+                const errText = `⚠️ <b>Ошибка</b> (${isChannel ? 'Channel' : 'DM'}): ${e.message}`;
                 for (const adminId of adminUsers) await sendMessage(token, adminId, errText, null, 'HTML');
             }
         }
@@ -410,7 +403,6 @@ export default async function handler(req, res) {
 }
 
 
-// === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ===
 
 function extractTikTokLink(msg) {
     const text = msg.text || msg.caption || '';
@@ -440,7 +432,7 @@ async function sendMessage(token, chatId, text, keyboard = null, parseMode = 'Ma
     } catch (e) {}
 }
 
-async function sendVideo(token, chatId, video, caption, keyboard = null, parseMode = 'HTML') {
+async function sendVideo(token, chatId, video, caption, keyboard = null, parseMode = 'Markdown') {
     const body = { chat_id: chatId, video: video, caption: caption, parse_mode: parseMode };
     if (keyboard) body.reply_markup = keyboard;
     
