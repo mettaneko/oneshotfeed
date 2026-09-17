@@ -28,14 +28,14 @@ export default async function handler(req, res) {
         const restoredNames = [];
 
         for (let index = 0; index < list.length; index++) {
-            if (processed >= BATCH_SIZE) break;
+            if (processed + failed >= BATCH_SIZE) break;
 
             let item = list[index];
             if (typeof item === 'string') {
                 try { item = JSON.parse(item); } catch (e) { continue; }
             }
 
-            if (item.tg_file_id && !item.videoUrl.includes('api.telegram.org')) {
+            if (item.deleted || (item.tg_file_id && !item.videoUrl.includes('api.telegram.org'))) {
                 continue;
             }
 
@@ -100,18 +100,27 @@ export default async function handler(req, res) {
                     processed++;
                     restoredNames.push(`@${author}`);
                 } else {
+                    item.deleted = true;
+                    await fetch(`${DB_URL}/pipeline`, {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify([
+                            ["LSET", "feed_videos", index, JSON.stringify(item)]
+                        ])
+                    });
+                    list[index] = item;
                     failed++;
                 }
             } catch (err) {
                 failed++;
             }
 
-            await new Promise(r => setTimeout(r, 300));
+            await new Promise(r => setTimeout(r, 200));
         }
 
         const totalRemaining = list.filter(v => {
             const parsed = typeof v === 'string' ? JSON.parse(v) : v;
-            return !parsed.tg_file_id || (parsed.videoUrl && parsed.videoUrl.includes('api.telegram.org'));
+            return !parsed.deleted && (!parsed.tg_file_id || (parsed.videoUrl && parsed.videoUrl.includes('api.telegram.org')));
         }).length;
 
         return res.status(200).json({
