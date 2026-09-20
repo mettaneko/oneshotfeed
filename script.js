@@ -410,17 +410,13 @@ function getActiveSlideData() {
 function loadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
-    const bg = slide.querySelector('.video-blur-bg');
     const url = slide.dataset.videoUrl;
     if (vid && !vid.getAttribute('src')) { vid.src = url; vid.load(); }
-    if (bg && !bg.getAttribute('src')) { bg.src = url; bg.load(); }
 }
 function unloadVideo(slide) {
     if (!slide) return;
     const vid = slide.querySelector('.video-player');
-    const bg = slide.querySelector('.video-blur-bg');
     if (vid && vid.getAttribute('src')) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
-    if (bg && bg.getAttribute('src')) { bg.pause(); bg.removeAttribute('src'); bg.load(); }
 }
 function manageVideoMemory(activeSlide) {
     const allSlides = Array.from(document.querySelectorAll('.video-slide'));
@@ -436,12 +432,14 @@ function createSlide(data) {
     slide.className = 'video-slide';
     slide.dataset.jsonData = JSON.stringify(data);
     slide.dataset.videoUrl = data.videoUrl;
-    slide.innerHTML = `<video class="video-blur-bg" loop muted playsinline></video><div class="video-wrapper"><video class="video-player" loop muted playsinline></video><div class="video-progress-container"><div class="video-progress-fill"></div></div></div>`;
+    const cover = typeof data.cover === 'string' && /^https?:\/\//i.test(data.cover)
+        ? data.cover.replace(/"/g, '\\"')
+        : '';
+    slide.innerHTML = `<div class="video-blur-bg"${cover ? ` style="background-image:url("${cover}")"` : ''}></div><div class="video-wrapper"><video class="video-player" loop muted playsinline preload="metadata"></video><div class="video-progress-container"><div class="video-progress-fill"></div></div></div>`;
     const vid = slide.querySelector('.video-player');
-    const bg = slide.querySelector('.video-blur-bg');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
-    vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
+    vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); } else { vid.pause(); } });
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     let streakSent = false;
     vid.addEventListener('timeupdate', () => {
@@ -469,8 +467,7 @@ const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
         const slide = entry.target;
         const vid = slide.querySelector('.video-player');
-        const bg = slide.querySelector('.video-blur-bg');
-        if (!vid || !bg) return;
+        if (!vid) return;
         if (entry.isIntersecting) {
             document.querySelectorAll('.video-slide').forEach(s => s.classList.remove('active-slide'));
             slide.classList.add('active-slide');
@@ -481,11 +478,11 @@ const observer = new IntersectionObserver((entries) => {
                 if (vid.paused) {
                     const playPromise = vid.play();
                     if (playPromise !== undefined) {
-                        playPromise.then(() => { bg.play().catch(() => {}); }).catch(error => { vid.muted = true; vid.play().catch(e => {}); bg.play().catch(() => {}); });
+                        playPromise.catch(() => { vid.muted = true; vid.play().catch(() => {}); });
                     }
                 }
             });
-        } else { vid.pause(); bg.pause(); }
+        } else { vid.pause(); }
     });
 }, { threshold: 0.6 });
 
