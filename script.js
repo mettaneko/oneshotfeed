@@ -724,7 +724,7 @@ if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.ta
 
 
 // === INIT ===
-document.addEventListener('DOMContentLoaded', async () => {
+const initializeFeed = async () => {
     injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
@@ -765,6 +765,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     renderFeed(feedToRender.slice(0, 5));
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeFeed, { once: true });
+} else {
+    initializeFeed();
+}
 
 setInterval(reloadVideosAndFeed, 30000);
