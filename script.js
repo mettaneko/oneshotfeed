@@ -439,6 +439,14 @@ function createSlide(data) {
     const vid = slide.querySelector('.video-player');
     const fill = slide.querySelector('.video-progress-fill');
     const bar = slide.querySelector('.video-progress-container');
+    vid.addEventListener('error', () => {
+        slide.classList.add('video-error');
+        vid.removeAttribute('src');
+        vid.load();
+        if (slide.classList.contains('active-slide') && uiDesc) {
+            uiDesc.textContent = 'Видео не поддерживается встроенным плеером Telegram';
+        }
+    }, { once: true });
     vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); } else { vid.pause(); } });
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
     let streakSent = false;
