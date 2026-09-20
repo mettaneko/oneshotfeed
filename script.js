@@ -724,7 +724,7 @@ if (themeSelect) { themeSelect.addEventListener('change', (e) => applyTheme(e.ta
 
 
 // === INIT ===
-window.addEventListener('load', async () => {
+document.addEventListener('DOMContentLoaded', async () => {
     injectNewStyles();
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
