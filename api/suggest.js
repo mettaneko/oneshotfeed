@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       const userId = user.id;
       // Проверяем блокировку
       const checkRes = await fetch(`${DB_URL}/get/spam_sug:${userId}`, {
-        headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        headers: { Authorization: 'Bearer ' + DB_TOKEN }
       });
       const checkData = await checkRes.json();
       
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
 
       // Ставим блокировку на 60 секунд
       await fetch(`${DB_URL}/setex/spam_sug:${userId}/60/1`, {
-        headers: { Authorization: `Bearer ${DB_TOKEN}` }
+        headers: { Authorization: 'Bearer ' + DB_TOKEN }
       });
     }
 

@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   try {
     // Получаем список подписок (smembers)
     const dbRes = await fetch(`${URL}/smembers/subs:${userId}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` }
+      headers: { Authorization: 'Bearer ' + TOKEN }
     });
     
     const data = await dbRes.json();

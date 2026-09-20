@@ -4,7 +4,7 @@ export async function upstash(path, options = {}) {
   if (!url || !token) throw new Error('DB config missing');
   const response = await fetch(`${url}/${path}`, {
     ...options,
-    headers: { Authorization: `Bearer ${token}`, ...(options.headers || {}) }
+    headers: { Authorization: 'Bearer ' + token, ...(options.headers || {}) }
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || data.error) throw new Error(data.error || `Upstash HTTP ${response.status}`);

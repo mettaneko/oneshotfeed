@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
     try {
         const getRes = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, {
-            headers: { Authorization: `Bearer ${DB_TOKEN}` }
+            headers: { Authorization: 'Bearer ' + DB_TOKEN }
         });
         const getData = await getRes.json();
         let list = getData.result || [];
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
 
                     await fetch(`${DB_URL}/pipeline`, {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                        headers: { Authorization: 'Bearer ' + DB_TOKEN, 'Content-Type': 'application/json' },
                         body: JSON.stringify([
                             ["LSET", "feed_videos", index, JSON.stringify(updatedItem)]
                         ])
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
                     item.deleted = true;
                     await fetch(`${DB_URL}/pipeline`, {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                        headers: { Authorization: 'Bearer ' + DB_TOKEN, 'Content-Type': 'application/json' },
                         body: JSON.stringify([
                             ["LSET", "feed_videos", index, JSON.stringify(item)]
                         ])

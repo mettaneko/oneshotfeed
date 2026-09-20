@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
     // Шлем запрос в базу
     const dbRes = await fetch(`${URL}/${command}/${key}/${encodeURIComponent(author)}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` }
+      headers: { Authorization: 'Bearer ' + TOKEN }
     });
     
     const data = await dbRes.json();
