@@ -3,11 +3,22 @@
 // === БЛОК УПРАВЛЕНИЯ РЕЖИМОМ ТЕХ. РАБОТ ===
 (async function() {
     const API_BASE = 'https://feed.mettaneko.ru';
+    const streakPill = document.getElementById('streak-pill');
+    function updateStreakPill(data) {
+        if (!streakPill || !data || !Number.isFinite(data.watched)) return;
+        streakPill.hidden = false;
+        streakPill.textContent = data.complete
+            ? `🔥 Серия: ${data.streak} дн.`
+            : `🔥 Сегодня: ${data.watched}/5 видео`;
+    }
     const SESSION_DURATION = 5 * 60 * 1000;
     const ACCESS_TOKEN_KEY = 'maintenance_access_pass';
     const checkStatusAndRedirect = async () => {
         try {
-            const response = await fetch(`${API_BASE}/api/maintenance`);
+            const pass = localStorage.getItem(ACCESS_TOKEN_KEY);
+            const response = await fetch(`${API_BASE}/api/maintenance`, {
+                headers: pass ? { 'X-Maintenance-Token': pass } : {}
+            });
             if (!response.ok) return;
             const data = await response.json();
             if (data.maintenance) {
@@ -225,6 +236,8 @@ let allVideos = []; // Хранит ВСЕ видео, включая секре
 
 // === DOM ===
 const feedContainer = document.getElementById('feed');
+const feedEndState = document.getElementById('feed-end-state');
+const feedRestartBtn = document.getElementById('feed-restart-btn');
 const tabForYou = document.getElementById('tab-foryou');
 const tabFollowing = document.getElementById('tab-following');
 const indicator = document.getElementById('nav-indicator');
@@ -240,6 +253,7 @@ const themeSelect = document.getElementById('theme-select');
 
 const uiShareBtn = document.getElementById('ui-share-btn');
 const uiSuggestBtn = document.getElementById('ui-suggest-btn');
+const uiOriginalBtn = document.getElementById('ui-original-btn');
 const suggestForm = document.getElementById('suggest-form');
 const sugUrl = document.getElementById('sug-url');
 const sugAuthor = document.getElementById('sug-author');
@@ -282,7 +296,7 @@ async function syncSubs() {
     if (local) subscribedAuthors = local;
     if (tg?.initDataUnsafe?.user) {
         try {
-            const res = await fetch(`${API_BASE}/api/get_subs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id }) });
+            const res = await fetch(`${API_BASE}/api/get_subs`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData }, body: '{}' });
             const data = await res.json();
             if (data.subs) { subscribedAuthors = data.subs; localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); updateSubBtnState(); }
         } catch (e) { }
@@ -348,6 +362,16 @@ function updateGlobalUI(videoData) {
     if (uiAuthor) uiAuthor.innerText = `@${videoData.author}`;
     if (uiDesc) uiDesc.innerText = videoData.desc;
     currentActiveAuthor = videoData.author;
+    if (uiOriginalBtn) {
+        const derivedSource = videoData.author && videoData.id
+            ? `https://www.tiktok.com/@${encodeURIComponent(videoData.author)}/video/${encodeURIComponent(videoData.id)}`
+            : '';
+        const source = typeof videoData.sourceUrl === 'string' && /^https?:\/\//i.test(videoData.sourceUrl)
+            ? videoData.sourceUrl
+            : derivedSource;
+        uiOriginalBtn.href = source || '#';
+        uiOriginalBtn.style.display = source ? 'inline-flex' : 'none';
+    }
     updateSubBtnState();
 }
 uiSubBtn.addEventListener('click', async (e) => {
@@ -363,7 +387,7 @@ uiSubBtn.addEventListener('click', async (e) => {
         else { const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret); renderFeed(filtered.slice(0, 5)); }
     }
     if (tg?.initDataUnsafe?.user) {
-        try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: tg.initDataUnsafe.user.id, author: currentActiveAuthor, action }) }); } catch (e) { }
+        try { await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData }, body: JSON.stringify({ author: currentActiveAuthor, action }) }); } catch (e) { }
     } else { localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); }
 });
 function getActiveSlideData() {
@@ -410,6 +434,16 @@ function createSlide(data) {
     const bar = slide.querySelector('.video-progress-container');
     vid.addEventListener('click', () => { if (vid.paused) { vid.play().catch(e => {}); bg.play().catch(() => {}); } else { vid.pause(); bg.pause(); } });
     vid.addEventListener('timeupdate', () => { if (vid.duration) fill.style.height = `${(vid.currentTime / vid.duration) * 100}%`; });
+    let streakSent = false;
+    vid.addEventListener('timeupdate', () => {
+        if (!streakSent && vid.duration && vid.currentTime / vid.duration >= 0.25) {
+            streakSent = true;
+            if (tg?.initData) fetch(`${API_BASE}/api/streak`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData },
+                body: JSON.stringify({ videoId: data.id, watchedPercent: 25 })
+            }).then(r => r.json()).then(updateStreakPill).catch(() => {});
+        }
+    });
     let isDragging = false;
     const handle = (y) => { const rect = bar.getBoundingClientRect(); if (vid.duration) { vid.currentTime = Math.max(0, Math.min(1, 1 - (y - rect.top) / rect.height)) * vid.duration; } };
     const start = (e) => { e.preventDefault(); isDragging = true; handle(e.touches ? e.touches[0].clientY : e.clientY); };
@@ -449,7 +483,19 @@ const observer = new IntersectionObserver((entries) => {
 
 function renderFeed(videos, append = false) {
     if (!append) feedContainer.innerHTML = '';
-    videos.forEach(v => { const s = createSlide(v); feedContainer.appendChild(s); observer.observe(s); });
+    const existing = new Set(Array.from(feedContainer.children).map(s => s.dataset.videoId));
+    let added = 0;
+    videos.forEach(v => {
+        if (existing.has(String(v.id))) return;
+        const s = createSlide(v);
+        s.dataset.videoId = String(v.id);
+        feedContainer.appendChild(s);
+        observer.observe(s);
+        existing.add(String(v.id));
+        added++;
+    });
+    if (feedEndState) feedEndState.hidden = feedContainer.children.length === 0 || added > 0;
+    return added;
 }
 
 
@@ -468,11 +514,22 @@ feedContainer.addEventListener('scroll', () => {
                 const filtered = allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret);
                 nextBatch = shuffle(filtered).slice(0, 5); 
             }
-            if (nextBatch.length > 0) { renderFeed(nextBatch, true); }
+            const added = nextBatch.length > 0 ? renderFeed(nextBatch, true) : 0;
+            if (!added && feedEndState) feedEndState.hidden = false;
             isFetching = false;
         }, 500);
     }
 });
+
+if (feedRestartBtn) {
+    feedRestartBtn.addEventListener('click', () => {
+        feedContainer.scrollTo({ top: 0, behavior: 'smooth' });
+        const publicVideos = currentTab === 'following'
+            ? allVideos.filter(v => subscribedAuthors.includes(v.author) && !v.isSecret)
+            : allVideos.filter(v => !v.isSecret);
+        renderFeed(shuffle([...publicVideos]).slice(0, 5));
+    });
+}
 
 
 // === SETTINGS UI ===
@@ -520,7 +577,9 @@ if (sugBtn) {
         sugBtn.innerText = '...';
         sugBtn.disabled = true;
         try {
-            const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, author, desc, user: tg?.initDataUnsafe?.user }) });
+            const headers = { 'Content-Type': 'application/json' };
+            if (tg?.initData) headers['X-Telegram-Init-Data'] = tg.initData;
+            const res = await fetch(`${API_BASE}/api/suggest`, { method: 'POST', headers, body: JSON.stringify({ url, author, desc }) });
             if (res.ok) {
                 sugBtn.innerText = 'Отправлено!';
                 sugUrl.value = ''; sugAuthor.value = ''; sugDesc.value = '';
@@ -553,14 +612,16 @@ if (uiShareBtn) {
         try {
             await fetch(`${API_BASE}/api/share`, { 
                 method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
+                headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData },
                 body: JSON.stringify({ 
                     id: data.id,
                     videoUrl: data.videoUrl, 
                     author: data.author, 
                     desc: data.desc, 
-                    user: tg.initDataUnsafe.user 
                 }) 
+            }).then(response => {
+                if (!response.ok) throw new Error('Share request failed');
+                return response;
             });
             showCustomNotification('Видео отправлено в ЛС!', { showConfetti: true });
         } catch (e) { showCustomNotification('Ошибка сети.', { isError: true }); }
@@ -668,6 +729,8 @@ window.addEventListener('load', async () => {
     if (modalVolRange) modalVolRange.value = globalVolume;
     await loadVideosOnce(); 
     await syncSubs();
+    if (tg?.initData) fetch(`${API_BASE}/api/streak`, { headers: { 'X-Telegram-Init-Data': tg.initData } })
+        .then(r => r.ok ? r.json() : null).then(updateStreakPill).catch(() => {});
     checkThemes();
     updateInd(tabForYou);
 

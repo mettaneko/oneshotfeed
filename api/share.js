@@ -1,4 +1,5 @@
 // /api/share.js
+import { escapeHtml, requireTelegramUser } from './_lib/auth.js';
 
 /**
  * Асинхронная функция для отправки видео через Telegram Bot API.
@@ -29,21 +30,21 @@ async function sendVideoToTelegram(token, chatId, videoUrl, caption, keyboard = 
 }
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
-    }
-
     res.setHeader('Access-Control-Allow-Origin', '*'); 
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method Not Allowed' });
+    }
 
     try {
         // ДОБАВИЛ: id в деструктуризацию
-        const { id, videoUrl, author, desc, user } = req.body;
+        const { id, videoUrl, author, desc } = req.body;
+        const user = requireTelegramUser(req, req.body || {});
 
         if (!videoUrl || !user || !user.id) {
             return res.status(400).json({ error: 'Missing required fields' });
@@ -63,7 +64,7 @@ export default async function handler(req, res) {
         }
 
         // Формируем подпись
-        const caption = `📥 <b>Скачано из @OneShotFeedBot!</b>\n\n👤 Автор: <code>${author || 'unknown'}</code> ${desc || 'unknown'}\n🔗 <a href="${deepLink}">Открыть это видео в приложении</a>`;
+        const caption = `📥 <b>Скачано из @OneShotFeedBot!</b>\n\n👤 Автор: <code>${escapeHtml(author || 'unknown')}</code> ${escapeHtml(desc || 'unknown')}\n🔗 <a href="${deepLink}">Открыть это видео в приложении</a>`;
 
         // Создаем кнопку "Смотреть в приложении"
         const keyboard = {

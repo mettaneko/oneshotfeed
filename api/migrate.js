@@ -83,6 +83,7 @@ export default async function handler(req, res) {
                         videoUrl: safeVideoUrl,
                         author: author,
                         desc: 'on tiktok',
+                        sourceUrl: item.sourceUrl || tiktokUrl,
                         cover: item.cover,
                         tg_file_id: fileId,
                         date: item.date || Date.now()

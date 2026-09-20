@@ -1,13 +1,17 @@
+import { requireTelegramUser } from './_lib/auth.js';
 export default async function handler(req, res) {
   // CORS (разрешаем запросы с GitHub Pages)
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Telegram-Init-Data');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
-  const { userId, author, action } = req.body;
+  const { author, action } = req.body;
+  const user = requireTelegramUser(req, req.body || {});
+  if (!user) return res.status(401).json({ error: 'Valid Telegram initData required' });
+  const userId = user.id;
   
   // Автоматические переменные от Upstash
   const URL = process.env.KV_REST_API_URL;
@@ -15,12 +19,13 @@ export default async function handler(req, res) {
 
   if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
 
+  if (!author || !['add', 'remove'].includes(action)) return res.status(400).json({ error: 'Invalid subscription' });
   try {
     const key = `subs:${userId}`;
     const command = action === 'add' ? 'sadd' : 'srem'; // sadd = добавить, srem = удалить
 
     // Шлем запрос в базу
-    const dbRes = await fetch(`${URL}/${command}/${key}/${author}`, {
+    const dbRes = await fetch(`${URL}/${command}/${key}/${encodeURIComponent(author)}`, {
       headers: { Authorization: `Bearer ${TOKEN}` }
     });
     

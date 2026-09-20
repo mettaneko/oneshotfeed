@@ -2,6 +2,10 @@
 
 export default async function handler(req, res) {
     try {
+        const webhookSecret = process.env.WEBHOOK_SECRET;
+        if (webhookSecret && req.headers['x-telegram-bot-api-secret-token'] !== webhookSecret) {
+            return res.status(401).json({ error: 'Invalid webhook secret' });
+        }
         if (req.method !== 'POST') return res.status(200).send('OK');
 
         const body = req.body;
@@ -150,7 +154,7 @@ export default async function handler(req, res) {
                             await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
                             try {
                                 await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                                     body: JSON.stringify({ chat_id: chatId, message_id: query.message.message_id })
                                 });
                             } catch(e) {}
@@ -164,7 +168,7 @@ export default async function handler(req, res) {
                     const status = data === 'maint_on' ? 'on' : 'off';
                     try {
                         await fetch(`${webAppUrl}/api/maintenance`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                             body: JSON.stringify({ adminId: query.from.id, status: status })
                         });
                         await answerCallback(token, callbackId, `Maintenance: ${status}`);
@@ -177,7 +181,7 @@ export default async function handler(req, res) {
                     const reset = data === 'winter_reset';
                     try {
                         await fetch(`${webAppUrl}/api/theme`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                             body: JSON.stringify({ active, reset })
                         });
                         await answerCallback(token, callbackId, `Winter: ${active ? 'ON' : 'RESET'}`);
@@ -390,6 +394,7 @@ export default async function handler(req, res) {
 
                     const newVideo = { 
                         id: String(finalId), 
+                        sourceUrl: targetUrl,
                         tg_file_id: fileId,
                         videoUrl: permanentVideoUrl, 
                         author: finalAuthor, 

@@ -7,8 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const errorMessage = document.getElementById('error-message');
 
     submitBtn.addEventListener('click', async () => {
-        const token = totpInput.value.trim();
-        if (token.length !== 6 || !/^\d{6}$/.test(token)) {
+        const code = totpInput.value.trim();
+        if (code.length !== 6 || !/^\d{6}$/.test(code)) {
             errorMessage.textContent = 'Код должен состоять из 6 цифр.';
             return;
         }
@@ -21,14 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch(`${API_BASE}/api/verify_totp`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token })
+                body: JSON.stringify({ code })
             });
 
             if (response.ok) {
                 const data = await response.json();
-                if (data.success && data.pass) {
+                if (data.success && data.token) {
                     // Сохраняем "пропуск" в sessionStorage, чтобы он жил до закрытия вкладки
-                    sessionStorage.setItem('maintenance_access_pass', JSON.stringify(data.pass));
+                    localStorage.setItem('maintenance_access_pass', data.token);
                     // Перенаправляем на главную страницу
                     window.location.href = '/'; 
                 }

@@ -22,7 +22,8 @@ export default async function handler(req, res) {
 
         const tgFileUrl = `https://api.telegram.org/file/bot${token}/${fileData.result.file_path}`;
 
-        const videoStream = await fetch(tgFileUrl);
+        const range = req.headers.range;
+        const videoStream = await fetch(tgFileUrl, range ? { headers: { Range: range } } : undefined);
         
         if (!videoStream.ok) {
             return res.status(videoStream.status).send('Failed to fetch from Telegram CDN');
@@ -37,7 +38,9 @@ export default async function handler(req, res) {
         res.setHeader('Cache-Control', 'public, max-age=86400');
 
         const arrayBuffer = await videoStream.arrayBuffer();
-        return res.status(200).send(Buffer.from(arrayBuffer));
+        const contentRange = videoStream.headers.get('content-range');
+        if (contentRange) res.setHeader('Content-Range', contentRange);
+        return res.status(videoStream.status === 206 ? 206 : 200).send(Buffer.from(arrayBuffer));
     } catch (e) {
         return res.status(500).send(e.message);
     }

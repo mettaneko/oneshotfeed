@@ -29,6 +29,12 @@
 
     <!-- ЛЕНТА -->
     <div class="tiktok-feed" id="feed"></div>
+    <div id="feed-end-state" class="feed-end-state" hidden>
+        <strong>Вы посмотрели все доступные видео</strong>
+        <span>Новые ролики появятся позже</span>
+        <button id="feed-restart-btn" type="button">Начать сначала</button>
+    </div>
+    <div id="streak-pill" class="streak-pill" aria-live="polite" hidden></div>
 
     <!-- ГЛОБАЛЬНЫЙ ИНТЕРФЕЙС -->
     <div class="liquid-controls-container" id="global-ui">
@@ -43,6 +49,7 @@
         </div>
 
         <div class="glass-deck">
+            <a class="control-btn btn-original" id="ui-original-btn" target="_blank" rel="noopener noreferrer" aria-label="Открыть оригинал"><i class="fab fa-tiktok"></i></a>
             <button class="control-btn btn-settings" id="ui-settings-btn"><i class="fas fa-cog"></i></button>
             <div class="divider"></div>
             <button class="control-btn btn-share" id="ui-share-btn"><i class="fas fa-share-alt"></i></button>
@@ -58,7 +65,7 @@
                 <span>Настройки</span>
                 <button id="close-settings"><i class="fas fa-times"></i></button>
             </div>
-            
+
             <!-- Тонкая громкость -->
             <div class="setting-item">
                 <div class="setting-label"><i class="fas fa-volume-up"></i> Громкость</div>
@@ -73,7 +80,7 @@
                     <option value="winter">❄️ Зимняя</option>
                 </select>
             </div>
-            
+
             <div class="settings-footer">
                 OneShot Feed v0.9.6
             </div>
