@@ -29,7 +29,11 @@ export default async function handler(req, res) {
             return res.status(videoStream.status).send('Failed to fetch from Telegram CDN');
         }
 
-        res.setHeader('Content-Type', videoStream.headers.get('content-type') || 'video/mp4');
+        const upstreamContentType = videoStream.headers.get('content-type') || '';
+        const contentType = upstreamContentType === 'application/octet-stream'
+            ? 'video/mp4'
+            : (upstreamContentType || 'video/mp4');
+        res.setHeader('Content-Type', contentType);
         const contentLength = videoStream.headers.get('content-length');
         if (contentLength) {
             res.setHeader('Content-Length', contentLength);
