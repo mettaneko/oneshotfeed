@@ -266,15 +266,24 @@ let audioCtx;
 // === VIDEO LOADING ===
 async function loadVideosOnce() {
     let localVideos = [], dbVideos = [];
+    const fetchWithTimeout = async (url, options = {}) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+            return await fetch(url, { ...options, signal: controller.signal });
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
     try {
-        const res = await fetch('public/videos.json', { cache: 'no-store' });
+        const res = await fetchWithTimeout('public/videos.json', { cache: 'no-store' });
         if (res.ok) localVideos = await res.json();
-        else { const res2 = await fetch('videos.json'); if (res2.ok) localVideos = await res2.json(); }
-    } catch (e) { }
+        else { const res2 = await fetchWithTimeout('videos.json'); if (res2.ok) localVideos = await res2.json(); }
+    } catch (e) { console.warn('Local feed unavailable:', e.message); }
     try {
-        const res = await fetch(`${API_BASE}/api/get_feed`);
+        const res = await fetchWithTimeout(`${API_BASE}/api/get_feed`);
         if (res.ok) dbVideos = await res.json();
-    } catch (e) { }
+    } catch (e) { console.warn('Remote feed unavailable:', e.message); }
     allVideos = [...dbVideos, ...localVideos];
     if (allVideos.length === 0) console.warn('No videos found!');
 }
@@ -765,6 +774,10 @@ const initializeFeed = async () => {
     }
 
     renderFeed(feedToRender.slice(0, 5));
+    if (feedToRender.length === 0 && uiAuthor) {
+        uiAuthor.textContent = 'Лента недоступна';
+        if (uiDesc) uiDesc.textContent = 'Проверьте соединение и перезапустите Mini App';
+    }
 };
 
 if (document.readyState === 'loading') {
