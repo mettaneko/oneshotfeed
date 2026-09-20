@@ -1,5 +1,5 @@
-import { requireTelegramUser } from './_lib/auth.js';
-import { upstash } from './_lib/upstash.js';
+import { requireTelegramUser } from '../lib/auth.js';
+import { upstash } from '../lib/upstash.js';
 
 function moscowDay() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date());

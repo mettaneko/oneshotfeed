@@ -1,5 +1,5 @@
-import { upstash } from './_lib/upstash.js';
-import { isAdmin, requireTelegramUser, validBotSecret } from './_lib/auth.js';
+import { upstash } from '../lib/upstash.js';
+import { isAdmin, requireTelegramUser, validBotSecret } from '../lib/auth.js';
 const KEY = 'config:winter_theme';
 export default async function handler(req) {
   const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, X-Telegram-Init-Data' };

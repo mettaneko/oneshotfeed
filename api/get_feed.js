@@ -1,4 +1,4 @@
-import { upstash } from './_lib/upstash.js';
+import { upstash } from '../lib/upstash.js';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });

@@ -1,4 +1,4 @@
-import { requireTelegramUser } from './_lib/auth.js';
+import { requireTelegramUser } from '../lib/auth.js';
 export default async function handler(req, res) {
   // CORS (разрешаем запросы с GitHub Pages)
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -19,6 +19,13 @@ export default async function handler(req, res) {
 
   if (!URL || !TOKEN) return res.status(500).json({ error: 'DB config missing' });
 
+  if (action === 'list') {
+    const dbRes = await fetch(`${URL}/smembers/subs:${userId}`, {
+      headers: { Authorization: 'Bearer ' + TOKEN }
+    });
+    const data = await dbRes.json();
+    return res.status(200).json({ subs: Array.isArray(data.result) ? data.result : [] });
+  }
   if (!author || !['add', 'remove'].includes(action)) return res.status(400).json({ error: 'Invalid subscription' });
   try {
     const key = `subs:${userId}`;

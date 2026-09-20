@@ -296,7 +296,7 @@ async function syncSubs() {
     if (local) subscribedAuthors = local;
     if (tg?.initDataUnsafe?.user) {
         try {
-            const res = await fetch(`${API_BASE}/api/get_subs`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData }, body: '{}' });
+            const res = await fetch(`${API_BASE}/api/subscribe`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Telegram-Init-Data': tg.initData }, body: JSON.stringify({ action: 'list' }) });
             const data = await res.json();
             if (data.subs) { subscribedAuthors = data.subs; localStorage.setItem('subscribedAuthors', JSON.stringify(subscribedAuthors)); updateSubBtnState(); }
         } catch (e) { }

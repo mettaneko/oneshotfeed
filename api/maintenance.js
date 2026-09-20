@@ -1,5 +1,5 @@
-import { upstash } from './_lib/upstash.js';
-import { isAdmin, requireTelegramUser, validBotSecret, validMaintenanceToken } from './_lib/auth.js';
+import { upstash } from '../lib/upstash.js';
+import { isAdmin, requireTelegramUser, validBotSecret, validMaintenanceToken } from '../lib/auth.js';
 const STATUS_KEY = 'MAINTENANCE_MODE_STATUS';
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

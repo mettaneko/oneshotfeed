@@ -1,4 +1,4 @@
-import { escapeHtml, requireTelegramUser } from './_lib/auth.js';
+import { escapeHtml, requireTelegramUser } from '../lib/auth.js';
 export default async function handler(req, res) {
   // === CORS (РАЗРЕШАЕМ ЗАПРОСЫ) ===
   res.setHeader('Access-Control-Allow-Origin', '*');

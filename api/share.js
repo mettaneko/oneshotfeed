@@ -1,5 +1,5 @@
 // /api/share.js
-import { escapeHtml, requireTelegramUser } from './_lib/auth.js';
+import { escapeHtml, requireTelegramUser } from '../lib/auth.js';
 
 /**
  * Асинхронная функция для отправки видео через Telegram Bot API.
