@@ -2,6 +2,10 @@
 
 export default async function handler(req, res) {
     try {
+        const webhookSecret = process.env.WEBHOOK_SECRET;
+        if (webhookSecret && req.headers['x-telegram-bot-api-secret-token'] !== webhookSecret) {
+            return res.status(401).json({ error: 'Invalid webhook secret' });
+        }
         if (req.method !== 'POST') return res.status(200).send('OK');
 
         const body = req.body;
@@ -33,13 +37,13 @@ export default async function handler(req, res) {
                 let messageId = query.message ? query.message.message_id : null;
 
                 if (data === 'run_migrate_auto') {
-                    await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                    await fetch(`${DB_URL}/set/migrate_auto_running/true`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                     await answerCallback(token, callbackId, "🚀 Авто-режим запущен!");
                 } else {
                     await answerCallback(token, callbackId);
                 }
 
-                const checkStatus = await fetch(`${DB_URL}/get/migrate_auto_running`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                const checkStatus = await fetch(`${DB_URL}/get/migrate_auto_running`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                 const statusJson = await checkStatus.json();
                 if (statusJson.result !== 'true') {
                     return res.status(200).json({ ok: true });
@@ -90,7 +94,7 @@ export default async function handler(req, res) {
                             })
                         }).catch(() => {});
                     } else {
-                        await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        await fetch(`${DB_URL}/set/migrate_auto_running/false`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                     }
 
                 } catch (e) {
@@ -127,7 +131,7 @@ export default async function handler(req, res) {
                     await answerCallback(token, callbackId, "⏳ Удаляю...");
                     
                     try {
-                        const getRes = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const getRes = await fetch(`${DB_URL}/lrange/feed_videos/0/-1`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                         const getData = await getRes.json();
                         let videos = getData.result || [];
                         videos = videos.map(v => typeof v === 'string' ? JSON.parse(v) : v);
@@ -138,19 +142,19 @@ export default async function handler(req, res) {
                         if (newVideos.length === initialLen) {
                             await sendMessage(token, chatId, `⚠️ Видео ${vidId} не найдено.`);
                         } else {
-                            await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                            await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                             if (newVideos.length > 0) {
                                 const args = newVideos.map(v => JSON.stringify(v));
                                 await fetch(`${DB_URL}/`, {
                                     method: 'POST',
-                                    headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                                    headers: { Authorization: 'Bearer ' + DB_TOKEN, 'Content-Type': 'application/json' },
                                     body: JSON.stringify(["RPUSH", "feed_videos", ...args])
                                 });
                             }
                             await sendMessage(token, chatId, `🗑 Видео ${vidId} удалено!`);
                             try {
                                 await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                                     body: JSON.stringify({ chat_id: chatId, message_id: query.message.message_id })
                                 });
                             } catch(e) {}
@@ -164,7 +168,7 @@ export default async function handler(req, res) {
                     const status = data === 'maint_on' ? 'on' : 'off';
                     try {
                         await fetch(`${webAppUrl}/api/maintenance`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                             body: JSON.stringify({ adminId: query.from.id, status: status })
                         });
                         await answerCallback(token, callbackId, `Maintenance: ${status}`);
@@ -177,7 +181,7 @@ export default async function handler(req, res) {
                     const reset = data === 'winter_reset';
                     try {
                         await fetch(`${webAppUrl}/api/theme`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Bot-Secret': process.env.WEBHOOK_SECRET || token },
                             body: JSON.stringify({ active, reset })
                         });
                         await answerCallback(token, callbackId, `Winter: ${active ? 'ON' : 'RESET'}`);
@@ -186,7 +190,7 @@ export default async function handler(req, res) {
                 }
                 
                 if (data === 'confirm_clear') {
-                     await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                     await fetch(`${DB_URL}/del/feed_videos`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                      await answerCallback(token, callbackId, "База очищена");
                      await sendMessage(token, chatId, "🗑 База видео полностью очищена!", null, 'HTML');
                 }
@@ -209,7 +213,7 @@ export default async function handler(req, res) {
 
             if (DB_URL && DB_TOKEN && chatId > 0) {
                 try {
-                    await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                    await fetch(`${DB_URL}/sadd/all_bot_users/${chatId}`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                 } catch (e) {}
             }
 
@@ -253,9 +257,9 @@ export default async function handler(req, res) {
             if (isAllowed(chatId)) {
                 if (text === "📊 Статистика" || text === '/stats') {
                     try {
-                        const uRes = await fetch(`${DB_URL}/scard/all_bot_users`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const uRes = await fetch(`${DB_URL}/scard/all_bot_users`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                         const uData = await uRes.json();
-                        const vRes = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const vRes = await fetch(`${DB_URL}/llen/feed_videos`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                         const vData = await vRes.json();
                         await sendMessage(token, chatId, `📊 *Статистика:*\n\n👥 Пользователей: *${uData.result}*\n📹 Видео: *${vData.result}*`);
                     } catch (e) { await sendMessage(token, chatId, "Ошибка статистики."); }
@@ -283,7 +287,7 @@ export default async function handler(req, res) {
 
                     let users = [];
                     try {
-                        const r = await fetch(`${DB_URL}/smembers/all_bot_users`, { headers: { Authorization: `Bearer ${DB_TOKEN}` } });
+                        const r = await fetch(`${DB_URL}/smembers/all_bot_users`, { headers: { Authorization: 'Bearer ' + DB_TOKEN } });
                         const d = await r.json();
                         users = d.result || [];
                     } catch (e) {}
@@ -390,6 +394,7 @@ export default async function handler(req, res) {
 
                     const newVideo = { 
                         id: String(finalId), 
+                        sourceUrl: targetUrl,
                         tg_file_id: fileId,
                         videoUrl: permanentVideoUrl, 
                         author: finalAuthor, 
@@ -400,7 +405,7 @@ export default async function handler(req, res) {
                     
                     await fetch(`${DB_URL}/`, {
                         method: 'POST',
-                        headers: { Authorization: `Bearer ${DB_TOKEN}`, 'Content-Type': 'application/json' },
+                        headers: { Authorization: 'Bearer ' + DB_TOKEN, 'Content-Type': 'application/json' },
                         body: JSON.stringify(["RPUSH", "feed_videos", JSON.stringify(newVideo)])
                     });
                     
