@@ -67,6 +67,18 @@
     box-shadow: 0 0 100px rgba(0,0,0,0.8);
     pointer-events: auto;
 }
+.video-slide.video-error .video-player {
+    display: none;
+}
+.video-slide.video-error .video-wrapper::after {
+    content: 'Откройте оригинал кнопкой TikTok';
+    position: absolute;
+    inset: 50% 20px auto;
+    transform: translateY(-50%);
+    color: rgba(255,255,255,.75);
+    text-align: center;
+    font-size: .9rem;
+}
 
 
 /* Мобилка */
